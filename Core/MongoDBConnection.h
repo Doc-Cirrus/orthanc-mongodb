@@ -35,7 +35,6 @@ namespace OrthancPlugins
 	MongoDBConnection(const MongoDBConnection& other);
     ~MongoDBConnection()
     {
-      Close();
     }
 
     void SetConnectionUri(const std::string& uri);

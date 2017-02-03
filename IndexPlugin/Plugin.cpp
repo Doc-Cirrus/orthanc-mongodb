@@ -91,9 +91,6 @@ extern "C"
 			bool useLock;
 			std::unique_ptr<OrthancPlugins::MongoDBConnection> pg(OrthancPlugins::CreateConnection(useLock, context_, configuration));
 
-			pg->Open();
-			pg->ClearAll();   // Reset the database
-
 			/* Create the database back-end */
 			backend_ = new OrthancPlugins::MongoDBBackend(context_, pg.release(), useLock, allowUnlock);
 

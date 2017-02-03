@@ -155,9 +155,6 @@ extern "C"
       std::unique_ptr<OrthancPlugins::MongoDBConnection>
         pg(OrthancPlugins::CreateConnection(useLock, context_, configuration));
 
-      pg->Open();
-      //pg->ClearAll();   // Reset the database
-
       /* Create the storage area back-end */
       storage_ = new OrthancPlugins::MongoDBStorageArea(pg.release(), useLock, allowUnlock);
 
