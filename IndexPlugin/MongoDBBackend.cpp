@@ -1,3 +1,21 @@
+/**
+ * MongoDB Plugin - A plugin for Otrhanc DICOM Server for storing DICOM data in MongoDB Database
+ * Copyright (C) 2017 DocCirrus, Germany
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General 
+ * Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ **/
+
 #include "MongoDBBackend.h"
 
 #include <bsoncxx/builder/stream/document.hpp>
@@ -13,50 +31,21 @@ namespace OrthancPlugins
 	MongoDBBackend::MongoDBBackend(OrthancPluginContext* context, MongoDBConnection* connection,
 								   bool useLock, bool allowUnlock) 
 		: context_(context)
-		//, connection_(connection)
-		//, globalProperties_(*connection, useLock, GlobalProperty_IndexLock)
 	{
-		/*
-		globalProperties_.Lock(allowUnlock);
-
-		Prepare();
-		*/
-
-		/**
-		* Below are the PostgreSQL precompiled statements that are used
-		* in more than 1 method of this class.
-		**//*
-
-		getPublicId_.reset
-		(new PostgreSQLStatement
-		(*connection_, "SELECT publicId FROM Resources WHERE internalId=$1"));
-		getPublicId_->DeclareInputInteger64(0);
-
-		clearDeletedFiles_.reset
-		(new PostgreSQLStatement
-		(*connection_, "DELETE FROM DeletedFiles"));
-
-		clearDeletedResources_.reset
-		(new PostgreSQLStatement
-		(*connection_, "DELETE FROM DeletedResources"));
-		*/
 	}
 
 	MongoDBBackend::~MongoDBBackend()
 	{
-		//globalProperties_.Unlock();
 	}
 
 	void MongoDBBackend::Open()
 	{
-		//connection_->Open() {}
 	}
 
 	void MongoDBBackend::Close() {}
 
 	void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment) 
 	{
-
 		mongocxx::instance inst{};
 		mongocxx::client conn{ mongocxx::uri{} };
 
