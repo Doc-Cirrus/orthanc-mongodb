@@ -23,7 +23,8 @@ ELSE ()
     include_directories(${BSONCXX_INCLUDE_DIRS})
     include_directories(${MONGOCXX_INCLUDE_DIRS})
     set(CMAKE_CXX_FLAGS "-std=c++11")
-    IF (UNIX)
+    #Linux specific switches
+    IF (NOT APPLE)
       set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")
       set(LIBS ${LIBS} "uuid" "mongoc-1.0" "bson-1.0" "bsoncxx" "mongocxx")
     ENDIF()
@@ -75,7 +76,7 @@ set(CORE_SOURCES
 )
 
 set(INDEX_PLUGIN_SOURCES
-  "IndexPlugin/MongoDBWrapper.cpp"
+  "IndexPlugin/MongoDBBackend.cpp"
   "IndexPlugin/Plugin.cpp"
 )
 

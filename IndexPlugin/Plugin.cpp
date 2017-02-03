@@ -23,13 +23,13 @@
 
 #include <orthanc/OrthancCPlugin.h>
 
-#include "MongoDBWrapper.h"
+#include "MongoDBBackend.h"
 #include "../Core/MongoDBException.h"
 #include "../Core/Configuration.h"
 //#include "Core/Logging.h"
 
 static OrthancPluginContext* context_ = NULL;
-static OrthancPlugins::MongoDBWrapper* backend_ = NULL;
+static OrthancPlugins::MongoDBBackend* backend_ = NULL;
 
 //using namespace Orthanc;
 //class InternalLogging;
@@ -96,7 +96,7 @@ extern "C"
 			pg->ClearAll();   // Reset the database
 
 			/* Create the database back-end */
-			backend_ = new OrthancPlugins::MongoDBWrapper(context_, pg.release(), useLock, allowUnlock);
+			backend_ = new OrthancPlugins::MongoDBBackend(context_, pg.release(), useLock, allowUnlock);
 
 			/* Register the MongoDB index into Orthanc */
 			OrthancPlugins::DatabaseBackendAdapter::Register(context_, *backend_);
