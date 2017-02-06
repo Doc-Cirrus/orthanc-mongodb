@@ -23,6 +23,7 @@
 #include <orthanc/OrthancCppDatabasePlugin.h>
 
 #include <mongocxx/pool.hpp>
+#include <boost/thread/mutex.hpp>
 
 #include "../Core/MongoDBConnection.h"
 
@@ -35,6 +36,9 @@ namespace OrthancPlugins
 		MongoDBConnection* connection_;
 		mongocxx::pool pool_;
 		std::string dbname_;
+		boost::mutex mutex_;
+
+		int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
 
 	public:
 		MongoDBBackend(OrthancPluginContext* context,

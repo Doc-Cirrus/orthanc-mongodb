@@ -75,7 +75,7 @@ namespace OrthancPlugins
 
 		auto collection = db["AttachedFiles"];
 		document << "id" << id 
-				<<  "contentType" << attachment.contentType
+				<<  "fileType" << attachment.contentType
 				<<	"uuid" << attachment.uuid
 				<<  "compressedSize" << static_cast<int64_t>(attachment.compressedSize)
 				<<  "uncompressedSize" << static_cast<int64_t>(attachment.uncompressedSize)
@@ -86,7 +86,8 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::AttachChild(int64_t parent, int64_t child) {
+	void MongoDBBackend::AttachChild(int64_t parent, int64_t child) 
+	{
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		auto collection = db["Resources"];
@@ -99,51 +100,275 @@ namespace OrthancPlugins
 		);
 	}
 
-	void MongoDBBackend::ClearChanges() {}
+	void MongoDBBackend::ClearChanges() 
+	{
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["Changes"];
+		collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
+	}
 
-	void MongoDBBackend::ClearExportedResources() {}
+	void MongoDBBackend::ClearExportedResources() {
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["ExportedResources"];
+		collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
+	}
 
-	int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type) { return 1; }
+	int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName) {
+		using namespace bsoncxx::builder::stream;
+		
+		boost::mutex::scoped_lock lock(mutex_);
 
-	void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment) {}
+		int64_t num = 1;
+		auto collection = db["Sequences"];
+		document searchDoc{};
+		searchDoc << "name" << seqName << finalize;
+		bsoncxx::document::view searchView = searchDoc.view();
+		mongocxx::stdx::optional<bsoncxx::document::value> seqDoc = collection.find_one(searchView);
+		if(seqDoc) 
+		{
+			collection.update_one(searchView,
+				document{} << "$inc" << open_document << "i" << int64_t(1) << close_document << finalize
+			);
+			bsoncxx::document::element element = seqDoc->view()["i"];
+			num = element.get_int64().value + 1;
+		} else 
+		{
+			collection.insert_one(
+				document{} << "name" << seqName << "i" << int64_t(1) << finalize);
+		}
+		return num;
+	}
 
-	void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType) {}
+	int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type) 
+	{
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		bsoncxx::builder::stream::document document{};
 
-	void MongoDBBackend::DeleteResource(int64_t id) {}
+		int64_t seq = GetNextSequence(db, "Resources");
 
-	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType) {}
+		auto collection = db["Resources"];
+		document << "internalId" << seq 
+				<<  "resourceType" << static_cast<int>(type)
+				<<	"publicId" << publicId
+				<<  "parentId" << bsoncxx::types::b_null();
 
-	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType) {}
+		collection.insert_one(document.view());
+		return seq; 
+	}
+
+	void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["AttachedFiles"];
+		collection.delete_many(
+			document{} << "id" << static_cast<int64_t>(id)
+					<< "fileType" << attachment	<< finalize);
+	}
+
+	void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["Metadata"];
+		collection.delete_many(
+			document{} << "id" << static_cast<int64_t>(id)
+					<< "type" << metadataType << finalize);
+	}
+
+	void MongoDBBackend::DeleteResource(int64_t id) {
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		db["Metadata"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
+		db["AttachedFiles"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
+		db["Changes"].delete_many(document{} << "internalId" << static_cast<int64_t>(id) << finalize);
+		db["PatientRecyclingOrder"].delete_many(document{} << "patientId" << static_cast<int64_t>(id) << finalize);
+		db["MainDicomTags"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
+		db["DicomIdentifiers"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
+		
+		//TODO: delete all parent resources as well
+		db["Resources"].delete_many(document{} << "internalId" << static_cast<int64_t>(id) << finalize);
+
+		//TODO:
+		/*
+		 PostgreSQLResult result(*getRemainingAncestor_);
+		if (!result.IsDone())
+		{
+		GetOutput().SignalRemainingAncestor(result.GetString(1),
+											static_cast<OrthancPluginResourceType>(result.GetInteger(0)));
+
+		// There is at most 1 remaining ancestor
+		assert((result.Step(), result.IsDone()));
+		}
+
+		SignalDeletedFilesAndResources();
+		*/
+	}
+
+	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto cursor = db["Resources"].find(
+			document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+		for(auto doc : cursor) {
+  			target.push_back(doc["internalId"].get_int64().value);
+		}
+	}
+
+	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto cursor = db["Resources"].find(
+			document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+		for(auto doc : cursor) {
+  			target.push_back(doc["publicId"].get_utf8().value.to_string());
+		}
+	}
 
 	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
-										 uint64_t since, uint64_t limit) {}
+										 uint64_t since, uint64_t limit) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		mongocxx::options::find options{};
+		options.limit(limit).skip(since);
+
+		auto cursor = db["Resources"].find(
+			document{} << "resourceType" << static_cast<int>(resourceType) << finalize, options);
+		for(auto doc : cursor) {
+  			target.push_back(doc["publicId"].get_utf8().value.to_string());
+		}
+	}
 
 	/* Use GetOutput().AnswerChange() */
-	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults) {}
+	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults) 
+	{
+		//todo
+	}
 
-	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id) {}
+	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id) 
+	{
+		using namespace bsoncxx::builder::stream;
 
-	void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id) {}
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto cursor = db["Resources"].find(document{} << "parentId" << id << finalize);
+		for(auto doc : cursor) {
+  			target.push_back(doc["internalId"].get_int64().value);
+		}
+	}
+
+	void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id) 
+	{
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto cursor = db["Resources"].find(
+			document{} << "parentId" << id << finalize);
+		for(auto doc : cursor) {
+  			target.push_back(doc["publicId"].get_utf8().value.to_string());
+		}
+	}
 
 	/* Use GetOutput().AnswerExportedResource() */
-	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults) {}
+	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults) 
+	{
+		//todo
+	}
 
 	/* Use GetOutput().AnswerChange() */
-	void MongoDBBackend::GetLastChange() {}
+	void MongoDBBackend::GetLastChange() 
+	{
+		//todo
+	}
 
 	/* Use GetOutput().AnswerExportedResource() */
-	void MongoDBBackend::GetLastExportedResource() {}
+	void MongoDBBackend::GetLastExportedResource() 
+	{
+		//todo
+	}
 
 	/* Use GetOutput().AnswerDicomTag() */
-	void MongoDBBackend::GetMainDicomTags(int64_t id) {}
+	void MongoDBBackend::GetMainDicomTags(int64_t id) 
+	{
+		using namespace bsoncxx::builder::stream;
 
-	std::string MongoDBBackend::GetPublicId(int64_t resourceId) { return ""; }
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
 
-	uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType) { return 1; }
+		auto cursor = db["MainDicomTags"].find(
+			document{} << "id" << id << finalize);
+		for(auto doc : cursor) {
+			GetOutput().AnswerDicomTag(static_cast<uint16_t>(doc["tagGroup"].get_int32().value),
+                                   static_cast<uint16_t>(doc["tagElement"].get_int32().value),
+                                   doc["value"].get_utf8().value.to_string());
+		}
+	}
+
+	std::string MongoDBBackend::GetPublicId(int64_t resourceId) 
+	{ 
+	    using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto result = db["Resources"].find_one(document{} << "id" << resourceId << finalize);
+    
+		if (result)
+		{ 
+			return result->view()["publicId"].get_utf8().value.to_string();
+		}
+		throw MongoDBException("Unknown resource");
+	}
+
+	uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType) { 
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		int64_t count = db["Resources"].count(
+			document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+		return count;
+	}
 
 	OrthancPluginResourceType MongoDBBackend::GetResourceType(int64_t resourceId) 
 	{
-		return static_cast<OrthancPluginResourceType>(0);
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto result = db["Resources"].find_one(document{} << "id" << resourceId << finalize);
+    
+		if (result)
+		{ 
+			return static_cast<OrthancPluginResourceType>(result->view()["resourceType"].get_int32().value);
+		}
+		throw MongoDBException("Unknown resource");
 	}
 
 	uint64_t MongoDBBackend::GetTotalCompressedSize() { return 1; }
