@@ -25,18 +25,14 @@
 #include "MongoDBBackend.h"
 #include "../Core/MongoDBException.h"
 #include "../Core/Configuration.h"
-//#include "Core/Logging.h"
 
 static OrthancPluginContext* context_ = NULL;
 static OrthancPlugins::MongoDBBackend* backend_ = NULL;
 
-//using namespace Orthanc;
-//class InternalLogging;
-
 static bool DisplayPerformanceWarning()
 {
 	(void)DisplayPerformanceWarning;   // Disable warning about unused function
-	OrthancPluginLogWarning(context_, "Performance warning in PostgreSQL index: "
+	OrthancPluginLogWarning(context_, "Performance warning in MongoDB index: "
 		"Non-release build, runtime debug assertions are turned on");
 	return true;
 }
@@ -83,16 +79,13 @@ extern "C"
 			OrthancPluginLogWarning(context_, "Using MongoDB index");
 		}
 		
-		bool allowUnlock = OrthancPlugins::IsFlagInCommandLineArguments(context_, FLAG_UNLOCK);
-		
 		try
 		{
 			/* Create the connection to MongoDB */
-			bool useLock;
-			std::unique_ptr<OrthancPlugins::MongoDBConnection> pg(OrthancPlugins::CreateConnection(useLock, context_, configuration));
+			std::unique_ptr<OrthancPlugins::MongoDBConnection> mongoconnection(OrthancPlugins::CreateConnection(context_, configuration));
 
 			/* Create the database back-end */
-			backend_ = new OrthancPlugins::MongoDBBackend(context_, pg.release(), useLock, allowUnlock);
+			backend_ = new OrthancPlugins::MongoDBBackend(context_, mongoconnection.release());
 
 			/* Register the MongoDB index into Orthanc */
 			OrthancPlugins::DatabaseBackendAdapter::Register(context_, *backend_);

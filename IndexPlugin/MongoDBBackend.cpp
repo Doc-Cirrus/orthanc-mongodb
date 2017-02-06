@@ -18,6 +18,10 @@
 
 #include "MongoDBBackend.h"
 
+#include <orthanc/OrthancCPlugin.h>
+#include "Configuration.h"
+#include "MongoDBException.h"
+
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
@@ -28,30 +32,48 @@
 
 namespace OrthancPlugins
 {
-	MongoDBBackend::MongoDBBackend(OrthancPluginContext* context, MongoDBConnection* connection,
-								   bool useLock, bool allowUnlock) 
-		: context_(context)
+	MongoDBBackend::MongoDBBackend(OrthancPluginContext* context, MongoDBConnection* connection) 
+		: context_(context),
+		connection_(connection),
+		pool_(mongocxx::uri{connection->GetConnectionUri()})
 	{
+		uint32_t expectedVersion = GlobalProperty_DatabaseSchemaVersion;
+		if (context_)
+		{
+			expectedVersion = OrthancPluginGetExpectedDatabaseVersion(context_);
+		}
+
+		/* Check the expected version of the database */
+		if (GlobalProperty_DatabaseSchemaVersion != expectedVersion)
+		{
+			char info[1024];
+			sprintf(info, "This database plugin is incompatible with your version of Orthanc "
+					"expecting the DB schema version %d, but this plugin is compatible with versions 6",
+					expectedVersion);
+			OrthancPluginLogError(context_, info);
+			throw MongoDBException(info);
+		}
+
+		//cache db name
+		mongocxx::uri uri{connection->GetConnectionUri()};
+		dbname_ = uri.database();
 	}
 
 	MongoDBBackend::~MongoDBBackend()
 	{
 	}
 
-	void MongoDBBackend::Open()
-	{
-	}
+	void MongoDBBackend::Open()	{}
 
 	void MongoDBBackend::Close() {}
 
 	void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment) 
 	{
-		mongocxx::instance inst{};
-		mongocxx::client conn{ mongocxx::uri{} };
-
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
 
-		auto collection = conn["orthanc"]["AttachedFiles"];
+		auto collection = db["AttachedFiles"];
 		document << "id" << id 
 				<<  "contentType" << attachment.contentType
 				<<	"uuid" << attachment.uuid
@@ -64,7 +86,18 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::AttachChild(int64_t parent, int64_t child) {}
+	void MongoDBBackend::AttachChild(int64_t parent, int64_t child) {
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["Resources"];
+
+		using namespace bsoncxx::builder::stream;
+		collection.update_many(
+			document{} << "internalId" << static_cast<int64_t>(child) << finalize,
+			document{} << "$set" << open_document <<
+                        "parentId" << static_cast<int64_t>(parent) << close_document << finalize
+		);
+	}
 
 	void MongoDBBackend::ClearChanges() {}
 
@@ -167,7 +200,7 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::CommitTransaction() {}
 
-	uint32_t MongoDBBackend::GetDatabaseVersion() { return 6; }
+	uint32_t MongoDBBackend::GetDatabaseVersion() { return GlobalProperty_DatabaseSchemaVersion; }
 
 	/**
 	* Upgrade the database to the specified version of the database

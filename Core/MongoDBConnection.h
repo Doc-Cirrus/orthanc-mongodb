@@ -31,14 +31,11 @@ namespace OrthancPlugins
     std::string uri_;
 
   public:
-	MongoDBConnection();
-	MongoDBConnection(const MongoDBConnection& other);
-    ~MongoDBConnection()
-    {
-    }
+    MongoDBConnection();
+    MongoDBConnection(const MongoDBConnection& other);
+    ~MongoDBConnection() {}
 
     void SetConnectionUri(const std::string& uri);
     std::string GetConnectionUri() const;
-
   };
 }

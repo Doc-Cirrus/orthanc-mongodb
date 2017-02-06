@@ -29,11 +29,6 @@
 // This comes from the Orthanc source code
 static const int32_t GlobalProperty_DatabaseSchemaVersion = 6;
 
-static const int32_t GlobalProperty_IndexLock = 1024;
-static const int32_t GlobalProperty_StorageLock = 1025;
-
-static const std::string FLAG_UNLOCK = "--unlock";
-
 namespace OrthancPlugins
 {
 
@@ -45,7 +40,7 @@ namespace OrthancPlugins
   
   bool GetBooleanValue(const Json::Value& configuration, const std::string& key, bool defaultValue);
   
-  MongoDBConnection* CreateConnection(bool& useLock, OrthancPluginContext* context, const Json::Value& configuration);
+  MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration);
   
   std::string GenerateUuid();
 

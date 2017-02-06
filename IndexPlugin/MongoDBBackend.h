@@ -22,6 +22,8 @@
 
 #include <orthanc/OrthancCppDatabasePlugin.h>
 
+#include <mongocxx/pool.hpp>
+
 #include "../Core/MongoDBConnection.h"
 
 namespace OrthancPlugins
@@ -30,13 +32,13 @@ namespace OrthancPlugins
 	{
 	private:
 		OrthancPluginContext*  context_;
-		uint32_t version_;
+		MongoDBConnection* connection_;
+		mongocxx::pool pool_;
+		std::string dbname_;
 
 	public:
 		MongoDBBackend(OrthancPluginContext* context,
-			MongoDBConnection* connection,  // Takes the ownership of the connection
-			bool useLock,
-			bool allowUnlock);
+			MongoDBConnection* connection);
 
 		virtual ~MongoDBBackend();
 

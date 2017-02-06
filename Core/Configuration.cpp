@@ -108,9 +108,8 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
   }
 
   
-  MongoDBConnection* CreateConnection(bool& useLock, OrthancPluginContext* context, const Json::Value& configuration)
+  MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration)
   {
-    useLock = true;  // Use locking by default
     std::unique_ptr<MongoDBConnection> connection(new MongoDBConnection);
 
     if (configuration.isMember("MongoDB"))

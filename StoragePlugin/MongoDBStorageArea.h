@@ -33,19 +33,10 @@ namespace OrthancPlugins
   {
   private:
     std::unique_ptr<MongoDBConnection>  db_;
-    //GlobalProperties globalProperties_;
-
     boost::mutex mutex_;
-    //std::unique_ptr<PostgreSQLStatement>  create_;
-    //std::unique_ptr<PostgreSQLStatement>  read_;
-    //std::unique_ptr<PostgreSQLStatement>  remove_;
-
-    void Prepare();
 
   public:
-	 MongoDBStorageArea(MongoDBConnection* db,   // Takes the ownership
-                          bool useLock,
-                          bool allowUnlock);
+	 MongoDBStorageArea(MongoDBConnection* db);
 
     ~MongoDBStorageArea();
 

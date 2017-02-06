@@ -145,18 +145,13 @@ extern "C"
       OrthancPluginLogWarning(context_, "Using PostgreSQL storage area");
     }
 
-
-    bool allowUnlock = OrthancPlugins::IsFlagInCommandLineArguments(context_, FLAG_UNLOCK);
-
     try
     {
-      /* Create the connection to PostgreSQL */
-      bool useLock;
       std::unique_ptr<OrthancPlugins::MongoDBConnection>
-        pg(OrthancPlugins::CreateConnection(useLock, context_, configuration));
+        pg(OrthancPlugins::CreateConnection(context_, configuration));
 
       /* Create the storage area back-end */
-      storage_ = new OrthancPlugins::MongoDBStorageArea(pg.release(), useLock, allowUnlock);
+      storage_ = new OrthancPlugins::MongoDBStorageArea(pg.release());
 
       /* Register the storage area into Orthanc */
       OrthancPluginRegisterStorageArea(context_, StorageCreate, StorageRead, StorageRemove);

@@ -55,6 +55,10 @@ find_library(AMONGOCXX_LIBS mongocxx
       PATHS "${MONGOCXX_ROOT}/lib"
 )
 
+IF (APPLE)
+  set (MONGOC_LIBS "-Wl,-all_load ${MONGOC_LIBS}")
+ENDIF()
+
 set(LIBS ${LIBS} ${LIBJSON_LIBS} ${BSON_LIBS} ${MONGOC_LIBS} ${BSONXX_LIBS} ${AMONGOCXX_LIBS})
 message("-- Libraries: ${LIBS}")
 

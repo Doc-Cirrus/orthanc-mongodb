@@ -44,4 +44,5 @@ namespace OrthancPlugins
   {
       return uri_;
   }
+
 }
