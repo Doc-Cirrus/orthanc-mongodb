@@ -477,7 +477,7 @@ namespace OrthancPlugins
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 
-		auto result = db["Resources"].find_one(document{} << "id" << resourceId << finalize);
+		auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
     
 		if (result)
 		{ 
