@@ -201,15 +201,15 @@ namespace OrthancPlugins
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 
-		db["Metadata"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
-		db["AttachedFiles"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
-		db["Changes"].delete_many(document{} << "internalId" << static_cast<int64_t>(id) << finalize);
-		db["PatientRecyclingOrder"].delete_many(document{} << "patientId" << static_cast<int64_t>(id) << finalize);
-		db["MainDicomTags"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
-		db["DicomIdentifiers"].delete_many(document{} << "id" << static_cast<int64_t>(id) << finalize);
+		db["Metadata"].delete_many(document{} << "id" << id << finalize);
+		db["AttachedFiles"].delete_many(document{} << "id" << id << finalize);
+		db["Changes"].delete_many(document{} << "internalId" << id << finalize);
+		db["PatientRecyclingOrder"].delete_many(document{} << "patientId" << id << finalize);
+		db["MainDicomTags"].delete_many(document{} << "id" << id << finalize);
+		db["DicomIdentifiers"].delete_many(document{} << "id" << id << finalize);
 		
 		//TODO: delete all parent resources as well
-		db["Resources"].delete_many(document{} << "internalId" << static_cast<int64_t>(id) << finalize);
+		db["Resources"].delete_many(document{} << "internalId" << id << finalize);
 
 		//TODO:
 		/*
@@ -280,7 +280,32 @@ namespace OrthancPlugins
 	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults) 
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
-		//todo
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		mongocxx::options::find options{};
+		options.sort(document{} << "seq" << 1 << finalize).limit(maxResults + 1);
+
+		auto cursor = db["Changes"].find(
+			document{} << "seq" << open_document << "$gt" << since << close_document << finalize, options);
+		uint32_t count = 0;
+		done = true;
+		for(auto doc : cursor) {
+			if (count == maxResults) 
+			{
+				done = false;
+				break;
+			}
+			GetOutput().AnswerChange(
+				doc["seq"].get_int64().value,
+				doc["changeType"].get_int32().value,
+				static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
+				GetPublicId(doc["internalId"].get_int64().value),
+				doc["date"].get_utf8().value.to_string());
+			count++;
+		}
 	}
 
 	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id) 
@@ -316,21 +341,86 @@ namespace OrthancPlugins
 	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults) 
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
-		//todo
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		mongocxx::options::find options{};
+		options.sort(document{} << "seq" << 1 << finalize).limit(maxResults + 1);
+
+		auto cursor = db["ExportedResources"].find(
+			document{} << "seq" << open_document << "$gt" << since << close_document << finalize, options);
+		int count = 0;
+		done = true;
+		for(auto doc : cursor) {
+			if (count == maxResults) {
+				done = false;
+				break;
+			}
+			GetOutput().AnswerExportedResource(
+				doc["seq"].get_int64().value,
+				static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
+				doc["publicId"].get_utf8().value.to_string(),
+				doc["remoteModality"].get_utf8().value.to_string(),
+				doc["date"].get_utf8().value.to_string(),
+				doc["patientId"].get_utf8().value.to_string(),
+				doc["studyInstanceUid"].get_utf8().value.to_string(),
+				doc["seriesInstanceUid"].get_utf8().value.to_string(),
+				doc["sopInstanceUid"].get_utf8().value.to_string());
+			count++;
+		}
 	}
 
 	/* Use GetOutput().AnswerChange() */
 	void MongoDBBackend::GetLastChange() 
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
-		//todo
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		mongocxx::options::find options{};
+		options.sort(document{} << "seq" << -1 << finalize).limit(1);
+
+		auto cursor = db["Changes"].find(
+			document{} << finalize, options);
+		for(auto doc : cursor) {
+			GetOutput().AnswerChange(
+				doc["seq"].get_int64().value,
+				doc["changeType"].get_int32().value,
+				static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
+				GetPublicId(doc["internalId"].get_int64().value),
+				doc["date"].get_utf8().value.to_string());
+		}
 	}
 
 	/* Use GetOutput().AnswerExportedResource() */
 	void MongoDBBackend::GetLastExportedResource() 
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
-		//todo
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		mongocxx::options::find options{};
+		options.sort(document{} << "seq" << 11 << finalize).limit(1);
+
+		auto cursor = db["ExportedResources"].find(document{} << finalize, options);
+		for(auto doc : cursor) {
+			GetOutput().AnswerExportedResource(
+				doc["seq"].get_int64().value,
+				static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
+				doc["publicId"].get_utf8().value.to_string(),
+				doc["remoteModality"].get_utf8().value.to_string(),
+				doc["date"].get_utf8().value.to_string(),
+				doc["patientId"].get_utf8().value.to_string(),
+				doc["studyInstanceUid"].get_utf8().value.to_string(),
+				doc["seriesInstanceUid"].get_utf8().value.to_string(),
+				doc["sopInstanceUid"].get_utf8().value.to_string());
+		}
 	}
 
 	/* Use GetOutput().AnswerDicomTag() */
@@ -359,7 +449,7 @@ namespace OrthancPlugins
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 
-		auto result = db["Resources"].find_one(document{} << "id" << resourceId << finalize);
+		auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
     
 		if (result)
 		{ 
@@ -579,7 +669,17 @@ namespace OrthancPlugins
 	bool MongoDBBackend::LookupGlobalProperty(std::string& target /*out*/, int32_t property) 
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
-		//todo
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto doc = db["GlobalProperties"].find_one(
+			document{} << "property" << property << finalize);
+		if(doc) {
+  			target = doc->view()["value"].get_utf8().value.to_string();
+			return true;
+		}
 		return false; 
 	}
 
@@ -605,9 +705,43 @@ namespace OrthancPlugins
 		} 
 	}
 
-	bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType) { return false; }
+	bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType) 
+	{
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		using namespace bsoncxx::builder::stream;
 
-	bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId) { return false; }
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto doc = db["Metadata"].find_one(
+			document{} << "id" << id << "type" << metadataType << finalize);
+		if(doc) {
+			bsoncxx::document::view view = doc->view();
+			target = view["value"].get_utf8().value.to_string();
+			return true;
+		}
+		return false; 
+	}
+
+	bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId) 
+	{ 
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto doc = db["Resources"].find_one(
+			document{} << "internalId" << resourceId << finalize);
+		bool res = false;
+		if (doc) {
+			bsoncxx::document::element parent = doc->view()["parentId"];
+			if (parent.type() == bsoncxx::type::k_int64) {
+				parentId = parent.get_int64().value;
+				res = true;
+			}
+		}
+		return res;
+	}
 
 	bool MongoDBBackend::LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId) 
 	{ 
@@ -632,7 +766,26 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid) { return false; }
 
-	void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value) {}
+	void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value) 
+	{
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		bsoncxx::builder::stream::document pdocument{};
+		pdocument << "property" << property 
+				<<  "value" << value;
+
+		auto collection = db["GlobalProperties"];
+		auto doc = collection.find_one_and_update(
+			document{} << "property" << property << finalize,
+			pdocument.view()
+		);
+		if (!doc) {
+			collection.insert_one(pdocument.view());
+		}
+	}
 
 	void MongoDBBackend::SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value) 
 	{
@@ -696,7 +849,17 @@ namespace OrthancPlugins
 	**/
 	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea) {}
 
-	void MongoDBBackend::ClearMainDicomTags(int64_t internalId) {}
+	void MongoDBBackend::ClearMainDicomTags(int64_t internalId) 
+	{
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		using namespace bsoncxx::builder::stream;
 
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		db["MainDicomTags"].delete_many(document{} << "id" << internalId << finalize);
+		db["DicomIdentifiers"].delete_many(document{} << "id" << internalId << finalize);
+		
+	}
 
 } //namespace OrthancPlugins
