@@ -83,9 +83,9 @@ namespace OrthancPlugins
         mongoc_iovec_t iov;
         iov.iov_len = size;
 #ifdef _WIN32
-        iov.iov_base = const_cast<void *>(content);
-#else
         iov.iov_base = static_cast<char *>(const_cast<void *>(content));
+#else
+        iov.iov_base = const_cast<void *>(content);
 #endif
         mongoc_stream_writev(stream_, &iov, 1, 0);
         if (!mongoc_gridfs_file_save(file_))
