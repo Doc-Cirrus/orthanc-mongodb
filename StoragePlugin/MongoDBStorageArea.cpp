@@ -19,6 +19,7 @@
 
 
 #include "MongoDBStorageArea.h"
+#include "MongoDBGridFS.h"
 
 #include "../Core/MongoDBException.h"
 #include "../Core/Configuration.h"
@@ -28,10 +29,16 @@ namespace OrthancPlugins
 	MongoDBStorageArea::MongoDBStorageArea(MongoDBConnection* db) : 
     db_(db)
   {
+    uri_ = mongoc_uri_new (db->GetConnectionUri().c_str());
+    pool_ = mongoc_client_pool_new (uri_);
+
+    mongoc_client_pool_set_error_api (pool_, MONGOC_ERROR_API_VERSION_2);
   }
 
   MongoDBStorageArea::~MongoDBStorageArea()
   {
+    mongoc_client_pool_destroy (pool_);
+    mongoc_uri_destroy (uri_);
   }
 
   void  MongoDBStorageArea::Create(const std::string& uuid,
@@ -39,6 +46,8 @@ namespace OrthancPlugins
                                       size_t size,
                                       OrthancPluginContentType type)
   {
+    MongoDBGridFS mongoGrid(pool_, uri_);
+    mongoGrid.SaveFile(uuid, content, size, type);
   }
 
   void  MongoDBStorageArea::Read(void*& content,
@@ -46,17 +55,15 @@ namespace OrthancPlugins
                                     const std::string& uuid,
                                     OrthancPluginContentType type) 
   {
-  }
-
-  void  MongoDBStorageArea::Read(std::string& content,
-                                    const std::string& uuid,
-                                    OrthancPluginContentType type) 
-  {
+    MongoDBGridFS mongoGrid(pool_, uri_);
+    mongoGrid.ReadFile(content, size, uuid, type);
   }
 
   void  MongoDBStorageArea::Remove(const std::string& uuid,
                                       OrthancPluginContentType type)
   {
+    MongoDBGridFS mongoGrid(pool_, uri_);
+    mongoGrid.RemoveFile(uuid, type);
   }
 
   void MongoDBStorageArea::Clear()

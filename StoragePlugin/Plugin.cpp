@@ -96,7 +96,7 @@ static RETURN_TYPE StorageRemove(const char* uuid,
 static bool DisplayPerformanceWarning()
 {
   (void) DisplayPerformanceWarning;   // Disable warning about unused function
-  OrthancPluginLogWarning(context_, "Performance warning in PostgreSQL storage: "
+  OrthancPluginLogWarning(context_, "Performance warning in MongoDB storage: "
                           "Non-release build, runtime debug assertions are turned on");
   return true;
 }
@@ -122,7 +122,7 @@ extern "C"
       return -1;
     }
 
-    OrthancPluginSetDescription(context_, "Stores the files received by Orthanc into a PostgreSQL database.");
+    OrthancPluginSetDescription(context_, "Stores the files received by Orthanc into a MongoDB database.");
 
 
     Json::Value configuration;
@@ -133,16 +133,16 @@ extern "C"
     }
 
 
-    if (!configuration.isMember("PostgreSQL") ||
-        configuration["PostgreSQL"].type() != Json::objectValue ||
-        !OrthancPlugins::GetBooleanValue(configuration["PostgreSQL"], "EnableStorage", false))
+    if (!configuration.isMember("MongoDB") ||
+        configuration["MongoDB"].type() != Json::objectValue ||
+        !OrthancPlugins::GetBooleanValue(configuration["MongoDB"], "EnableStorage", false))
     {
-      OrthancPluginLogWarning(context_, "The PostgreSQL storage area is currently disabled, set \"EnableStorage\" to \"true\" in the \"PostgreSQL\" section of the configuration file of Orthanc");
+      OrthancPluginLogWarning(context_, "The MongoDB storage area is currently disabled, set \"EnableStorage\" to \"true\" in the \"MongoDB\" section of the configuration file of Orthanc");
       return 0;
     }
     else
     {
-      OrthancPluginLogWarning(context_, "Using PostgreSQL storage area");
+      OrthancPluginLogWarning(context_, "Using MongoDB storage area");
     }
 
     try
@@ -180,7 +180,7 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
   {
-    return "postgresql-storage";
+    return "MongoDB-storage";
   }
 
 

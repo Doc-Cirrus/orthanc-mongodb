@@ -26,6 +26,7 @@
 #include <orthanc/OrthancCPlugin.h>
 #include <memory>
 #include <boost/thread/mutex.hpp>
+#include <mongoc.h>
 
 namespace OrthancPlugins
 {  
@@ -34,6 +35,8 @@ namespace OrthancPlugins
   private:
     std::unique_ptr<MongoDBConnection>  db_;
     boost::mutex mutex_;
+    mongoc_client_pool_t *pool_;
+    mongoc_uri_t *uri_;
 
   public:
 	 MongoDBStorageArea(MongoDBConnection* db);
@@ -44,10 +47,6 @@ namespace OrthancPlugins
                 const void* content,
                 size_t size,
                 OrthancPluginContentType type);
-
-    void Read(std::string& content,
-              const std::string& uuid,
-              OrthancPluginContentType type);
 
     void Read(void*& content,
               size_t& size,

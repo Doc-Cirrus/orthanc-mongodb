@@ -43,11 +43,10 @@ extern "C"
 {
 	ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
 	{
-#ifdef _WIN32
-// on Windows explicitly call mongo_init
-		mongoc_init();
-#endif // _WIN32
 
+#ifdef _WIN32
+		mongoc_init();
+#endif
 
 		context_ = context;
 		assert(DisplayPerformanceWarning());

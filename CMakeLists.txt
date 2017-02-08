@@ -87,6 +87,7 @@ set(INDEX_PLUGIN_SOURCES
 set(STORAGE_PLUGIN_SOURCES
   "StoragePlugin/MongoDBStorageArea.cpp"
   "StoragePlugin/Plugin.cpp"
+  "StoragePlugin/MongoDBGridFS.cpp"
 )
 
 ##################################################################
