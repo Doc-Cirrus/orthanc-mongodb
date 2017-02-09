@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.2)
 project(OrthancMongoDB)
 
 set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.2.0" CACHE STRING "Orthanc server sources root.")
+set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
 IF ( MSVC )
@@ -91,11 +92,22 @@ set(STORAGE_PLUGIN_SOURCES
 )
 
 ##################################################################
-add_library(OrthancMongoDBIndex SHARED ${LOGGING} ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
-add_library(OrthancMongoDBStorage SHARED ${LOGGING} ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES})
+add_library(OrthancMongoDBIndex SHARED ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
+add_library(OrthancMongoDBStorage SHARED ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES})
 
 IF (APPLE)
       set(APPLE_LIBS "sasl2" "-framework Security" "-framework CoreFoundation")
       target_link_libraries(OrthancMongoDBIndex ${APPLE_LIBS})
       target_link_libraries(OrthancMongoDBStorage ${APPLE_LIBS})
 ENDIF ()
+
+IF (BUILD_TESTS)
+      include_directories ("${PROJECT_SOURCE_DIR}/Tests")
+      find_library(GOOGLE_TEST_LIB gtest)
+     
+      set(TEST_SOURCES
+            "Tests/IndexPluginTest.cpp"
+      )
+      add_executable(IndexPluginTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
+      target_link_libraries(IndexPluginTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+ENDIF()
