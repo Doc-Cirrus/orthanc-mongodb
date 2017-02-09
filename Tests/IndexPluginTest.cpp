@@ -23,6 +23,8 @@
 #include "MongoDBBackend.h"
 
 static OrthancPluginContext static_context;
+static OrthancPlugins::MongoDBConnection connection;
+
 
 OrthancPluginErrorCode PluginServiceMock(struct _OrthancPluginContext_t* context,
                                               _OrthancPluginService service,
@@ -33,18 +35,53 @@ OrthancPluginErrorCode PluginServiceMock(struct _OrthancPluginContext_t* context
                                                     const_cast<void *>(params));
         (*p->resultUint32) = 6;
     }
+    else if(service == _OrthancPluginService_LogInfo) {
+        const char *data = static_cast<const char *>(params);
+        std::cout << data << std::endl;
+    }
+    else
+    {
+        std::cout << "Unknown type: " << service << std::endl;
+    }
     return OrthancPluginErrorCode_Success;
 }
 
-TEST (Indexplugin, Constructor) {
+
+class MongoDBBackendTest : public ::testing::Test {
+ protected:
+  virtual void SetUp() {
     static_context.InvokeService = &PluginServiceMock;
+    connection.SetConnectionUri("mongodb://localhost:27017/test");
+  }
 
-    OrthancPlugins::MongoDBConnection connection;
-    connection.SetConnectionUri("mongodb://localhost:27011/pliugin_unit_tests");
+  // virtual void TearDown() {}
 
-    OrthancPlugins::MongoDBBackend bakend(&static_context, &connection);
+};
 
-    ASSERT_EQ (-1, -1);
+TEST_F (MongoDBBackendTest, GetTotalCompressedSize) {
+    OrthancPlugins::MongoDBBackend backend(&static_context, &connection);
+    size_t size = backend.GetTotalCompressedSize();
+    std::cout << "Total size: " << size << std::endl;
+    ASSERT_GT(size, 0);
+}
+
+TEST_F (MongoDBBackendTest, ProtectedPatient) {
+    OrthancPlugins::MongoDBBackend backend(&static_context, &connection);
+
+    int64_t pId = 1001;
+
+    bool isProtected = backend.IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, false);
+
+    backend.SetProtectedPatient(pId, true);
+    isProtected = backend.IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, true);
+
+    backend.SetProtectedPatient(pId, false);
+    isProtected = backend.IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, false);
+    
+//    ASSERT_EQ (-1, -1);
 }
  
 int main(int argc, char **argv) {

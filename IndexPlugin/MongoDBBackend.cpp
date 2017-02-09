@@ -832,7 +832,28 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected) {}
+	void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected) 
+	{
+		using namespace bsoncxx::builder::stream;
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+		auto collection = db["PatientRecyclingOrder"];
+
+		if (isProtected)
+		{
+			if (!IsProtectedPatient(internalId))
+			{
+				int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
+				collection.insert_one(document{} << "id" << seq 
+						<<  "patientId" << internalId << finalize);
+			}
+		} 
+		else
+		{
+			collection.delete_many(document{} << "patientId" << internalId << finalize);
+		}
+
+	}
 
 	void MongoDBBackend::StartTransaction() {}
 
@@ -840,14 +861,20 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::CommitTransaction() {}
 
-	uint32_t MongoDBBackend::GetDatabaseVersion() { return GlobalProperty_DatabaseSchemaVersion; }
+	uint32_t MongoDBBackend::GetDatabaseVersion() 
+	{ 
+		return GlobalProperty_DatabaseSchemaVersion; 
+	}
 
 	/**
 	* Upgrade the database to the specified version of the database
 	* schema.  The upgrade script is allowed to make calls to
 	* OrthancPluginReconstructMainDicomTags().
 	**/
-	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea) {}
+	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea) 
+	{
+		
+	}
 
 	void MongoDBBackend::ClearMainDicomTags(int64_t internalId) 
 	{
