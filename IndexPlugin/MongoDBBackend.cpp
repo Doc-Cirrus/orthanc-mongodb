@@ -9,9 +9,9 @@
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General 
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
  * Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
@@ -34,7 +34,7 @@
 
 namespace OrthancPlugins
 {
-	MongoDBBackend::MongoDBBackend(OrthancPluginContext* context, MongoDBConnection* connection) 
+	MongoDBBackend::MongoDBBackend(OrthancPluginContext* context, MongoDBConnection* connection)
 		: context_(context),
 		connection_(connection),
 		pool_(mongocxx::uri{connection->GetConnectionUri()})
@@ -69,7 +69,7 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::Close() {}
 
-	void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment) 
+	void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -77,7 +77,7 @@ namespace OrthancPlugins
 		bsoncxx::builder::stream::document document{};
 
 		auto collection = db["AttachedFiles"];
-		document << "id" << id 
+		document << "id" << id
 				<<  "fileType" << attachment.contentType
 				<<	"uuid" << attachment.uuid
 				<<  "compressedSize" << static_cast<int64_t>(attachment.compressedSize)
@@ -89,7 +89,7 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::AttachChild(int64_t parent, int64_t child) 
+	void MongoDBBackend::AttachChild(int64_t parent, int64_t child)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -104,7 +104,7 @@ namespace OrthancPlugins
 		);
 	}
 
-	void MongoDBBackend::ClearChanges() 
+	void MongoDBBackend::ClearChanges()
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -113,7 +113,8 @@ namespace OrthancPlugins
 		collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
 	}
 
-	void MongoDBBackend::ClearExportedResources() {
+	void MongoDBBackend::ClearExportedResources()
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
@@ -121,7 +122,8 @@ namespace OrthancPlugins
 		collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
 	}
 
-	int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName) {
+	int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 		
@@ -137,11 +139,11 @@ namespace OrthancPlugins
 			document{} << "$inc" << open_document << "i" << int64_t(1) << close_document << finalize,
 			options);
 
-		if(seqDoc) 
+		if(seqDoc)
 		{
 			bsoncxx::document::element element = seqDoc->view()["i"];
 			num = element.get_int64().value;
-		} else 
+		} else
 		{
 			collection.insert_one(
 				document{} << "name" << seqName << "i" << int64_t(1) << finalize);
@@ -149,7 +151,7 @@ namespace OrthancPlugins
 		return num;
 	}
 
-	int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type) 
+	int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -159,16 +161,16 @@ namespace OrthancPlugins
 		int64_t seq = GetNextSequence(db, "Resources");
 
 		auto collection = db["Resources"];
-		document << "internalId" << seq 
+		document << "internalId" << seq
 				<<  "resourceType" << static_cast<int>(type)
 				<<	"publicId" << publicId
 				<<  "parentId" << bsoncxx::types::b_null();
 
 		collection.insert_one(document.view());
-		return seq; 
+		return seq;
 	}
 
-	void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment) 
+	void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -181,7 +183,7 @@ namespace OrthancPlugins
 					<< "fileType" << attachment	<< finalize);
 	}
 
-	void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType) 
+	void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -194,7 +196,8 @@ namespace OrthancPlugins
 					<< "type" << metadataType << finalize);
 	}
 
-	void MongoDBBackend::DeleteResource(int64_t id) {
+	void MongoDBBackend::DeleteResource(int64_t id)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -227,7 +230,7 @@ namespace OrthancPlugins
 		*/
 	}
 
-	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType) 
+	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -237,12 +240,13 @@ namespace OrthancPlugins
 
 		auto cursor = db["Resources"].find(
 			document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["internalId"].get_int64().value);
 		}
 	}
 
-	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType) 
+	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -252,13 +256,14 @@ namespace OrthancPlugins
 
 		auto cursor = db["Resources"].find(
 			document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["publicId"].get_utf8().value.to_string());
 		}
 	}
 
 	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
-										 uint64_t since, uint64_t limit) 
+										 uint64_t since, uint64_t limit)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -271,13 +276,14 @@ namespace OrthancPlugins
 
 		auto cursor = db["Resources"].find(
 			document{} << "resourceType" << static_cast<int>(resourceType) << finalize, options);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["publicId"].get_utf8().value.to_string());
 		}
 	}
 
 	/* Use GetOutput().AnswerChange() */
-	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults) 
+	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -292,8 +298,9 @@ namespace OrthancPlugins
 			document{} << "seq" << open_document << "$gt" << since << close_document << finalize, options);
 		uint32_t count = 0;
 		done = true;
-		for(auto doc : cursor) {
-			if (count == maxResults) 
+		for (auto&& doc : cursor)
+		{
+			if (count == maxResults)
 			{
 				done = false;
 				break;
@@ -308,7 +315,7 @@ namespace OrthancPlugins
 		}
 	}
 
-	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id) 
+	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -317,12 +324,13 @@ namespace OrthancPlugins
 		auto db = (*conn)[dbname_];
 
 		auto cursor = db["Resources"].find(document{} << "parentId" << id << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["internalId"].get_int64().value);
 		}
 	}
 
-	void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id) 
+	void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -332,13 +340,14 @@ namespace OrthancPlugins
 
 		auto cursor = db["Resources"].find(
 			document{} << "parentId" << id << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["publicId"].get_utf8().value.to_string());
 		}
 	}
 
 	/* Use GetOutput().AnswerExportedResource() */
-	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults) 
+	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -353,8 +362,10 @@ namespace OrthancPlugins
 			document{} << "seq" << open_document << "$gt" << since << close_document << finalize, options);
 		int count = 0;
 		done = true;
-		for(auto doc : cursor) {
-			if (count == maxResults) {
+		for (auto&& doc : cursor)
+		{
+			if (count == maxResults)
+			{
 				done = false;
 				break;
 			}
@@ -373,7 +384,7 @@ namespace OrthancPlugins
 	}
 
 	/* Use GetOutput().AnswerChange() */
-	void MongoDBBackend::GetLastChange() 
+	void MongoDBBackend::GetLastChange()
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -386,7 +397,8 @@ namespace OrthancPlugins
 
 		auto cursor = db["Changes"].find(
 			document{} << finalize, options);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
 			GetOutput().AnswerChange(
 				doc["seq"].get_int64().value,
 				doc["changeType"].get_int32().value,
@@ -397,7 +409,7 @@ namespace OrthancPlugins
 	}
 
 	/* Use GetOutput().AnswerExportedResource() */
-	void MongoDBBackend::GetLastExportedResource() 
+	void MongoDBBackend::GetLastExportedResource()
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -409,7 +421,8 @@ namespace OrthancPlugins
 		options.sort(document{} << "seq" << 11 << finalize).limit(1);
 
 		auto cursor = db["ExportedResources"].find(document{} << finalize, options);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
 			GetOutput().AnswerExportedResource(
 				doc["seq"].get_int64().value,
 				static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
@@ -424,7 +437,7 @@ namespace OrthancPlugins
 	}
 
 	/* Use GetOutput().AnswerDicomTag() */
-	void MongoDBBackend::GetMainDicomTags(int64_t id) 
+	void MongoDBBackend::GetMainDicomTags(int64_t id)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -434,15 +447,16 @@ namespace OrthancPlugins
 
 		auto cursor = db["MainDicomTags"].find(
 			document{} << "id" << id << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
 			GetOutput().AnswerDicomTag(static_cast<uint16_t>(doc["tagGroup"].get_int32().value),
                                    static_cast<uint16_t>(doc["tagElement"].get_int32().value),
                                    doc["value"].get_utf8().value.to_string());
 		}
 	}
 
-	std::string MongoDBBackend::GetPublicId(int64_t resourceId) 
-	{ 
+	std::string MongoDBBackend::GetPublicId(int64_t resourceId)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 	    using namespace bsoncxx::builder::stream;
 
@@ -450,15 +464,16 @@ namespace OrthancPlugins
 		auto db = (*conn)[dbname_];
 
 		auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
-    
+
 		if (result)
-		{ 
+		{
 			return result->view()["publicId"].get_utf8().value.to_string();
 		}
 		throw MongoDBException("Unknown resource");
 	}
 
-	uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType) { 
+	uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -469,7 +484,7 @@ namespace OrthancPlugins
 		return count;
 	}
 
-	OrthancPluginResourceType MongoDBBackend::GetResourceType(int64_t resourceId) 
+	OrthancPluginResourceType MongoDBBackend::GetResourceType(int64_t resourceId)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -478,16 +493,16 @@ namespace OrthancPlugins
 		auto db = (*conn)[dbname_];
 
 		auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
-    
+
 		if (result)
-		{ 
+		{
 			return static_cast<OrthancPluginResourceType>(result->view()["resourceType"].get_int32().value);
 		}
 		throw MongoDBException("Unknown resource");
 	}
 
-	uint64_t MongoDBBackend::GetTotalCompressedSize() 
-	{ 
+	uint64_t MongoDBBackend::GetTotalCompressedSize()
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -504,15 +519,16 @@ namespace OrthancPlugins
 
         auto cursor = db["AttachedFiles"].aggregate(stages);
 
-        for (auto&& doc : cursor) {
+        for (auto&& doc : cursor)
+		{
             return doc["totalSize"].get_int64().value;
         }
 		
-		return 0; 
+		return 0;
 	}
 
-	uint64_t MongoDBBackend::GetTotalUncompressedSize() 
-	{ 
+	uint64_t MongoDBBackend::GetTotalUncompressedSize()
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -529,15 +545,16 @@ namespace OrthancPlugins
 
         auto cursor = db["AttachedFiles"].aggregate(stages);
 
-        for (auto&& doc : cursor) {
+        for (auto&& doc : cursor)
+		{
             return doc["totalSize"].get_int64().value;
         }
 		
 		return 0; 	
 	}
 
-	bool MongoDBBackend::IsExistingResource(int64_t internalId) 
-	{ 
+	bool MongoDBBackend::IsExistingResource(int64_t internalId)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -548,8 +565,8 @@ namespace OrthancPlugins
 		return count > 0;
 	}
 
-	bool MongoDBBackend::IsProtectedPatient(int64_t internalId) 
-	{ 
+	bool MongoDBBackend::IsProtectedPatient(int64_t internalId)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -560,7 +577,7 @@ namespace OrthancPlugins
 		return count > 0;
 	}
 
-	void MongoDBBackend::ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id) 
+	void MongoDBBackend::ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -570,12 +587,13 @@ namespace OrthancPlugins
 
 		auto cursor = db["Metadata"].find(
 			document{} << "id" << id << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["type"].get_int32().value);
 		}
 	}
 
-	void MongoDBBackend::ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id) 
+	void MongoDBBackend::ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -585,12 +603,13 @@ namespace OrthancPlugins
 
 		auto cursor = db["AttachedFiles"].find(
 			document{} << "id" << id << finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["fileType"].get_int32().value);
 		}
 	}
 
-	void MongoDBBackend::LogChange(const OrthancPluginChange& change) 
+	void MongoDBBackend::LogChange(const OrthancPluginChange& change)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -608,7 +627,7 @@ namespace OrthancPlugins
 		}
 
 		auto collection = db["Changes"];
-		document << "id" << seq 
+		document << "id" << seq
 				<<  "changeType" << change.changeType
 				<<	"internalId" << id
 				<<  "resourceType" << change.resourceType
@@ -617,7 +636,7 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::LogExportedResource(const OrthancPluginExportedResource& resource) 
+	void MongoDBBackend::LogExportedResource(const OrthancPluginExportedResource& resource)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
@@ -627,7 +646,7 @@ namespace OrthancPlugins
 		int64_t seq = GetNextSequence(db, "ExportedResources");
 
 		auto collection = db["ExportedResources"];
-		document << "id" << seq 
+		document << "id" << seq
 				<<  "resourceType" << resource.resourceType
 				<<	"publicId" << resource.publicId
 				<<  "remoteModality" << resource.modality
@@ -641,7 +660,7 @@ namespace OrthancPlugins
 	}
 
 	/* Use GetOutput().AnswerAttachment() */
-	bool MongoDBBackend::LookupAttachment(int64_t id, int32_t contentType) 
+	bool MongoDBBackend::LookupAttachment(int64_t id, int32_t contentType)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -651,7 +670,8 @@ namespace OrthancPlugins
 
 		auto doc = db["AttachedFiles"].find_one(
 			document{} << "id" << id << "fileType" << contentType << finalize);
-		if(doc) {
+		if(doc)
+		{
 			bsoncxx::document::view view = doc->view();
 			GetOutput().AnswerAttachment(
 							view["uuid"].get_utf8().value.to_string(),
@@ -663,10 +683,10 @@ namespace OrthancPlugins
 							view["compressedHash"].get_utf8().value.to_string());
 			return true;
 		}
-		return false; 
+		return false;
 	}
 
-	bool MongoDBBackend::LookupGlobalProperty(std::string& target /*out*/, int32_t property) 
+	bool MongoDBBackend::LookupGlobalProperty(std::string& target /*out*/, int32_t property)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -676,11 +696,12 @@ namespace OrthancPlugins
 
 		auto doc = db["GlobalProperties"].find_one(
 			document{} << "property" << property << finalize);
-		if(doc) {
+		if(doc)
+		{
   			target = doc->view()["value"].get_utf8().value.to_string();
 			return true;
 		}
-		return false; 
+		return false;
 	}
 
 	void MongoDBBackend::LookupIdentifier(std::list<int64_t>& target /*out*/,
@@ -688,7 +709,7 @@ namespace OrthancPlugins
 		uint16_t group,
 		uint16_t element,
 		OrthancPluginIdentifierConstraint constraint,
-		const char* value) 
+		const char* value)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -697,15 +718,16 @@ namespace OrthancPlugins
 		auto db = (*conn)[dbname_];
 
 		auto cursor = db["DicomIdentifiers"].find(
-			document{} << "tagGroup" << group 
+			document{} << "tagGroup" << group
 					<< "tagElement" << element
 					<< "value" << value	<< finalize);
-		for(auto doc : cursor) {
+		for (auto&& doc : cursor)
+		{
   			target.push_back(doc["id"].get_int64().value);
-		} 
+		}
 	}
 
-	bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType) 
+	bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -715,16 +737,17 @@ namespace OrthancPlugins
 
 		auto doc = db["Metadata"].find_one(
 			document{} << "id" << id << "type" << metadataType << finalize);
-		if(doc) {
+		if(doc)
+		{
 			bsoncxx::document::view view = doc->view();
 			target = view["value"].get_utf8().value.to_string();
 			return true;
 		}
-		return false; 
+		return false;
 	}
 
-	bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId) 
-	{ 
+	bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -733,9 +756,11 @@ namespace OrthancPlugins
 		auto doc = db["Resources"].find_one(
 			document{} << "internalId" << resourceId << finalize);
 		bool res = false;
-		if (doc) {
+		if (doc)
+		{
 			bsoncxx::document::element parent = doc->view()["parentId"];
-			if (parent.type() == bsoncxx::type::k_int64) {
+			if (parent.type() == bsoncxx::type::k_int64)
+			{
 				parentId = parent.get_int64().value;
 				res = true;
 			}
@@ -743,8 +768,8 @@ namespace OrthancPlugins
 		return res;
 	}
 
-	bool MongoDBBackend::LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId) 
-	{ 
+	bool MongoDBBackend::LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId)
+	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
@@ -753,20 +778,29 @@ namespace OrthancPlugins
 
 		auto doc = db["Resources"].find_one(
 			document{} << "publicId" << publicId << finalize);
-		if(doc) {
+		if(doc)
+		{
 			bsoncxx::document::view view = doc->view();
 			id = view["internalId"].get_int64().value;
 			type = static_cast<OrthancPluginResourceType>(view["resourceType"].get_int32().value);
 			return true;
 		}
-		return false; 
+		return false;
 	}
 
-	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/) { return false; }
+	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/)
+	{
+		//todo
+		return false;
+	}
 
-	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid) { return false; }
+	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid)
+	{
+		//todo
+		return false;
+	}
 
-	void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value) 
+	void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
@@ -774,7 +808,7 @@ namespace OrthancPlugins
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document pdocument{};
-		pdocument << "property" << property 
+		pdocument << "property" << property
 				<<  "value" << value;
 
 		auto collection = db["GlobalProperties"];
@@ -782,19 +816,20 @@ namespace OrthancPlugins
 			document{} << "property" << property << finalize,
 			pdocument.view()
 		);
-		if (!doc) {
+		if (!doc)
+		{
 			collection.insert_one(pdocument.view());
 		}
 	}
 
-	void MongoDBBackend::SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value) 
+	void MongoDBBackend::SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value)
 	{
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
 
 		auto collection = db["MainDicomTags"];
-		document << "id" << id 
+		document << "id" << id
 				<<  "tagGroup" << group
 				<<	"tagElement" << element
 				<<  "value" << value;
@@ -802,14 +837,14 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::SetIdentifierTag(int64_t id, uint16_t group, uint16_t element, const char* value) 
+	void MongoDBBackend::SetIdentifierTag(int64_t id, uint16_t group, uint16_t element, const char* value)
 	{
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
 
 		auto collection = db["DicomIdentifiers"];
-		document << "id" << id 
+		document << "id" << id
 				<<  "tagGroup" << group
 				<<	"tagElement" << element
 				<<  "value" << value;
@@ -817,7 +852,7 @@ namespace OrthancPlugins
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::SetMetadata(int64_t id, int32_t metadataType, const char* value) 
+	void MongoDBBackend::SetMetadata(int64_t id, int32_t metadataType, const char* value)
 	{
 		//todo: delete
 		auto conn = pool_.acquire();
@@ -825,14 +860,14 @@ namespace OrthancPlugins
 		bsoncxx::builder::stream::document document{};
 
 		auto collection = db["Metadata"];
-		document << "id" << id 
+		document << "id" << id
 				<<  "type" << metadataType
 				<<  "value" << value;
 
 		collection.insert_one(document.view());
 	}
 
-	void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected) 
+	void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected)
 	{
 		using namespace bsoncxx::builder::stream;
 		auto conn = pool_.acquire();
@@ -844,10 +879,10 @@ namespace OrthancPlugins
 			if (!IsProtectedPatient(internalId))
 			{
 				int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
-				collection.insert_one(document{} << "id" << seq 
+				collection.insert_one(document{} << "id" << seq
 						<<  "patientId" << internalId << finalize);
 			}
-		} 
+		}
 		else
 		{
 			collection.delete_many(document{} << "patientId" << internalId << finalize);
@@ -861,9 +896,9 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::CommitTransaction() {}
 
-	uint32_t MongoDBBackend::GetDatabaseVersion() 
-	{ 
-		return GlobalProperty_DatabaseSchemaVersion; 
+	uint32_t MongoDBBackend::GetDatabaseVersion()
+	{
+		return GlobalProperty_DatabaseSchemaVersion;
 	}
 
 	/**
@@ -871,12 +906,12 @@ namespace OrthancPlugins
 	* schema.  The upgrade script is allowed to make calls to
 	* OrthancPluginReconstructMainDicomTags().
 	**/
-	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea) 
+	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea)
 	{
-		
+
 	}
 
-	void MongoDBBackend::ClearMainDicomTags(int64_t internalId) 
+	void MongoDBBackend::ClearMainDicomTags(int64_t internalId)
 	{
 		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
