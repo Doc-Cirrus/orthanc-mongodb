@@ -22,6 +22,10 @@
 #include "MongoDBConnection.h"
 #include "MongoDBBackend.h"
 
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/json.hpp>
+#include <bsoncxx/types.hpp>
+
 static OrthancPluginContext static_context;
 static OrthancPlugins::MongoDBConnection connection;
 

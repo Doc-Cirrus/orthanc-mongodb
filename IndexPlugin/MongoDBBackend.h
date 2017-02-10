@@ -39,6 +39,7 @@ namespace OrthancPlugins
 		boost::mutex mutex_;
 
 		int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
+		
 
 	public:
 		MongoDBBackend(OrthancPluginContext* context,

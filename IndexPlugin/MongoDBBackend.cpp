@@ -98,9 +98,9 @@ namespace OrthancPlugins
 
 		using namespace bsoncxx::builder::stream;
 		collection.update_many(
-			document{} << "internalId" << static_cast<int64_t>(child) << finalize,
+			document{} << "internalId" << child << finalize,
 			document{} << "$set" << open_document <<
-                        "parentId" << static_cast<int64_t>(parent) << close_document << finalize
+                        "parentId" << parent << close_document << finalize
 		);
 	}
 
@@ -204,30 +204,76 @@ namespace OrthancPlugins
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 
-		db["Metadata"].delete_many(document{} << "id" << id << finalize);
-		db["AttachedFiles"].delete_many(document{} << "id" << id << finalize);
-		db["Changes"].delete_many(document{} << "internalId" << id << finalize);
-		db["PatientRecyclingOrder"].delete_many(document{} << "patientId" << id << finalize);
-		db["MainDicomTags"].delete_many(document{} << "id" << id << finalize);
-		db["DicomIdentifiers"].delete_many(document{} << "id" << id << finalize);
-		
-		//TODO: delete all parent resources as well
-		db["Resources"].delete_many(document{} << "internalId" << id << finalize);
-
-		//TODO:
-		/*
-		 PostgreSQLResult result(*getRemainingAncestor_);
-		if (!result.IsDone())
+		/* find all resources to delete */
+		std::vector<int64_t> resources_to_delete;
+		std::vector<int64_t> parent_resources_vec {id};
+		while (!parent_resources_vec.empty()) 
 		{
-		GetOutput().SignalRemainingAncestor(result.GetString(1),
-											static_cast<OrthancPluginResourceType>(result.GetInteger(0)));
-
-		// There is at most 1 remaining ancestor
-		assert((result.Step(), result.IsDone()));
+			int64_t resId = parent_resources_vec.back();
+			parent_resources_vec.pop_back();
+			resources_to_delete.push_back(resId); // collect the resource id's to delete
+			auto resCursor = db["Resources"].find(document{} << "parentId" << resId << finalize);
+			for (auto&& d : resCursor) 
+			{
+				int64_t parentId = d["internalId"].get_int64().value;
+				parent_resources_vec.push_back(parentId);
+			}
 		}
 
-		SignalDeletedFilesAndResources();
-		*/
+		//document with ids to delete
+		document inCriteriaArray{};
+		auto inCriteriaStream = inCriteriaArray << "$in" << open_array;
+		for (auto delId : resources_to_delete)
+		{
+			inCriteriaStream << delId;
+		}
+		auto inCriteriaValue = inCriteriaStream << close_array << finalize;
+		bsoncxx::document::view_or_value byIdValue = document{} << "id" << inCriteriaValue << finalize;
+		bsoncxx::document::view_or_value byInternalIdValue = document{} << "internalId" << inCriteriaValue << finalize;
+		bsoncxx::document::view_or_value byPatientIdValue = document{} << "patientId" << inCriteriaValue << finalize;
+
+		// Get the resources to delete for SignalDeletedAttachment
+		std::vector<bsoncxx::document::view> deleted_files_vec;
+		auto cursor = db["AttachedFiles"].find(byIdValue);
+		for (auto&& doc : cursor) 
+		{
+			deleted_files_vec.push_back(doc);
+		}
+
+		// Get the resources to delete for SignalDeletedResource
+		std::vector<bsoncxx::document::view> deleted_resources_vec;
+		cursor = db["Resources"].find(document{} << "internalId" << id << finalize);
+		for (auto&& doc : cursor) 
+		{
+			deleted_resources_vec.push_back(doc);
+		}
+
+		// Delete
+		db["Metadata"].delete_many(byIdValue);
+		db["AttachedFiles"].delete_many(byIdValue);
+		db["Changes"].delete_many(byInternalIdValue);
+		db["PatientRecyclingOrder"].delete_many(byPatientIdValue);
+		db["MainDicomTags"].delete_many(byIdValue);
+		db["DicomIdentifiers"].delete_many(byIdValue);
+		db["Resources"].delete_many(byInternalIdValue);
+
+		for (auto&& doc : deleted_files_vec)
+		{
+			GetOutput().SignalDeletedAttachment(doc["uuid"].get_utf8().value.to_string().c_str(),
+												doc["fileType"].get_int32().value,
+												doc["uncompressedSize"].get_int64().value,
+												doc["uncompressedHash"].get_utf8().value.to_string().c_str(),
+												doc["compressionType"].get_int32().value,
+												doc["compressedSize"].get_int64().value,
+												doc["compressedHash"].get_utf8().value.to_string().c_str());
+		}
+
+		for (auto&& doc : deleted_resources_vec)
+		{
+			GetOutput().SignalDeletedResource(
+					doc["publicId"].get_utf8().value.to_string().c_str(), 
+					static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value));
+		}
 	}
 
 	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType)
@@ -790,13 +836,39 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/)
 	{
-		//todo
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+	    using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto result = db["PatientRecyclingOrder"].find_one(document{} << finalize);
+
+		if (result)
+		{
+			internalId = result->view()["publicId"].get_int64().value;
+			return true;
+		}
 		return false;
 	}
 
 	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid)
 	{
-		//todo
+		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+	    using namespace bsoncxx::builder::stream;
+
+		auto conn = pool_.acquire();
+		auto db = (*conn)[dbname_];
+
+		auto result = db["PatientRecyclingOrder"].find_one(document{} << "patientId" <<
+					open_document << "$ne" << patientIdToAvoid << close_document << finalize,
+					mongocxx::options::find{}.sort(document{} << "seq" << 1 << finalize));
+
+		if (result)
+		{
+			internalId = result->view()["publicId"].get_int64().value;
+			return true;
+		}
 		return false;
 	}
 
@@ -854,17 +926,18 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::SetMetadata(int64_t id, int32_t metadataType, const char* value)
 	{
-		//todo: delete
+		using namespace bsoncxx::builder::stream;
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
-		bsoncxx::builder::stream::document document{};
 
 		auto collection = db["Metadata"];
-		document << "id" << id
-				<<  "type" << metadataType
-				<<  "value" << value;
 
-		collection.insert_one(document.view());
+		collection.delete_many(document{} << "id" << id << "type" << metadataType << finalize);
+		
+		collection.insert_one(
+			document{} << "id" << id
+				<<  "type" << metadataType
+				<<  "value" << value << finalize);
 	}
 
 	void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected)
