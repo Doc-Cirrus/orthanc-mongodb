@@ -29,6 +29,7 @@ namespace OrthancPlugins
   {
   private:
     std::string uri_;
+    int chunk_size_ = 255 * 1024; // Default to the 255k same as mongodb default
 
   public:
     MongoDBConnection();
@@ -37,5 +38,7 @@ namespace OrthancPlugins
 
     void SetConnectionUri(const std::string& uri);
     std::string GetConnectionUri() const;
+    void SetChunkSize(int size);
+    int GetChunkSize() const;
   };
 }

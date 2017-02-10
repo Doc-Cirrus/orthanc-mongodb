@@ -34,21 +34,21 @@ namespace OrthancPlugins
     mongoc_client_pool_t *pool_;
     mongoc_uri_t *uri_;
 
+    int chunk_size_;
+
     // Owning the mongo structures
     mongoc_client_t *client_ = NULL;
     mongoc_gridfs_t *gridfs_ = NULL;
-    mongoc_gridfs_file_t *file_ = NULL;
-    mongoc_stream_t *stream_ = NULL;
-
     mongoc_gridfs_file_opt_t opt = { 0 };
     bson_error_t error;
 
-    void TearDown();
-    void CreateMongoDBFile(const std::string& uuid,
+    void Cleanup();
+    mongoc_gridfs_file_t *CreateMongoDBFile(const std::string& uuid,
                                     OrthancPluginContentType type, bool createFile);
+    mongoc_stream_t *CreateMongoDBStream(mongoc_gridfs_file_t *file);
 
   public:
-    MongoDBGridFS(mongoc_client_pool_t *pool, mongoc_uri_t *uri);
+    MongoDBGridFS(mongoc_client_pool_t *pool, mongoc_uri_t *uri, int chunk_size);
     ~MongoDBGridFS();
 
     void SaveFile(const std::string& uuid,

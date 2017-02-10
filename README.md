@@ -14,12 +14,6 @@ This chapter describes the process of installation with not too much detals and 
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
 - Download Ortanc sources
 
-## Windows
-
-## OSX
-
-## Linux
-
 ### CENTOS 6.8 dev environment setup
 
 * install pyton
@@ -87,3 +81,28 @@ To run cmake with the custom congiguration use the command liek that:
 ```sh
 cmake -DORTHANC_ROOT=~/sources/Orthanc-1.2.0 ..
 ```
+
+
+## Plugin configuration setup
+
+Add plugins in the Ortahc json configuration file:
+
+```json
+    ...
+  "Plugins" : [
+    "libOrthancMongoDBIndex.dylib",
+    "libOrthancMongoDBStorage.dylib"
+  ],
+  // MongoDB plugin confihuration section:
+  "MongoDB" : {
+    "EnableIndex" : true, // false to use default SQLite 
+    "EnableStorage" : true, // false to use default SQLite 
+    "ConnectionUri" : "mongodb://localhost:27017/orthanc_db"
+  },
+  ...
+```
+
+## Known Issues:
+
+1. ConnectionUri must contain the database name due to the [bug in the mongocxx driver CXX-1187](https://jira.mongodb.org/browse/CXX-1187)
+2. 

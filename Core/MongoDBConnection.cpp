@@ -34,7 +34,6 @@ namespace OrthancPlugins
   {
   }
 
-
   void MongoDBConnection::SetConnectionUri(const std::string& uri)
   {
     uri_ = uri;
@@ -45,4 +44,13 @@ namespace OrthancPlugins
       return uri_;
   }
 
+  void MongoDBConnection::SetChunkSize(int size)
+  {
+    chunk_size_ = size;
+  }
+
+  int MongoDBConnection::GetChunkSize() const
+  {
+      return chunk_size_;
+  }
 }

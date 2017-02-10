@@ -23,20 +23,21 @@
 
 namespace OrthancPlugins
 {
-    MongoDBGridFS::MongoDBGridFS(mongoc_client_pool_t *pool, mongoc_uri_t *uri) :
+    MongoDBGridFS::MongoDBGridFS(mongoc_client_pool_t *pool, mongoc_uri_t *uri, int chunk_size) :
         pool_(pool),
-        uri_(uri)
+        uri_(uri),
+        chunk_size_(chunk_size)
     {
         const char *database_name = mongoc_uri_get_database (uri_);
         if (!database_name) 
         {
-            TearDown();
+            Cleanup();
             throw MongoDBException("Is not set");
         }
         client_ = mongoc_client_pool_pop (pool_);
         if (!client_)
         {
-            TearDown();
+            Cleanup();
             throw MongoDBException("Could not initialize mongodb client");
         }
 
@@ -44,21 +45,13 @@ namespace OrthancPlugins
         gridfs_ = mongoc_client_get_gridfs (client_, database_name ? database_name : "orthanc", "fs", &error);
         if (!gridfs_) 
         {
-            TearDown();
+            Cleanup();
             throw MongoDBException("Is not set");
         }
     }
 
-    void MongoDBGridFS::TearDown() 
+    void MongoDBGridFS::Cleanup() 
     {
-        if (stream_) 
-        {
-            mongoc_stream_destroy(stream_);
-        }
-        if (file_) 
-        {
-            mongoc_gridfs_file_destroy(file_);
-        }
         if (gridfs_) 
         {
             mongoc_gridfs_destroy (gridfs_);
@@ -71,14 +64,15 @@ namespace OrthancPlugins
 
     MongoDBGridFS::~MongoDBGridFS() 
     {
-        TearDown();
+        Cleanup();
     }
 
     void MongoDBGridFS::SaveFile(const std::string& uuid,
                     const void* content,
                     size_t size,
                     OrthancPluginContentType type) {
-        CreateMongoDBFile(uuid, type, true);
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, true);
+        mongoc_stream_t *stream = CreateMongoDBStream(file);
 
         mongoc_iovec_t iov;
         iov.iov_len = size;
@@ -87,20 +81,24 @@ namespace OrthancPlugins
 #else
         iov.iov_base = const_cast<void *>(content);
 #endif
-        mongoc_stream_writev(stream_, &iov, 1, 0);
-        if (!mongoc_gridfs_file_save(file_))
+        mongoc_stream_writev(stream, &iov, 1, 0);
+        if (!mongoc_gridfs_file_save(file))
         {
             throw MongoDBException("Could write file.");
         }
+        mongoc_stream_destroy(stream);
+        mongoc_gridfs_file_destroy(file);
     }
 
     void MongoDBGridFS::ReadFile(void*& content,
                                     size_t& size,
                                     const std::string& uuid,
-                                    OrthancPluginContentType type) {
-        CreateMongoDBFile(uuid, type, false);
+                                    OrthancPluginContentType type)
+    {
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
+        mongoc_stream_t *stream = CreateMongoDBStream(file);
         
-        size = mongoc_gridfs_file_get_length(file_);
+        size = mongoc_gridfs_file_get_length(file);
         if (0 == size)
         {
             content = NULL;
@@ -116,40 +114,53 @@ namespace OrthancPlugins
 #else
         iov.iov_base = content;
 #endif
-        mongoc_stream_readv(stream_, &iov, 1, -1, 0);
+        mongoc_stream_readv(stream, &iov, 1, -1, 0);
+
+        mongoc_stream_destroy(stream);
+        mongoc_gridfs_file_destroy(file);
     }
 
     void MongoDBGridFS::RemoveFile(const std::string& uuid,
                                     OrthancPluginContentType type) {
-        CreateMongoDBFile(uuid, type, false);
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
         bson_error_t error;
-        mongoc_gridfs_file_remove(file_, &error);
+        mongoc_gridfs_file_remove(file, &error);
+        mongoc_gridfs_file_destroy(file);
     }
 
-    void MongoDBGridFS::CreateMongoDBFile(const std::string& uuid,
+    mongoc_gridfs_file_t *MongoDBGridFS::CreateMongoDBFile(const std::string& uuid,
                                     OrthancPluginContentType type, bool createFile = true) {
+        mongoc_gridfs_file_t *file = NULL;
         char file_name[1024];
         sprintf(file_name, "%s - %i", uuid.c_str(), type);
         if (createFile)
         {
             mongoc_gridfs_file_opt_t opt = { 0 };
             opt.filename = file_name;
-            file_ = mongoc_gridfs_create_file(gridfs_, &opt);
+            opt.chunk_size = chunk_size_;
+            file = mongoc_gridfs_create_file(gridfs_, &opt);
         } else
         {
             bson_error_t error;
-            file_ = mongoc_gridfs_find_one_by_filename(gridfs_, file_name, &error);
+            file = mongoc_gridfs_find_one_by_filename(gridfs_, file_name, &error);
         }
 
-        if (!file_)
+        if (!file)
         {
             throw MongoDBException("Could not create file.");
         }
-        stream_ = mongoc_stream_gridfs_new(file_);
-        if (!stream_)
+        return file;
+    }
+
+    mongoc_stream_t *MongoDBGridFS::CreateMongoDBStream(mongoc_gridfs_file_t *file)
+    {
+        mongoc_stream_t *stream = NULL;
+        stream = mongoc_stream_gridfs_new(file);
+        if (!stream)
         {
             throw MongoDBException("Could not create stream.");
         }
+        return stream;
     }
   
 

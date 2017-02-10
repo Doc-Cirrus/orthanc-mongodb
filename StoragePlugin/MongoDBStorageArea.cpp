@@ -46,7 +46,7 @@ namespace OrthancPlugins
                                       size_t size,
                                       OrthancPluginContentType type)
   {
-    MongoDBGridFS mongoGrid(pool_, uri_);
+    MongoDBGridFS mongoGrid(pool_, uri_, db_->GetChunkSize());
     mongoGrid.SaveFile(uuid, content, size, type);
   }
 
@@ -55,14 +55,14 @@ namespace OrthancPlugins
                                     const std::string& uuid,
                                     OrthancPluginContentType type) 
   {
-    MongoDBGridFS mongoGrid(pool_, uri_);
+    MongoDBGridFS mongoGrid(pool_, uri_, db_->GetChunkSize());
     mongoGrid.ReadFile(content, size, uuid, type);
   }
 
   void  MongoDBStorageArea::Remove(const std::string& uuid,
                                       OrthancPluginContentType type)
   {
-    MongoDBGridFS mongoGrid(pool_, uri_);
+    MongoDBGridFS mongoGrid(pool_, uri_, db_->GetChunkSize());
     mongoGrid.RemoveFile(uuid, type);
   }
 

@@ -119,6 +119,10 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
       {
         connection->SetConnectionUri(c["ConnectionUri"].asString());
       }
+      if (c.isMember("ChunkSize"))
+      {
+        connection->SetChunkSize(c["ChunkSize"].asInt());
+      }
     }
     return connection.release();
   }
