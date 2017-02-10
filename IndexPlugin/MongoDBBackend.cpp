@@ -233,19 +233,19 @@ namespace OrthancPlugins
 		bsoncxx::document::view_or_value byPatientIdValue = document{} << "patientId" << inCriteriaValue << finalize;
 
 		// Get the resources to delete for SignalDeletedAttachment
-		std::vector<bsoncxx::document::view> deleted_files_vec;
+		std::vector<bsoncxx::document::value> deleted_files_vec;
 		auto attachedCursor = db["AttachedFiles"].find(byIdValue);
 		for (auto&& doc : attachedCursor)
 		{
-			deleted_files_vec.push_back(doc);
+			deleted_files_vec.push_back(bsoncxx::document::value(doc));
 		}
 
 		// Get the resources to delete for SignalDeletedResource
-		std::vector<bsoncxx::document::view> deleted_resources_vec;
+		std::vector<bsoncxx::document::value> deleted_resources_vec;
 		auto resourcesCursor = db["Resources"].find(document{} << "internalId" << id << finalize);
 		for (auto&& doc : resourcesCursor)
 		{
-			deleted_resources_vec.push_back(doc);
+			deleted_resources_vec.push_back(bsoncxx::document::value(doc));
 		}
 
 		// Delete
@@ -259,20 +259,22 @@ namespace OrthancPlugins
 
 		for (auto&& doc : deleted_files_vec)
 		{
-			GetOutput().SignalDeletedAttachment(doc["uuid"].get_utf8().value.to_string().c_str(),
-												doc["fileType"].get_int32().value,
-												doc["uncompressedSize"].get_int64().value,
-												doc["uncompressedHash"].get_utf8().value.to_string().c_str(),
-												doc["compressionType"].get_int32().value,
-												doc["compressedSize"].get_int64().value,
-												doc["compressedHash"].get_utf8().value.to_string().c_str());
+            auto v = doc.view();
+			GetOutput().SignalDeletedAttachment(v["uuid"].get_utf8().value.to_string().c_str(),
+												v["fileType"].get_int32().value,
+												v["uncompressedSize"].get_int64().value,
+												v["uncompressedHash"].get_utf8().value.to_string().c_str(),
+												v["compressionType"].get_int32().value,
+												v["compressedSize"].get_int64().value,
+												v["compressedHash"].get_utf8().value.to_string().c_str());
 		}
 
 		for (auto&& doc : deleted_resources_vec)
 		{
+            auto v = doc.view();
 			GetOutput().SignalDeletedResource(
-					doc["publicId"].get_utf8().value.to_string().c_str(), 
-					static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value));
+					v["publicId"].get_utf8().value.to_string().c_str(),
+					static_cast<OrthancPluginResourceType>(v["resourceType"].get_int32().value));
 		}
 	}
 
