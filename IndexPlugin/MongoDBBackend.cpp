@@ -234,16 +234,16 @@ namespace OrthancPlugins
 
 		// Get the resources to delete for SignalDeletedAttachment
 		std::vector<bsoncxx::document::view> deleted_files_vec;
-		auto cursor = db["AttachedFiles"].find(byIdValue);
-		for (auto&& doc : cursor) 
+		auto attachedCursor = db["AttachedFiles"].find(byIdValue);
+		for (auto&& doc : attachedCursor)
 		{
 			deleted_files_vec.push_back(doc);
 		}
 
 		// Get the resources to delete for SignalDeletedResource
 		std::vector<bsoncxx::document::view> deleted_resources_vec;
-		cursor = db["Resources"].find(document{} << "internalId" << id << finalize);
-		for (auto&& doc : cursor) 
+		auto resourcesCursor = db["Resources"].find(document{} << "internalId" << id << finalize);
+		for (auto&& doc : resourcesCursor)
 		{
 			deleted_resources_vec.push_back(doc);
 		}
