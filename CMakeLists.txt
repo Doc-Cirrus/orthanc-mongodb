@@ -108,6 +108,11 @@ IF (BUILD_TESTS)
       set(TEST_SOURCES
             "Tests/IndexPluginTest.cpp"
       )
+
+      IF (UNIX and NOT APPLE)
+       set (CMAKE_SHARED_LINKER_FLAGS "-lpthread -lm")
+      ENDIF()
+
       add_executable(IndexPluginTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
       target_link_libraries(IndexPluginTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
 ENDIF()
