@@ -92,24 +92,6 @@ class MongoDBBackendTest : public ::testing::Test {
 
 };
 
-TEST_F (MongoDBBackendTest, ProtectedPatient) {
-    
-    int64_t pId = 1001;
-
-    bool isProtected = backend_->IsProtectedPatient(pId);
-    ASSERT_EQ(isProtected, false);
-
-    backend_->SetProtectedPatient(pId, true);
-    isProtected = backend_->IsProtectedPatient(pId);
-    ASSERT_EQ(isProtected, true);
-
-    backend_->SetProtectedPatient(pId, false);
-    isProtected = backend_->IsProtectedPatient(pId);
-    ASSERT_EQ(isProtected, false);
-    
-//    ASSERT_EQ (-1, -1);
-}
-
 OrthancPluginAttachment attachment {
     "", //const char* uuid;
     0, //int32_t     contentType;
@@ -132,9 +114,60 @@ TEST_F(MongoDBBackendTest, Attachments)
     size = backend_->GetTotalUncompressedSize();
     ASSERT_GT(size, 0);
 
+    std::list<int32_t> list;
+    backend_->ListAvailableAttachments(list, 0);
+    ASSERT_EQ(1, list.size());
+
     backend_->DeleteAttachment(0, 0);
     found = backend_->LookupAttachment(0, 0);
     ASSERT_FALSE(found);
+}
+
+TEST_F (MongoDBBackendTest, Resource) 
+{
+    int64_t id = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+    ASSERT_TRUE(id > 0);
+
+    std::list<int64_t> list;
+    backend_->GetAllInternalIds(list, OrthancPluginResourceType_Patient);
+    ASSERT_EQ(1, list.size());
+    ASSERT_EQ(id, *list.begin());
+
+    std::list<std::string> list1;
+    backend_->GetAllPublicIds(list1, OrthancPluginResourceType_Patient);
+    ASSERT_EQ(1, list.size());
+    ASSERT_EQ("", *list1.begin());
+
+    std::string pId = backend_->GetPublicId(id);
+    ASSERT_EQ(pId, "");
+
+    uint64_t count = backend_->GetResourceCount(OrthancPluginResourceType_Patient);
+    ASSERT_EQ(count, 1);
+
+    OrthancPluginResourceType rt = backend_->GetResourceType(id);
+    ASSERT_EQ(rt, OrthancPluginResourceType_Patient);
+
+    ASSERT_TRUE(backend_->IsExistingResource(id));
+    ASSERT_FALSE(backend_->IsExistingResource(id + 1));
+   
+    backend_->DeleteResource(id);
+    ASSERT_FALSE(backend_->IsExistingResource(id));
+}
+
+TEST_F (MongoDBBackendTest, ProtectedPatient) 
+{
+    int64_t pId = 1001;
+
+    bool isProtected = backend_->IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, false);
+
+    backend_->SetProtectedPatient(pId, true);
+    isProtected = backend_->IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, true);
+
+    backend_->SetProtectedPatient(pId, false);
+    isProtected = backend_->IsProtectedPatient(pId);
+    ASSERT_EQ(isProtected, false);
 }
  
 int main(int argc, char **argv) {

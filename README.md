@@ -70,9 +70,12 @@ This chapter describes the process of installation with not too much detals and 
 1. Download the package ```___.tar.gz```
 2. Unpack the sources, and go to the source catalog
 3. create folder ```mkdir build``` and ```cd build```
-4. Run cmake and build the project
-    * ```cmake ..```
-    * ```make```
+4. Linux only: ```export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/```
+5. Run cmake and build the project
+    ```sh
+    cmake ..
+    make
+    ```
 
 ### Build Configuration options:
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
@@ -97,7 +100,8 @@ Add plugins in the Ortahc json configuration file:
   "MongoDB" : {
     "EnableIndex" : true, // false to use default SQLite 
     "EnableStorage" : true, // false to use default SQLite 
-    "ConnectionUri" : "mongodb://localhost:27017/orthanc_db"
+    "ConnectionUri" : "mongodb://localhost:27017/orthanc_db",
+    "ChunkSize" : 261120
   },
   ...
 ```
