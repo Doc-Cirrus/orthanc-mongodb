@@ -109,8 +109,8 @@ IF (BUILD_TESTS)
             "Tests/IndexPluginTest.cpp"
       )
 
-      IF (UNIX and NOT APPLE)
-       set (CMAKE_SHARED_LINKER_FLAGS "-lpthread -lm")
+      IF (UNIX AND NOT APPLE)
+       set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
       ENDIF()
 
       add_executable(IndexPluginTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
