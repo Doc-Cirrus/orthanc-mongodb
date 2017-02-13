@@ -23,7 +23,7 @@ ELSE ()
     pkg_search_module(MONGOCXX REQUIRED libmongocxx)
     include_directories(${BSONCXX_INCLUDE_DIRS})
     include_directories(${MONGOCXX_INCLUDE_DIRS})
-    set(CMAKE_CXX_FLAGS "-std=c++11")
+    set(CMAKE_CXX_FLAGS "-std=c++14")
     #Linux specific switches
     IF (NOT APPLE)
       set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")

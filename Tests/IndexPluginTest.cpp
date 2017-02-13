@@ -22,13 +22,17 @@
 #include "MongoDBConnection.h"
 #include "MongoDBBackend.h"
 
+#include <orthanc/OrthancCPlugin.h>
+
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
 
-static OrthancPluginContext static_context;
-static OrthancPlugins::MongoDBConnection connection;
+#include <mongocxx/client.hpp>
+#include <mongocxx/uri.hpp>
 
+const static char* connection_str = "mongodb://localhost:27017/";
+const static char* test_database = "orthanc_mongodb_testdb";
 
 OrthancPluginErrorCode PluginServiceMock(struct _OrthancPluginContext_t* context,
                                               _OrthancPluginService service,
@@ -53,39 +57,84 @@ OrthancPluginErrorCode PluginServiceMock(struct _OrthancPluginContext_t* context
 
 class MongoDBBackendTest : public ::testing::Test {
  protected:
+
+    std::unique_ptr<OrthancPluginContext> context_;
+    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection_;
+    std::unique_ptr<OrthancPlugins::MongoDBBackend> backend_;
+    OrthancPlugins::DatabaseBackendOutput *output_; // IDatabaseBackend delete the registered output in the desctructor.
+
+    OrthancPluginDatabaseContext *db_context_ = NULL;
+
   virtual void SetUp() {
-    static_context.InvokeService = &PluginServiceMock;
-    connection.SetConnectionUri("mongodb://localhost:27017/test");
+    context_ = std::make_unique<OrthancPluginContext>();
+    context_->InvokeService = &PluginServiceMock;
+
+    connection_ = std::make_unique<OrthancPlugins::MongoDBConnection>();
+    connection_->SetConnectionUri(std::string(connection_str) + test_database);
+
+    backend_ = std::make_unique<OrthancPlugins::MongoDBBackend>(context_.get(), connection_.get());
+    output_ = new OrthancPlugins::DatabaseBackendOutput(context_.get(), db_context_);
+    backend_->RegisterOutput(output_);
+
+    // clean DB
+    mongocxx::client client{mongocxx::uri{connection_->GetConnectionUri()}};
+    auto test_db = client[test_database];
+    auto collections = test_db.list_collections();
+    for (auto&& c : collections)
+    {
+        std::string name = c["name"].get_utf8().value.to_string();
+        test_db[name].drop();
+    }
+
   }
 
   // virtual void TearDown() {}
 
 };
 
-TEST_F (MongoDBBackendTest, GetTotalCompressedSize) {
-    OrthancPlugins::MongoDBBackend backend(&static_context, &connection);
-    size_t size = backend.GetTotalCompressedSize();
-    std::cout << "Total size: " << size << std::endl;
-    ASSERT_GT(size, 0);
-}
-
 TEST_F (MongoDBBackendTest, ProtectedPatient) {
-    OrthancPlugins::MongoDBBackend backend(&static_context, &connection);
-
+    
     int64_t pId = 1001;
 
-    bool isProtected = backend.IsProtectedPatient(pId);
+    bool isProtected = backend_->IsProtectedPatient(pId);
     ASSERT_EQ(isProtected, false);
 
-    backend.SetProtectedPatient(pId, true);
-    isProtected = backend.IsProtectedPatient(pId);
+    backend_->SetProtectedPatient(pId, true);
+    isProtected = backend_->IsProtectedPatient(pId);
     ASSERT_EQ(isProtected, true);
 
-    backend.SetProtectedPatient(pId, false);
-    isProtected = backend.IsProtectedPatient(pId);
+    backend_->SetProtectedPatient(pId, false);
+    isProtected = backend_->IsProtectedPatient(pId);
     ASSERT_EQ(isProtected, false);
     
 //    ASSERT_EQ (-1, -1);
+}
+
+OrthancPluginAttachment attachment {
+    "", //const char* uuid;
+    0, //int32_t     contentType;
+    100, //uint64_t    uncompressedSize;
+    "", //const char* uncompressedHash;
+    0, //int32_t     compressionType;
+    100, //uint64_t    compressedSize;
+    "" //const char* compressedHash;
+};
+
+TEST_F(MongoDBBackendTest, Attachments) 
+{
+    backend_->AddAttachment(0, attachment);
+    bool found = backend_->LookupAttachment(0, 0);
+    ASSERT_TRUE(found);
+
+    size_t size = backend_->GetTotalCompressedSize();
+    ASSERT_GT(size, 0);
+
+    size = backend_->GetTotalUncompressedSize();
+    ASSERT_GT(size, 0);
+
+    backend_->DeleteAttachment(0, 0);
+    found = backend_->LookupAttachment(0, 0);
+    ASSERT_FALSE(found);
 }
  
 int main(int argc, char **argv) {
