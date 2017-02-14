@@ -123,6 +123,30 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
       {
         connection->SetChunkSize(c["ChunkSize"].asInt());
       }
+      if (c.isMember("host"))
+      {
+        connection->SetHost(c["host"].asString());
+      }
+      if (c.isMember("port"))
+      {
+        connection->SetPort(c["port"].asInt());
+      }
+      if (c.isMember("database"))
+      {
+        connection->SetDatabase(c["database"].asString());
+      }
+      if (c.isMember("user"))
+      {
+        connection->SetUser(c["user"].asString());
+      }
+      if (c.isMember("password"))
+      {
+        connection->SetPassword(c["password"].asString());
+      }
+      if (c.isMember("authenticationDatabase"))
+      {
+        connection->SetAuthenticationDatabase(c["authenticationDatabase"].asString());
+      }
     }
     return connection.release();
   }

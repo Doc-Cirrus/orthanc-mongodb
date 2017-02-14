@@ -26,14 +26,8 @@ namespace OrthancPlugins
   
   MongoDBConnection::MongoDBConnection()
   {
-    uri_.clear();
   }
  
-  MongoDBConnection::MongoDBConnection(const MongoDBConnection& other) :
-    uri_(other.uri_)
-  {
-  }
-
   void MongoDBConnection::SetConnectionUri(const std::string& uri)
   {
     uri_ = uri;
@@ -41,7 +35,23 @@ namespace OrthancPlugins
 
   std::string MongoDBConnection::GetConnectionUri() const
   {
+    if (!uri_.empty())
+    {
       return uri_;
+    }
+    // build from other params
+    std::stringstream builder;
+    builder << "mongodb://";
+    if (!user_.empty())
+    {
+      builder << user_ << ":" << password_ << "@";
+    }
+    builder << host_ << ":" << port_ << "/" << database_;
+    if (!authenticationDatabase_.empty())
+    {
+      builder << "?" << "authSource=" << authenticationDatabase_;
+    }
+    return builder.str();
   }
 
   void MongoDBConnection::SetChunkSize(int size)
@@ -53,4 +63,65 @@ namespace OrthancPlugins
   {
       return chunk_size_;
   }
+
+  std::string MongoDBConnection::GetHost() const
+  {
+    return host_;
+  }
+
+  void MongoDBConnection::SetHost(const std::string& host)
+  {
+    host_ = host;
+  }
+
+  std::string MongoDBConnection::GetDatabase() const
+  {
+    return database_;
+  }
+
+  void MongoDBConnection::SetDatabase(const std::string& database)
+  {
+    database_ = database;
+  }
+
+  int MongoDBConnection::GetPort() const
+  {
+    return port_;
+  }
+
+  void MongoDBConnection::SetPort(int port)
+  {
+    port_ = port;
+  }
+
+  std::string MongoDBConnection::GetUser() const
+  {
+    return user_;
+  }
+
+  void MongoDBConnection::SetUser(const std::string& user)
+  {
+    user_ = user;
+  }
+
+  std::string MongoDBConnection::GetPassword() const
+  {
+    return password_;
+  }
+
+  void MongoDBConnection::SetPassword(const std::string password)
+  {
+    password_ = password;
+  }
+
+  std::string MongoDBConnection::GetAuthenticationDatabase() const
+  {
+    return authenticationDatabase_;
+  }
+
+  void MongoDBConnection::SetAuthenticationDatabase(const std::string authenticationDatabase)
+  {
+    authenticationDatabase_ = authenticationDatabase;
+  }
+
 }

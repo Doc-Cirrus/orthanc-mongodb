@@ -113,13 +113,13 @@ IF (BUILD_TESTS)
       find_library(GOOGLE_TEST_LIB gtest)
      
       set(TEST_SOURCES
-            "Tests/IndexPluginTest.cpp"
+            "Tests/PluginsTest.cpp"
       )
 
       IF (UNIX AND NOT APPLE)
        set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
       ENDIF()
 
-      add_executable(IndexPluginTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
-      target_link_libraries(IndexPluginTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+      add_executable(PluginsTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
+      target_link_libraries(PluginsTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
 ENDIF()

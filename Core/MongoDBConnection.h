@@ -28,17 +28,36 @@ namespace OrthancPlugins
   class MongoDBConnection : public boost::noncopyable
   {
   private:
-    std::string uri_;
+    std::string uri_ = "";
+    std::string host_ = "localhost";
+    int port_ = 27017;
+    std::string database_;
+    std::string user_ = "";
+    std::string password_ = "";
+    std::string authenticationDatabase_ = "";
     int chunk_size_ = 255 * 1024; // Default to the 255k same as mongodb default
 
   public:
     MongoDBConnection();
-    MongoDBConnection(const MongoDBConnection& other);
+    MongoDBConnection(const MongoDBConnection& other) = delete;
     ~MongoDBConnection() {}
 
     void SetConnectionUri(const std::string& uri);
     std::string GetConnectionUri() const;
     void SetChunkSize(int size);
     int GetChunkSize() const;
+    std::string GetHost() const;
+    void SetHost(const std::string& host);
+    std::string GetDatabase() const;
+    void SetDatabase(const std::string& database);
+    int GetPort() const;
+    void SetPort(int port);
+    std::string GetUser() const;
+    void SetUser(const std::string& user);
+    std::string GetPassword() const;
+    void SetPassword(const std::string password);
+    std::string GetAuthenticationDatabase() const;
+    void SetAuthenticationDatabase(const std::string authenticationDatabase);
+
   };
 }

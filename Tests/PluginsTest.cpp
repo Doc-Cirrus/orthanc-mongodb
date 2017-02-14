@@ -24,6 +24,8 @@
 
 #include <orthanc/OrthancCPlugin.h>
 
+#include <json/reader.h>
+
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
@@ -168,6 +170,46 @@ TEST_F (MongoDBBackendTest, ProtectedPatient)
     backend_->SetProtectedPatient(pId, false);
     isProtected = backend_->IsProtectedPatient(pId);
     ASSERT_EQ(isProtected, false);
+}
+
+
+class ConfigurationTest : public ::testing::Test {
+ protected:
+
+    std::unique_ptr<OrthancPluginContext> context_;
+
+  virtual void SetUp() {
+    context_ = std::make_unique<OrthancPluginContext>();
+    context_->InvokeService = &PluginServiceMock;
+  }
+
+  // virtual void TearDown() {}
+
+};
+
+TEST_F(ConfigurationTest, Configuration)
+{
+    std::string conf_str = R"(
+        {
+            "MongoDB" : {
+                "host" : "customhost",
+                "port" : 27001,
+                "user" : "user",
+                "database" : "database",
+                "password" : "password",
+                "authenticationDatabase" : "admin"
+            }
+        }
+    )";
+
+    Json::Reader r;
+    Json::Value v;
+    r.parse(conf_str, v);
+
+    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = 
+            std::unique_ptr<OrthancPlugins::MongoDBConnection>(OrthancPlugins::CreateConnection(context_.get(), v));
+
+    ASSERT_EQ("mongodb://user:password@customhost:27001/database?authSource=admin", connection->GetConnectionUri());
 }
  
 int main(int argc, char **argv) {
