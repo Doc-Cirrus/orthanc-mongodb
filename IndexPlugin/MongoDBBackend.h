@@ -33,7 +33,7 @@ namespace OrthancPlugins
 	{
 	private:
 		OrthancPluginContext*  context_;
-		MongoDBConnection* connection_;
+		std::unique_ptr<MongoDBConnection> connection_;
 		mongocxx::pool pool_;
 		std::string dbname_;
 		boost::mutex mutex_;

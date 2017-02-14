@@ -62,14 +62,6 @@ IF (APPLE)
 ENDIF()
 
 set(LIBS ${LIBS} ${LIBJSON_LIBS} ${BSON_LIBS} ${MONGOC_LIBS} ${BSONXX_LIBS} ${AMONGOCXX_LIBS})
-
-IF (BUILD_WITH_GCOV)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-  IF(UNIX AND NOT APPLE)
-    set(LIBS ${LIBS} gcov)
-  ENDIF()
-ENDIF()
-
 link_libraries(${LIBS})
 
 ##################################################################
@@ -103,23 +95,36 @@ add_library(OrthancMongoDBIndex SHARED ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
 add_library(OrthancMongoDBStorage SHARED ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES})
 
 IF (APPLE)
-      set(APPLE_LIBS "sasl2" "-framework Security" "-framework CoreFoundation")
-      target_link_libraries(OrthancMongoDBIndex ${APPLE_LIBS})
-      target_link_libraries(OrthancMongoDBStorage ${APPLE_LIBS})
+  set(APPLE_LIBS "sasl2" "-framework Security" "-framework CoreFoundation")
+  target_link_libraries(OrthancMongoDBIndex ${APPLE_LIBS})
+  target_link_libraries(OrthancMongoDBStorage ${APPLE_LIBS})
 ENDIF ()
 
 IF (BUILD_TESTS)
-      include_directories ("${PROJECT_SOURCE_DIR}/Tests")
-      find_library(GOOGLE_TEST_LIB gtest)
-     
-      set(TEST_SOURCES
-            "Tests/PluginsTest.cpp"
-      )
 
-      IF (UNIX AND NOT APPLE)
-       set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
-      ENDIF()
+  IF (BUILD_WITH_GCOV)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+    IF(UNIX AND NOT APPLE)
+      set(LIBS ${LIBS} gcov)
+    ENDIF()
+  ENDIF()
 
-      add_executable(PluginsTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
-      target_link_libraries(PluginsTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+  include_directories ("${PROJECT_SOURCE_DIR}/Tests")
+  find_library(GOOGLE_TEST_LIB gtest)
+
+  set(TEST_SOURCES_INDEX
+        "Tests/IndexTest.cpp"
+  )
+  set(TEST_SOURCES_STORAGE
+        "Tests/StorageTest.cpp"
+  )
+
+  IF (UNIX AND NOT APPLE)
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
+  ENDIF()
+
+  add_executable(IndexTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES_INDEX})
+  add_executable(StorageTest ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES} ${TEST_SOURCES_STORAGE})
+  target_link_libraries(IndexTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+  target_link_libraries(StorageTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
 ENDIF()
