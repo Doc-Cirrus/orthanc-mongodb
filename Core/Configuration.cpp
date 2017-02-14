@@ -110,7 +110,7 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
   
   MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration)
   {
-    std::unique_ptr<MongoDBConnection> connection(new MongoDBConnection);
+    std::unique_ptr<MongoDBConnection> connection = std::make_unique<MongoDBConnection>();
 
     if (configuration.isMember("MongoDB"))
     {

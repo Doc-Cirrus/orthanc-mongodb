@@ -62,7 +62,13 @@ IF (APPLE)
 ENDIF()
 
 set(LIBS ${LIBS} ${LIBJSON_LIBS} ${BSON_LIBS} ${MONGOC_LIBS} ${BSONXX_LIBS} ${AMONGOCXX_LIBS})
-message("-- Libraries: ${LIBS}")
+
+IF (BUILD_WITH_GCOV)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+  IF(UNIX AND NOT APPLE)
+    set(LIBS ${LIBS} gcov)
+  ENDIF()
+ENDIF()
 
 link_libraries(${LIBS})
 
@@ -91,11 +97,6 @@ set(STORAGE_PLUGIN_SOURCES
   "StoragePlugin/Plugin.cpp"
   "StoragePlugin/MongoDBGridFS.cpp"
 )
-
-IF (BUILD_WITH_GCOV)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-  set(LIBS ${LIBS} gcov)
-ENDIF()
 
 ##################################################################
 add_library(OrthancMongoDBIndex SHARED ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
