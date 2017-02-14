@@ -4,6 +4,7 @@ project(OrthancMongoDB)
 
 set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.2.0" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
+set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
 IF ( MSVC )
@@ -90,6 +91,11 @@ set(STORAGE_PLUGIN_SOURCES
   "StoragePlugin/Plugin.cpp"
   "StoragePlugin/MongoDBGridFS.cpp"
 )
+
+IF (BUILD_WITH_GCOV)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+  set(LIBS ${LIBS} gcov)
+ENDIF()
 
 ##################################################################
 add_library(OrthancMongoDBIndex SHARED ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
