@@ -4,6 +4,7 @@ project(OrthancMongoDB)
 
 set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.2.0" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
+set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
 IF ( MSVC )
@@ -23,7 +24,7 @@ ELSE ()
     pkg_search_module(MONGOCXX REQUIRED libmongocxx)
     include_directories(${BSONCXX_INCLUDE_DIRS})
     include_directories(${MONGOCXX_INCLUDE_DIRS})
-    set(CMAKE_CXX_FLAGS "-std=c++11")
+    set(CMAKE_CXX_FLAGS "-std=c++14")
     #Linux specific switches
     IF (NOT APPLE)
       set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")
@@ -61,7 +62,13 @@ IF (APPLE)
 ENDIF()
 
 set(LIBS ${LIBS} ${LIBJSON_LIBS} ${BSON_LIBS} ${MONGOC_LIBS} ${BSONXX_LIBS} ${AMONGOCXX_LIBS})
-message("-- Libraries: ${LIBS}")
+
+IF (BUILD_WITH_GCOV)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+  IF(UNIX AND NOT APPLE)
+    set(LIBS ${LIBS} gcov)
+  ENDIF()
+ENDIF()
 
 link_libraries(${LIBS})
 
@@ -106,8 +113,13 @@ IF (BUILD_TESTS)
       find_library(GOOGLE_TEST_LIB gtest)
      
       set(TEST_SOURCES
-            "Tests/IndexPluginTest.cpp"
+            "Tests/PluginsTest.cpp"
       )
-      add_executable(IndexPluginTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
-      target_link_libraries(IndexPluginTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+
+      IF (UNIX AND NOT APPLE)
+       set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
+      ENDIF()
+
+      add_executable(PluginsTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES})
+      target_link_libraries(PluginsTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
 ENDIF()

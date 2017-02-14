@@ -110,7 +110,7 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
   
   MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration)
   {
-    std::unique_ptr<MongoDBConnection> connection(new MongoDBConnection);
+    std::unique_ptr<MongoDBConnection> connection = std::make_unique<MongoDBConnection>();
 
     if (configuration.isMember("MongoDB"))
     {
@@ -122,6 +122,30 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
       if (c.isMember("ChunkSize"))
       {
         connection->SetChunkSize(c["ChunkSize"].asInt());
+      }
+      if (c.isMember("host"))
+      {
+        connection->SetHost(c["host"].asString());
+      }
+      if (c.isMember("port"))
+      {
+        connection->SetPort(c["port"].asInt());
+      }
+      if (c.isMember("database"))
+      {
+        connection->SetDatabase(c["database"].asString());
+      }
+      if (c.isMember("user"))
+      {
+        connection->SetUser(c["user"].asString());
+      }
+      if (c.isMember("password"))
+      {
+        connection->SetPassword(c["password"].asString());
+      }
+      if (c.isMember("authenticationDatabase"))
+      {
+        connection->SetAuthenticationDatabase(c["authenticationDatabase"].asString());
       }
     }
     return connection.release();

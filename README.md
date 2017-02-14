@@ -70,9 +70,12 @@ This chapter describes the process of installation with not too much detals and 
 1. Download the package ```___.tar.gz```
 2. Unpack the sources, and go to the source catalog
 3. create folder ```mkdir build``` and ```cd build```
-4. Run cmake and build the project
-    * ```cmake ..```
-    * ```make```
+4. Linux only: ```export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/```
+5. Run cmake and build the project
+    ```sh
+    cmake ..
+    make
+    ```
 
 ### Build Configuration options:
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
@@ -97,10 +100,31 @@ Add plugins in the Ortahc json configuration file:
   "MongoDB" : {
     "EnableIndex" : true, // false to use default SQLite 
     "EnableStorage" : true, // false to use default SQLite 
-    "ConnectionUri" : "mongodb://localhost:27017/orthanc_db"
+    "ConnectionUri" : "mongodb://localhost:27017/orthanc_db",
+    "ChunkSize" : 261120
   },
   ...
 ```
+
+Also it's possible to configure the plugin with separate config options:
+
+```json
+    "Plugins" : [
+    "libOrthancMongoDBIndex.dylib",
+    "libOrthancMongoDBStorage.dylib"
+    ],
+    "MongoDB" : {
+        "host" : "customhost",
+        "port" : 27001,
+        "user" : "user",
+        "database" : "database",
+        "password" : "password",
+        "authenticationDatabase" : "admin",
+        "ChunkSize" : 261120
+    }
+```
+
+**NOTE: Setting up the ConnectionUri overrides the host, port, database params. So if the ConnectionUri is set, the other parameters except the ChunkSize will be ignored.**
 
 ## Known Issues:
 
