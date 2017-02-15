@@ -7,6 +7,6 @@ OUTPUT_FILE=coverage.info
 OUTPUT_DIR=coverage_report
 
 lcov --capture $PLUGIN_TEST_DIRS --output-file $OUTPUT_FILE 
-lcov --remove $OUTPUT_FILE '/usr/*' '/Applications/*' '*Plugins/Include/orthanc*' -o $OUTPUT_FILE
+lcov --remove $OUTPUT_FILE '/usr/*' '/Applications/*' '*Plugins/Include/orthanc*' '/opt/rh/*' -o $OUTPUT_FILE
 genhtml $OUTPUT_FILE --output-directory $OUTPUT_DIR
 
