@@ -180,7 +180,7 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
   {
-    return "MongoDBIndex";
+    return "MongoDBStorage";
   }
 
 
