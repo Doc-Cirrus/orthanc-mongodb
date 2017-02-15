@@ -70,7 +70,8 @@ namespace OrthancPlugins
     void MongoDBGridFS::SaveFile(const std::string& uuid,
                     const void* content,
                     size_t size,
-                    OrthancPluginContentType type) {
+                    OrthancPluginContentType type) 
+    {
         mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, true);
         mongoc_stream_t *stream = CreateMongoDBStream(file);
 
@@ -121,7 +122,8 @@ namespace OrthancPlugins
     }
 
     void MongoDBGridFS::RemoveFile(const std::string& uuid,
-                                    OrthancPluginContentType type) {
+                                    OrthancPluginContentType type) 
+    {
         mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
         bson_error_t error;
         mongoc_gridfs_file_remove(file, &error);
@@ -129,7 +131,8 @@ namespace OrthancPlugins
     }
 
     mongoc_gridfs_file_t *MongoDBGridFS::CreateMongoDBFile(const std::string& uuid,
-                                    OrthancPluginContentType type, bool createFile = true) {
+                                    OrthancPluginContentType type, bool createFile = true) 
+    {
         mongoc_gridfs_file_t *file = NULL;
         char file_name[1024];
         sprintf(file_name, "%s - %i", uuid.c_str(), type);

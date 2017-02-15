@@ -26,8 +26,8 @@
 
 namespace OrthancPlugins
 {  
-	MongoDBStorageArea::MongoDBStorageArea(MongoDBConnection* db) : 
-    db_(db)
+  MongoDBStorageArea::MongoDBStorageArea(MongoDBConnection* db) : 
+  db_(db)
   {
     uri_ = mongoc_uri_new (db->GetConnectionUri().c_str());
     pool_ = mongoc_client_pool_new (uri_);

@@ -53,7 +53,7 @@ namespace OrthancPlugins
       {
         s += '.';
       }
-      else 
+      else
       {
         s += query[i];
       }
@@ -146,7 +146,7 @@ namespace OrthancPlugins
   int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName)
   {
     using namespace bsoncxx::builder::stream;
-    
+   
     boost::mutex::scoped_lock lock(mutex_);
 
     int64_t num = 1;
@@ -191,7 +191,7 @@ namespace OrthancPlugins
 
   void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment)
   {
-    
+   
     using namespace bsoncxx::builder::stream;
 
     auto conn = pool_.acquire();
@@ -204,7 +204,7 @@ namespace OrthancPlugins
 
   void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType)
   {
-    
+   
     using namespace bsoncxx::builder::stream;
 
     auto conn = pool_.acquire();
@@ -225,13 +225,13 @@ namespace OrthancPlugins
     /* find all resources to delete */
     std::vector<int64_t> resources_to_delete;
     std::vector<int64_t> parent_resources_vec {id};
-    while (!parent_resources_vec.empty()) 
+    while (!parent_resources_vec.empty())
     {
       int64_t resId = parent_resources_vec.back();
       parent_resources_vec.pop_back();
       resources_to_delete.push_back(resId); // collect the resource id's to delete
       auto resCursor = db["Resources"].find(document{} << "parentId" << resId << finalize);
-      for (auto&& d : resCursor) 
+      for (auto&& d : resCursor)
       {
         int64_t parentId = d["internalId"].get_int64().value;
         parent_resources_vec.push_back(parentId);
@@ -329,7 +329,7 @@ namespace OrthancPlugins
   void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
                      uint64_t since, uint64_t limit)
   {
-    
+   
     using namespace bsoncxx::builder::stream;
 
     auto conn = pool_.acquire();
@@ -576,7 +576,7 @@ namespace OrthancPlugins
     {
       return doc["totalSize"].get_int64().value;
     }
-    
+   
     return 0;
   }
 
@@ -601,8 +601,8 @@ namespace OrthancPlugins
     {
       return doc["totalSize"].get_int64().value;
     }
-    
-    return 0;   
+   
+    return 0;  
   }
 
   bool MongoDBBackend::IsExistingResource(int64_t internalId)
@@ -762,6 +762,13 @@ namespace OrthancPlugins
 
     std::list<int64_t> internalIds;
     GetAllInternalIds(internalIds, resourceType);
+   
+    if (internalIds.size() <= 0)
+    {
+      //not foundinternalIds
+      return;
+    }
+   
     document in{};
     auto bs = in << "$in" << open_array;
     for (auto rid : internalIds)
@@ -774,28 +781,28 @@ namespace OrthancPlugins
     switch (constraint)
     {
     case OrthancPluginIdentifierConstraint_Equal:
-      criteria = document{} << "id" << inValue 
+      criteria = document{} << "id" << inValue
           << "tagGroup" << group
           << "tagElement" << element
           << "value" << value << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_SmallerOrEqual:
-      criteria = document{} << "id" << inValue 
+      criteria = document{} << "id" << inValue
           << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$lte" << value << close_document << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_GreaterOrEqual:
-      criteria = document{} << "id" << inValue 
+      criteria = document{} << "id" << inValue
           << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$gte" << value << close_document << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_Wildcard:
-      criteria = document{} << "id" << inValue 
+      criteria = document{} << "id" << inValue
           << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$regex" << ConvertWildcardToRegex(value) << close_document << finalize;
@@ -967,7 +974,7 @@ namespace OrthancPlugins
     auto collection = db["Metadata"];
 
     collection.delete_many(document{} << "id" << id << "type" << metadataType << finalize);
-    
+   
     collection.insert_one(
       document{} << "id" << id
         <<  "type" << metadataType
@@ -1024,7 +1031,7 @@ namespace OrthancPlugins
 
     db["MainDicomTags"].delete_many(document{} << "id" << internalId << finalize);
     db["DicomIdentifiers"].delete_many(document{} << "id" << internalId << finalize);
-    
+   
   }
 
 } //namespace OrthancPlugins

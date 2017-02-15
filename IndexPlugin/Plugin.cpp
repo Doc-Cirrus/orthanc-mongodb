@@ -32,102 +32,102 @@ static OrthancPlugins::MongoDBBackend* backend_ = NULL;
 
 static bool DisplayPerformanceWarning()
 {
-	(void)DisplayPerformanceWarning;   // Disable warning about unused function
-	OrthancPluginLogWarning(context_, "Performance warning in MongoDB index: "
-		"Non-release build, runtime debug assertions are turned on");
-	return true;
+  (void)DisplayPerformanceWarning;   // Disable warning about unused function
+  OrthancPluginLogWarning(context_, "Performance warning in MongoDB index: "
+    "Non-release build, runtime debug assertions are turned on");
+  return true;
 }
 
 
 extern "C"
 {
-	ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
-	{
+  ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
+  {
 
 #ifdef _WIN32
-		mongoc_init();
+    mongoc_init();
 #endif
 
-		context_ = context;
-		assert(DisplayPerformanceWarning());
+    context_ = context;
+    assert(DisplayPerformanceWarning());
 
-		/* Check the version of the Orthanc core */
-		if (OrthancPluginCheckVersion(context_) == 0)
-		{
-			char info[1024];
-			sprintf(info, "Your version of Orthanc (%s) must be above %d.%d.%d to run this plugin",
-				context_->orthancVersion,
-				ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER,
-				ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER,
-				ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER);
-			OrthancPluginLogError(context_, info);
-			return -1;
-		}
+    /* Check the version of the Orthanc core */
+    if (OrthancPluginCheckVersion(context_) == 0)
+    {
+      char info[1024];
+      sprintf(info, "Your version of Orthanc (%s) must be above %d.%d.%d to run this plugin",
+      context_->orthancVersion,
+      ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER,
+      ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER,
+      ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER);
+      OrthancPluginLogError(context_, info);
+      return -1;
+    }
 
-		OrthancPluginSetDescription(context_, "Stores the Orthanc index into a MongoDB database.");
+    OrthancPluginSetDescription(context_, "Stores the Orthanc index into a MongoDB database.");
 
-		Json::Value configuration;
-		
-		if (!OrthancPlugins::ReadConfiguration(configuration, context))
-		{
-			OrthancPluginLogError(context_, "Unable to read the configuration file");
-			return -1;
-		}
-		
-		if (!configuration.isMember("MongoDB") || configuration["MongoDB"].type() != Json::objectValue ||
-			!OrthancPlugins::GetBooleanValue(configuration["MongoDB"], "EnableIndex", false))
-		{
-			OrthancPluginLogWarning(context_, "The MongoDB index is currently disabled, set \"EnableIndex\" to \"true\" in the \"MongoDB\" section of the configuration file of Orthanc");
-			return 0;
-		}
-		else
-		{
-			OrthancPluginLogWarning(context_, "Using MongoDB index");
-		}
-		
-		try
-		{
-			/* Create the connection to MongoDB */
-			std::unique_ptr<OrthancPlugins::MongoDBConnection> mongoconnection(OrthancPlugins::CreateConnection(context_, configuration));
+    Json::Value configuration;
+    
+    if (!OrthancPlugins::ReadConfiguration(configuration, context))
+    {
+      OrthancPluginLogError(context_, "Unable to read the configuration file");
+      return -1;
+    }
+    
+    if (!configuration.isMember("MongoDB") || configuration["MongoDB"].type() != Json::objectValue ||
+      !OrthancPlugins::GetBooleanValue(configuration["MongoDB"], "EnableIndex", false))
+    {
+      OrthancPluginLogWarning(context_, "The MongoDB index is currently disabled, set \"EnableIndex\" to \"true\" in the \"MongoDB\" section of the configuration file of Orthanc");
+      return 0;
+    }
+    else
+    {
+      OrthancPluginLogWarning(context_, "Using MongoDB index");
+    }
+    
+    try
+    {
+      /* Create the connection to MongoDB */
+      std::unique_ptr<OrthancPlugins::MongoDBConnection> mongoconnection(OrthancPlugins::CreateConnection(context_, configuration));
 
-			/* Create the database back-end */
-			backend_ = new OrthancPlugins::MongoDBBackend(context_, mongoconnection.release());
+      /* Create the database back-end */
+      backend_ = new OrthancPlugins::MongoDBBackend(context_, mongoconnection.release());
 
-			/* Register the MongoDB index into Orthanc */
-			OrthancPlugins::DatabaseBackendAdapter::Register(context_, *backend_);
-		}
-		catch (std::runtime_error& e)
-		{
-			OrthancPluginLogError(context_, e.what());
-			return -1;
-		}
-		
-		return 0;
-	}
+      /* Register the MongoDB index into Orthanc */
+      OrthancPlugins::DatabaseBackendAdapter::Register(context_, *backend_);
+    }
+    catch (std::runtime_error& e)
+    {
+      OrthancPluginLogError(context_, e.what());
+      return -1;
+    }
+    
+    return 0;
+  }
 
-	
-	ORTHANC_PLUGINS_API void OrthancPluginFinalize()
-	{
-		OrthancPluginLogWarning(context_, "MongoDB index is finalizing");
+  
+  ORTHANC_PLUGINS_API void OrthancPluginFinalize()
+  {
+    OrthancPluginLogWarning(context_, "MongoDB index is finalizing");
 
-		if (backend_ != NULL)
-		{
-			delete backend_;
-			backend_ = NULL;
-		}
-	}
-
-
-	ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
-	{
-		return "MongoDB";
-	}
+    if (backend_ != NULL)
+    {
+      delete backend_;
+      backend_ = NULL;
+    }
+  }
 
 
-	ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
-	{
-		return "1.0.0"; //TODO: fix this version return value
-	}
+  ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
+  {
+    return "MongoDBIndex";
+  }
+
+
+  ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
+  {
+    return "1.0.0";
+  }
 
 } //extern "C"
 

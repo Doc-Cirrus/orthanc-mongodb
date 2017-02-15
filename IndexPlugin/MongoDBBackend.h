@@ -29,141 +29,141 @@
 
 namespace OrthancPlugins
 {
-	class MongoDBBackend : public IDatabaseBackend
-	{
-	private:
-		OrthancPluginContext*  context_;
-		std::unique_ptr<MongoDBConnection> connection_;
-		mongocxx::pool pool_;
-		std::string dbname_;
-		boost::mutex mutex_;
+  class MongoDBBackend : public IDatabaseBackend
+  {
+  private:
+    OrthancPluginContext*  context_;
+    std::unique_ptr<MongoDBConnection> connection_;
+    mongocxx::pool pool_;
+    std::string dbname_;
+    boost::mutex mutex_;
 
-		int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
-		
+    int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
+    
 
-	public:
-		MongoDBBackend(OrthancPluginContext* context,
-			MongoDBConnection* connection);
+  public:
+    MongoDBBackend(OrthancPluginContext* context,
+      MongoDBConnection* connection);
 
-		virtual ~MongoDBBackend();
+    virtual ~MongoDBBackend();
 
-		virtual void Open();
+    virtual void Open();
 
-		virtual void Close();
+    virtual void Close();
 
-		virtual void AddAttachment(int64_t id, const OrthancPluginAttachment& attachment);
+    virtual void AddAttachment(int64_t id, const OrthancPluginAttachment& attachment);
 
-		virtual void AttachChild(int64_t parent, int64_t child);
+    virtual void AttachChild(int64_t parent, int64_t child);
 
-		virtual void ClearChanges();
+    virtual void ClearChanges();
 
-		virtual void ClearExportedResources();
+    virtual void ClearExportedResources();
 
-		virtual int64_t CreateResource(const char* publicId, OrthancPluginResourceType type);
+    virtual int64_t CreateResource(const char* publicId, OrthancPluginResourceType type);
 
-		virtual void DeleteAttachment(int64_t id, int32_t attachment);
+    virtual void DeleteAttachment(int64_t id, int32_t attachment);
 
-		virtual void DeleteMetadata(int64_t id, int32_t metadataType);
+    virtual void DeleteMetadata(int64_t id, int32_t metadataType);
 
-		virtual void DeleteResource(int64_t id);
+    virtual void DeleteResource(int64_t id);
 
-		virtual void GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType);
+    virtual void GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType);
 
-		virtual void GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType);
+    virtual void GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType);
 
-		virtual void GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
-									 uint64_t since, uint64_t limit);
+    virtual void GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
+                   uint64_t since, uint64_t limit);
 
-		/* Use GetOutput().AnswerChange() */
-		virtual void GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults);
+    /* Use GetOutput().AnswerChange() */
+    virtual void GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults);
 
-		virtual void GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id);
+    virtual void GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id);
 
-		virtual void GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id);
+    virtual void GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id);
 
-		/* Use GetOutput().AnswerExportedResource() */
-		virtual void GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults);
+    /* Use GetOutput().AnswerExportedResource() */
+    virtual void GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults);
 
-		/* Use GetOutput().AnswerChange() */
-		virtual void GetLastChange();
+    /* Use GetOutput().AnswerChange() */
+    virtual void GetLastChange();
 
-		/* Use GetOutput().AnswerExportedResource() */
-		virtual void GetLastExportedResource();
+    /* Use GetOutput().AnswerExportedResource() */
+    virtual void GetLastExportedResource();
 
-		/* Use GetOutput().AnswerDicomTag() */
-		virtual void GetMainDicomTags(int64_t id);
+    /* Use GetOutput().AnswerDicomTag() */
+    virtual void GetMainDicomTags(int64_t id);
 
-		virtual std::string GetPublicId(int64_t resourceId);
+    virtual std::string GetPublicId(int64_t resourceId);
 
-		virtual uint64_t GetResourceCount(OrthancPluginResourceType resourceType);
+    virtual uint64_t GetResourceCount(OrthancPluginResourceType resourceType);
 
-		virtual OrthancPluginResourceType GetResourceType(int64_t resourceId);
+    virtual OrthancPluginResourceType GetResourceType(int64_t resourceId);
 
-		virtual uint64_t GetTotalCompressedSize();
+    virtual uint64_t GetTotalCompressedSize();
 
-		virtual uint64_t GetTotalUncompressedSize();
+    virtual uint64_t GetTotalUncompressedSize();
 
-		virtual bool IsExistingResource(int64_t internalId);
+    virtual bool IsExistingResource(int64_t internalId);
 
-		virtual bool IsProtectedPatient(int64_t internalId);
+    virtual bool IsProtectedPatient(int64_t internalId);
 
-		virtual void ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id);
+    virtual void ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id);
 
-		virtual void ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id);
+    virtual void ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id);
 
-		virtual void LogChange(const OrthancPluginChange& change);
+    virtual void LogChange(const OrthancPluginChange& change);
 
-		virtual void LogExportedResource(const OrthancPluginExportedResource& resource);
+    virtual void LogExportedResource(const OrthancPluginExportedResource& resource);
 
-		/* Use GetOutput().AnswerAttachment() */
-		virtual bool LookupAttachment(int64_t id, int32_t contentType);
+    /* Use GetOutput().AnswerAttachment() */
+    virtual bool LookupAttachment(int64_t id, int32_t contentType);
 
-		virtual bool LookupGlobalProperty(std::string& target /*out*/, int32_t property);
+    virtual bool LookupGlobalProperty(std::string& target /*out*/, int32_t property);
 
-		virtual void LookupIdentifier(std::list<int64_t>& target /*out*/,
-			OrthancPluginResourceType resourceType,
-			uint16_t group,
-			uint16_t element,
-			OrthancPluginIdentifierConstraint constraint,
-			const char* value);
+    virtual void LookupIdentifier(std::list<int64_t>& target /*out*/,
+      OrthancPluginResourceType resourceType,
+      uint16_t group,
+      uint16_t element,
+      OrthancPluginIdentifierConstraint constraint,
+      const char* value);
 
-		virtual bool LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType);
+    virtual bool LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType);
 
-		virtual bool LookupParent(int64_t& parentId /*out*/, int64_t resourceId);
+    virtual bool LookupParent(int64_t& parentId /*out*/, int64_t resourceId);
 
-		virtual bool LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId);
+    virtual bool LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId);
 
-		virtual bool SelectPatientToRecycle(int64_t& internalId /*out*/);
+    virtual bool SelectPatientToRecycle(int64_t& internalId /*out*/);
 
-		virtual bool SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid);
+    virtual bool SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid);
 
-		virtual void SetGlobalProperty(int32_t property, const char* value);
+    virtual void SetGlobalProperty(int32_t property, const char* value);
 
-		virtual void SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value);
+    virtual void SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value);
 
-		virtual void SetIdentifierTag(int64_t id, uint16_t group, uint16_t element, const char* value);
+    virtual void SetIdentifierTag(int64_t id, uint16_t group, uint16_t element, const char* value);
 
-		virtual void SetMetadata(int64_t id, int32_t metadataType, const char* value);
+    virtual void SetMetadata(int64_t id, int32_t metadataType, const char* value);
 
-		virtual void SetProtectedPatient(int64_t internalId, bool isProtected);
+    virtual void SetProtectedPatient(int64_t internalId, bool isProtected);
 
-		virtual void StartTransaction();
+    virtual void StartTransaction();
 
-		virtual void RollbackTransaction();
+    virtual void RollbackTransaction();
 
-		virtual void CommitTransaction();
+    virtual void CommitTransaction();
 
-		virtual uint32_t GetDatabaseVersion();
+    virtual uint32_t GetDatabaseVersion();
 
-		/**
-		* Upgrade the database to the specified version of the database
-		* schema.  The upgrade script is allowed to make calls to
-		* OrthancPluginReconstructMainDicomTags().
-		**/
-		virtual void UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea);
+    /**
+    * Upgrade the database to the specified version of the database
+    * schema.  The upgrade script is allowed to make calls to
+    * OrthancPluginReconstructMainDicomTags().
+    **/
+    virtual void UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea);
 
-		virtual void ClearMainDicomTags(int64_t internalId);
-	};
+    virtual void ClearMainDicomTags(int64_t internalId);
+  };
 } //namespace OrtahncPlugins
 
 

@@ -19,12 +19,12 @@ This chapter describes the process of installation with not too much detals and 
 * install pyton
     ```yum install python```
 * install devtoolset-3
-    ```sh
+    ```
     yum install centos-release-scl-rh
     yum install devtoolset-3-gcc devtoolset-3-gcc-c++
     ```
 * download, compile, install cmake
-    ```sh
+    ```
     wget https://cmake.org/files/v3.7/cmake-3.7.2.tar.gz
     tar zxf cmake-3.7.2.tar.gz
     cd cmake-3.7.2
@@ -32,31 +32,53 @@ This chapter describes the process of installation with not too much detals and 
     scl enable devtoolset-3 bash
     ./configure
     make
-    gmake
     sudo make install
     ```
 
 * download, compile and install boost
-    ```sh
-        wget https://sourceforge.net/projects/boost/files/boost/1.63.0/boost_1_63_0.tar.gz/download -O boost_1_63_0.tar.gz
-        tar zxf boost_1_63_0.tar.gz
-        cd boost_1_63_0
-        ./bootstrap.sh
-        ./b2 cflags=-fPIC
-        sudo ./b2 install
     ```
+    wget https://sourceforge.net/projects/boost/files/boost/1.63.0/boost_1_63_0.tar.gz/download -O boost_1_63_0.tar.gz
+    tar zxf boost_1_63_0.tar.gz
+    cd boost_1_63_0
+    ./bootstrap.sh
+    ./b2 cflags=-fPIC -j 4
+    sudo ./b2 install
+    ```
+* download and install jsoncpp
+    ```
+    wget https://github.com/open-source-parsers/jsoncpp/archive/1.8.0.tar.gz -O jsoncpp-1.8.0.tar.gz
+    tar zxf jsoncpp-1.8.0.tar.gz
+    cd jsoncpp-1.8.0
+    mkdir build && cd build
+    export CXXFLAGS=-fPIC
+    cmake ..
+    make -j4
+    sudo make install
+    ```
+
+* donwload and install Orthanc
+    ```
+    wget http://www.orthanc-server.com/downloads/get.php?path=/orthanc/Orthanc-1.2.0.tar.gz - O Orthanc-1.2.0.tar.gz
+    tar zxf Orthanc-1.2.0.tar.gz
+    cd Orthanc-1.2.0
+    mkdir build
+    cd build
+    sudo yum install libuuid-devel libpng-devel libjpeg-devel
+    cmake -DALLOW_DOWNLOADS=ON -DSTATIC_BUILD=ON ..
+    ```
+
 * donwload builld and install mongo c driver
     ```
-    wget ...
-    tar zxf ...
-    cd ...
+    wget https://github.com/mongodb/mongo-c-driver/releases/download/1.6.0/mongo-c-driver-1.6.0.tar.gz
+    tar zxf mongo-c-driver-1.6.0.tar.gz
+    cd mongo-c-driver
     ./configure --enable-static
     make
     sudo make install
     ```
 * download and build mongo cxx driver
-    ```sh
-    curl -OL https://github.com/mongodb/mongo-cxx-driver/archive/r3.1.1.tar.gz
+    ```
+    wget https://github.com/mongodb/mongo-cxx-driver/archive/r3.1.1.tar.gz
     tar -xzf r3.1.1.tar.gz
     cd mongo-cxx-driver-r3.1.1/build
     export CXXFLAGS=-fPIC
@@ -67,21 +89,23 @@ This chapter describes the process of installation with not too much detals and 
 
 ## Build Configuration
 
-1. Download the package ```___.tar.gz```
-2. Unpack the sources, and go to the source catalog
-3. create folder ```mkdir build``` and ```cd build```
-4. Linux only: ```export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/```
-5. Run cmake and build the project
-    ```sh
+1. Download and unpack the package ```___.tar.gz``` or clone repository
+2. create folder ```mkdir build``` and ```cd build```
+3. Linux only: ```export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig/```
+4. Run cmake and build the project
+    ```
+    export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
     cmake ..
     make
     ```
 
 ### Build Configuration options:
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
+* ```BUILD_TESTS``` - option to build tests, default off
+* ```BUILD_WITH_GCOV``` - option to inclode coverage default off
 
 To run cmake with the custom congiguration use the command liek that:
-```sh
+```
 cmake -DORTHANC_ROOT=~/sources/Orthanc-1.2.0 ..
 ```
 

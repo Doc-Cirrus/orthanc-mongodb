@@ -39,8 +39,7 @@ namespace OrthancPlugins
     mongoc_uri_t *uri_;
 
   public:
-	 MongoDBStorageArea(MongoDBConnection* db);
-
+    MongoDBStorageArea(MongoDBConnection* db);
     ~MongoDBStorageArea();
 
     void Create(const std::string& uuid,
@@ -57,9 +56,9 @@ namespace OrthancPlugins
                 OrthancPluginContentType type);
 
     // For unit tests only (not thread-safe)!
-	MongoDBConnection& GetConnection()
-    {
-      return *db_;
-    }
+  MongoDBConnection& GetConnection()
+  {
+    return *db_;
+  }
   };
 }

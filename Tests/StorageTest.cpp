@@ -39,7 +39,8 @@ class MongoDBStorageTest : public ::testing::Test {
  protected:
     std::unique_ptr<OrthancPlugins::MongoDBStorageArea> storage_;
 
-  virtual void SetUp() {
+  virtual void SetUp() 
+  {
     std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = 
             std::make_unique<OrthancPlugins::MongoDBConnection>();
     connection->SetConnectionUri(std::string(connection_str) + test_database);
@@ -90,7 +91,8 @@ TEST_F(MongoDBStorageTest, StoreFiles)
 }
 
  
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
