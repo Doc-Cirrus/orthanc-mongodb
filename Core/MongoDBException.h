@@ -24,10 +24,10 @@
 
 namespace OrthancPlugins
 {
-	class MongoDBException : public std::runtime_error
-	{
-	public:
-		MongoDBException(const std::string& message) :
-			std::runtime_error("Error in MongoDB: " + message)	{}
-	};
+  class MongoDBException : public std::runtime_error
+  {
+  public:
+    MongoDBException(const std::string& message) :
+    std::runtime_error("Error in MongoDB: " + message)  {}
+  };
 }

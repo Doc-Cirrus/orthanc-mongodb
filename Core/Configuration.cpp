@@ -9,9 +9,9 @@
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General 
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
  * Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
@@ -41,64 +41,64 @@ namespace OrthancPlugins
 
 bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context)
 {
-	std::string s;
+  std::string s;
 
-	char* tmp = OrthancPluginGetConfiguration(context);
-	if (tmp == NULL)
-	{
-		OrthancPluginLogError(context, "Error while retrieving the configuration from Orthanc");
-		return false;
-	}
+  char* tmp = OrthancPluginGetConfiguration(context);
+  if (tmp == NULL)
+  {
+    OrthancPluginLogError(context, "Error while retrieving the configuration from Orthanc");
+    return false;
+  }
 
-	s.assign(tmp);
-	OrthancPluginFreeString(context, tmp);
+  s.assign(tmp);
+  OrthancPluginFreeString(context, tmp);
 
     Json::Reader reader;
     if (reader.parse(s, configuration))
     {
-		return true;
+    return true;
     }
     else
     {
-		OrthancPluginLogError(context, "Unable to parse the configuration");
-		return false;
+    OrthancPluginLogError(context, "Unable to parse the configuration");
+    return false;
     }
 }
 
- 
+
     std::string GetStringValue(const Json::Value& configuration, const std::string& key, const std::string& defaultValue)
-	{
-		if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
-			configuration[key].type() != Json::stringValue)
-		{
-			return defaultValue;
-		}
-		else
-		{
-			return configuration[key].asString();
-		}
-	}
+  {
+    if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
+      configuration[key].type() != Json::stringValue)
+    {
+      return defaultValue;
+    }
+    else
+    {
+      return configuration[key].asString();
+    }
+  }
 
-  
+
     int GetIntegerValue(const Json::Value& configuration, const std::string& key, int defaultValue)
-	{
-		if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
-			configuration[key].type() != Json::intValue)
-		{
-			return defaultValue;
-		}
-		else
-		{
-			return configuration[key].asInt();
-		}
-	}
+  {
+    if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
+      configuration[key].type() != Json::intValue)
+    {
+      return defaultValue;
+    }
+    else
+    {
+      return configuration[key].asInt();
+    }
+  }
 
-  
+
   bool GetBooleanValue(const Json::Value& configuration, const std::string& key, bool defaultValue)
   {
     if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
         configuration[key].type() != Json::booleanValue)
-	{
+  {
       return defaultValue;
     }
     else
@@ -107,7 +107,7 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
     }
   }
 
-  
+
   MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration)
   {
     std::unique_ptr<MongoDBConnection> connection = std::make_unique<MongoDBConnection>();
@@ -151,7 +151,7 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
     return connection.release();
   }
 
-  
+
   std::string GenerateUuid()
   {
 #ifdef WIN32
@@ -192,5 +192,5 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
 
     return false;
   }
- 
+
 }

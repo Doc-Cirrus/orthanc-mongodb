@@ -9,9 +9,9 @@
  *
  * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General 
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
  * Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  **/
@@ -43,7 +43,8 @@ OrthancPluginErrorCode PluginServiceMock(struct _OrthancPluginContext_t* context
                                               _OrthancPluginService service,
                                               const void* params)
 {
-    if (service == _OrthancPluginService_GetExpectedDatabaseVersion) {
+    if (service == _OrthancPluginService_GetExpectedDatabaseVersion)
+    {
         _OrthancPluginReturnSingleValue *p = static_cast<_OrthancPluginReturnSingleValue *>(
                                                     const_cast<void *>(params));
         (*p->resultUint32) = DatabaseVersion;
@@ -69,7 +70,8 @@ class MongoDBBackendTest : public ::testing::Test {
     std::unique_ptr<OrthancPlugins::MongoDBBackend> backend_;
     std::unique_ptr<OrthancPlugins::DatabaseBackendOutput> output_; // IDatabaseBackend delete the registered output in the desctructor.
 
-  virtual void SetUp() {
+  virtual void SetUp()
+  {
     std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = std::make_unique<OrthancPlugins::MongoDBConnection>();
     connection->SetConnectionUri(std::string(connection_str) + test_database);
     context_ = std::make_unique<OrthancPluginContext>();
@@ -89,7 +91,7 @@ class MongoDBBackendTest : public ::testing::Test {
     client[test_database].drop();
   }
 
-  virtual void TearDown() 
+  virtual void TearDown()
   {
       DropDB();
   }
@@ -106,7 +108,7 @@ OrthancPluginAttachment attachment {
     "" //const char* compressedHash;
 };
 
-TEST_F(MongoDBBackendTest, Attachments) 
+TEST_F(MongoDBBackendTest, Attachments)
 {
     backend_->AddAttachment(0, attachment);
     bool found = backend_->LookupAttachment(0, 0);
@@ -127,7 +129,7 @@ TEST_F(MongoDBBackendTest, Attachments)
     ASSERT_FALSE(found);
 }
 
-TEST_F (MongoDBBackendTest, Resource) 
+TEST_F (MongoDBBackendTest, Resource)
 {
     int64_t id = backend_->CreateResource("", OrthancPluginResourceType_Patient);
     ASSERT_TRUE(id > 0);
@@ -179,7 +181,7 @@ TEST_F (MongoDBBackendTest, Resource)
     bool parent = backend_->LookupParent(parentId, childId);
     ASSERT_TRUE(parent);
     ASSERT_EQ(parentId, id);
-   
+
     backend_->DeleteResource(id);
     ASSERT_FALSE(backend_->IsExistingResource(id));
     ASSERT_FALSE(backend_->IsExistingResource(childId));
@@ -198,7 +200,7 @@ OrthancPluginChange change = {
 TEST_F (MongoDBBackendTest, Changes)
 {
     int64_t id = backend_->CreateResource(change.publicId, OrthancPluginResourceType_Patient);
-    
+
     for (int i = 0; i < 10; i++)
     {
         backend_->LogChange(change);
@@ -219,7 +221,7 @@ TEST_F (MongoDBBackendTest, Changes)
     DatabaseAnswerCount = 0;
     backend_->GetLastChange();
     ASSERT_EQ(DatabaseAnswerCount, 1);
-        
+
     backend_->ClearChanges();
 }
 
@@ -239,7 +241,7 @@ OrthancPluginExportedResource exportedResource =
 TEST_F (MongoDBBackendTest, ExportedResources)
 {
     int64_t id = backend_->CreateResource(change.publicId, OrthancPluginResourceType_Patient);
-    
+
     for (int i = 0; i < 10; i++)
     {
         backend_->LogExportedResource(exportedResource);
@@ -260,7 +262,7 @@ TEST_F (MongoDBBackendTest, ExportedResources)
     DatabaseAnswerCount = 0;
     backend_->GetLastExportedResource();
     ASSERT_EQ(DatabaseAnswerCount, 1);
-        
+
     backend_->ClearExportedResources();
 }
 
@@ -292,7 +294,7 @@ TEST_F(MongoDBBackendTest, GlobalProperty)
     ASSERT_EQ(p, "property");
 }
 
-TEST_F (MongoDBBackendTest, ProtectedPatient) 
+TEST_F (MongoDBBackendTest, ProtectedPatient)
 {
     int64_t id1 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
     int64_t id2 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
@@ -320,7 +322,7 @@ TEST_F (MongoDBBackendTest, ProtectedPatient)
     ASSERT_EQ(rId, id2);
 }
 
-TEST_F (MongoDBBackendTest, MainDicomTags) 
+TEST_F (MongoDBBackendTest, MainDicomTags)
 {
     int64_t parentId = backend_->CreateResource("", OrthancPluginResourceType_Patient);
 
@@ -383,7 +385,8 @@ class ConfigurationTest : public ::testing::Test {
 
     std::unique_ptr<OrthancPluginContext> context_;
 
-  virtual void SetUp() {
+  virtual void SetUp()
+  {
     context_ = std::make_unique<OrthancPluginContext>();
     context_->InvokeService = &PluginServiceMock;
   }
@@ -412,7 +415,7 @@ TEST_F(ConfigurationTest, Configuration)
     Json::Value v;
     r.parse(conf_str, v);
 
-    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = 
+    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection =
             std::unique_ptr<OrthancPlugins::MongoDBConnection>(OrthancPlugins::CreateConnection(context_.get(), v));
 
     ASSERT_EQ("mongodb://user:password@customhost:27001/database?authSource=admin", connection->GetConnectionUri());
@@ -425,7 +428,8 @@ TEST_F(ConfigurationTest, Configuration)
     ASSERT_EQ(connection->GetChunkSize(), 1000);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
