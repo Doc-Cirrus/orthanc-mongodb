@@ -129,7 +129,7 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
       }
       if (c.isMember("port"))
       {
-        connection->SetPort(c["port"].asInt());
+        connection->SetTcpPort(c["port"].asInt());
       }
       if (c.isMember("database"))
       {

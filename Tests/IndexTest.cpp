@@ -61,25 +61,15 @@ class MongoDBBackendTest : public ::testing::Test {
  protected:
 
     std::unique_ptr<OrthancPluginContext> context_;
-    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection_;
     std::unique_ptr<OrthancPlugins::MongoDBBackend> backend_;
-    OrthancPlugins::DatabaseBackendOutput *output_; // IDatabaseBackend delete the registered output in the desctructor.
-
-    OrthancPluginDatabaseContext *db_context_ = NULL;
+    std::unique_ptr<OrthancPlugins::DatabaseBackendOutput> output_; // IDatabaseBackend delete the registered output in the desctructor.
 
   virtual void SetUp() {
-    context_ = std::make_unique<OrthancPluginContext>();
-    context_->InvokeService = &PluginServiceMock;
-
-    connection_ = std::make_unique<OrthancPlugins::MongoDBConnection>();
-    connection_->SetConnectionUri(std::string(connection_str) + test_database);
-
-    backend_ = std::make_unique<OrthancPlugins::MongoDBBackend>(context_.get(), connection_.get());
-    output_ = new OrthancPlugins::DatabaseBackendOutput(context_.get(), db_context_);
-    backend_->RegisterOutput(output_);
+    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = std::make_unique<OrthancPlugins::MongoDBConnection>();
+    connection->SetConnectionUri(std::string(connection_str) + test_database);
 
     // clean DB
-    mongocxx::client client{mongocxx::uri{connection_->GetConnectionUri()}};
+    mongocxx::client client{mongocxx::uri{connection->GetConnectionUri()}};
     auto test_db = client[test_database];
     auto collections = test_db.list_collections();
     for (auto&& c : collections)
@@ -88,6 +78,12 @@ class MongoDBBackendTest : public ::testing::Test {
         test_db[name].drop();
     }
 
+    context_ = std::make_unique<OrthancPluginContext>();
+    context_->InvokeService = &PluginServiceMock;
+    output_ = std::make_unique<OrthancPlugins::DatabaseBackendOutput>(context_.get(), static_cast<OrthancPluginDatabaseContext*>(NULL));
+
+    backend_ = std::make_unique<OrthancPlugins::MongoDBBackend>(context_.get(), connection.release());
+    backend_->RegisterOutput(output_.release());
   }
 
   // virtual void TearDown() {}
@@ -211,7 +207,7 @@ TEST_F(ConfigurationTest, Configuration)
 
     ASSERT_EQ("mongodb://user:password@customhost:27001/database?authSource=admin", connection->GetConnectionUri());
 }
- 
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

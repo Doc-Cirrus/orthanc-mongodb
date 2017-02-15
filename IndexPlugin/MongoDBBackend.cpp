@@ -61,9 +61,7 @@ namespace OrthancPlugins
 		dbname_ = uri.database();
 	}
 
-	MongoDBBackend::~MongoDBBackend()
-	{
-	}
+	MongoDBBackend::~MongoDBBackend()	{}
 
 	void MongoDBBackend::Open()	{}
 
@@ -71,7 +69,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
@@ -91,7 +88,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::AttachChild(int64_t parent, int64_t child)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		auto collection = db["Resources"];
@@ -106,7 +102,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::ClearChanges()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		auto collection = db["Changes"];
@@ -115,7 +110,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::ClearExportedResources()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		auto collection = db["ExportedResources"];
@@ -124,7 +118,6 @@ namespace OrthancPlugins
 
 	int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 		
 		boost::mutex::scoped_lock lock(mutex_);
@@ -153,7 +146,6 @@ namespace OrthancPlugins
 
 	int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
@@ -172,7 +164,7 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -185,7 +177,7 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -198,7 +190,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::DeleteResource(int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -280,7 +271,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -296,7 +286,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -313,7 +302,7 @@ namespace OrthancPlugins
 	void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
 										 uint64_t since, uint64_t limit)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
+		
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -333,7 +322,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerChange() */
 	void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -365,7 +353,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -380,7 +367,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -397,7 +383,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerExportedResource() */
 	void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -434,7 +419,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerChange() */
 	void MongoDBBackend::GetLastChange()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -459,7 +443,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerExportedResource() */
 	void MongoDBBackend::GetLastExportedResource()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -487,7 +470,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerDicomTag() */
 	void MongoDBBackend::GetMainDicomTags(int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -505,7 +487,6 @@ namespace OrthancPlugins
 
 	std::string MongoDBBackend::GetPublicId(int64_t resourceId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 	    using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -522,7 +503,6 @@ namespace OrthancPlugins
 
 	uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -534,7 +514,6 @@ namespace OrthancPlugins
 
 	OrthancPluginResourceType MongoDBBackend::GetResourceType(int64_t resourceId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -551,7 +530,6 @@ namespace OrthancPlugins
 
 	uint64_t MongoDBBackend::GetTotalCompressedSize()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -577,7 +555,6 @@ namespace OrthancPlugins
 
 	uint64_t MongoDBBackend::GetTotalUncompressedSize()
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -603,7 +580,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::IsExistingResource(int64_t internalId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -615,7 +591,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::IsProtectedPatient(int64_t internalId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -627,7 +602,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -643,7 +617,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -659,7 +632,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::LogChange(const OrthancPluginChange& change)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
@@ -671,7 +643,7 @@ namespace OrthancPlugins
 		if (!LookupResource(id, type, change.publicId) ||
 			type != change.resourceType)
 		{
-			throw MongoDBException();
+			throw MongoDBException("MongoDBBackend::LogChange - Can not lookup resource.");
 		}
 
 		auto collection = db["Changes"];
@@ -686,7 +658,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::LogExportedResource(const OrthancPluginExportedResource& resource)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		auto conn = pool_.acquire();
 		auto db = (*conn)[dbname_];
 		bsoncxx::builder::stream::document document{};
@@ -710,7 +681,6 @@ namespace OrthancPlugins
 	/* Use GetOutput().AnswerAttachment() */
 	bool MongoDBBackend::LookupAttachment(int64_t id, int32_t contentType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -736,7 +706,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::LookupGlobalProperty(std::string& target /*out*/, int32_t property)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -759,7 +728,6 @@ namespace OrthancPlugins
 		OrthancPluginIdentifierConstraint constraint,
 		const char* value)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -777,7 +745,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -796,7 +763,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -818,7 +784,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -838,7 +803,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 	    using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -856,7 +820,6 @@ namespace OrthancPlugins
 
 	bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 	    using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -876,7 +839,6 @@ namespace OrthancPlugins
 
 	void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();
@@ -981,14 +943,10 @@ namespace OrthancPlugins
 	* schema.  The upgrade script is allowed to make calls to
 	* OrthancPluginReconstructMainDicomTags().
 	**/
-	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea)
-	{
-
-	}
+	void MongoDBBackend::UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea)	{}
 
 	void MongoDBBackend::ClearMainDicomTags(int64_t internalId)
 	{
-		OrthancPluginLogInfo(context_, (std::string("Entering: ") + BOOST_CURRENT_FUNCTION).c_str());
 		using namespace bsoncxx::builder::stream;
 
 		auto conn = pool_.acquire();

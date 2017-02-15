@@ -66,8 +66,4 @@ namespace OrthancPlugins
     mongoGrid.RemoveFile(uuid, type);
   }
 
-  void MongoDBStorageArea::Clear()
-  {
-  }
-
 }
