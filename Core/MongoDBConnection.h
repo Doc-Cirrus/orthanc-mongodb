@@ -50,8 +50,8 @@ namespace OrthancPlugins
     void SetHost(const std::string& host);
     std::string GetDatabase() const;
     void SetDatabase(const std::string& database);
-    int GetPort() const;
-    void SetPort(int port);
+    int GetTcpPort() const;
+    void SetTcpPort(int port);
     std::string GetUser() const;
     void SetUser(const std::string& user);
     std::string GetPassword() const;

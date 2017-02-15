@@ -84,12 +84,12 @@ namespace OrthancPlugins
     database_ = database;
   }
 
-  int MongoDBConnection::GetPort() const
+  int MongoDBConnection::GetTcpPort() const
   {
     return port_;
   }
 
-  void MongoDBConnection::SetPort(int port)
+  void MongoDBConnection::SetTcpPort(int port)
   {
     port_ = port;
   }
