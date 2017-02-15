@@ -32,8 +32,8 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/uri.hpp>
 
-const static char* connection_str = "mongodb://localhost:27017/";
-const static char* test_database = "orthanc_mongodb_testdb";
+std::string connection_str = "mongodb://localhost:27017/";
+std::string test_database = "test_db_" + OrthancPlugins::GenerateUuid();
 
 class MongoDBStorageTest : public ::testing::Test {
  protected:
@@ -43,22 +43,23 @@ class MongoDBStorageTest : public ::testing::Test {
     std::unique_ptr<OrthancPlugins::MongoDBConnection> connection = 
             std::make_unique<OrthancPlugins::MongoDBConnection>();
     connection->SetConnectionUri(std::string(connection_str) + test_database);
-
-    // clean DB
-    mongocxx::client client{mongocxx::uri{connection->GetConnectionUri()}};
-    auto test_db = client[test_database];
-    auto collections = test_db.list_collections();
-    for (auto&& c : collections)
-    {
-        std::string name = c["name"].get_utf8().value.to_string();
-        test_db[name].drop();
-    }
-
     storage_ = std::make_unique<OrthancPlugins::MongoDBStorageArea>(connection.release());
+    
+    DropDB();
   }
 
+  void DropDB()
+  {
+    // drop test DB
+    mongocxx::client client{mongocxx::uri{std::string(connection_str) + test_database}};
+    client[test_database].drop();
+  }
 
-  // virtual void TearDown() {}
+  virtual void TearDown() 
+  {
+      DropDB();
+  }
+
 
 };
 
