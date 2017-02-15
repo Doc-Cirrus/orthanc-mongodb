@@ -18,8 +18,10 @@
 
 #include "gtest/gtest.h"
 
+#include "Configuration.h"
 #include "MongoDBConnection.h"
 #include "MongoDBStorageArea.h"
+#include "MongoDBException.h"
 
 #include <orthanc/OrthancCPlugin.h>
 
@@ -60,12 +62,30 @@ class MongoDBStorageTest : public ::testing::Test {
 
 };
 
+const static std::string input_data(1024*1024, 'A');
+const static std::string filename = OrthancPlugins::GenerateUuid();
+const static OrthancPluginContentType type = OrthancPluginContentType_Unknown;
+
 TEST_F(MongoDBStorageTest, StoreFiles)
 {
-    std::string content = "File Content";
-    std::string filename = "filename";
-    storage_->Create(filename, content.c_str(), content.length(), OrthancPluginContentType_Unknown);
+    storage_->Create(filename, input_data.c_str(), input_data.length(), type);
 
+    void *content;
+    size_t size;
+    storage_->Read(content, size, filename, type);
+    //convert dtaa to string of the specified size
+    char* d = static_cast<char *>(content);
+    std::string res(d, d + size);
+
+    ASSERT_EQ(input_data.length(), size);
+    ASSERT_EQ(input_data, res);
+
+    // free allocated by the Read method memory
+    free(content);
+
+    storage_->Remove(filename, type);
+
+    ASSERT_THROW(storage_->Read(content, size, filename, type), OrthancPlugins::MongoDBException);
 }
 
  

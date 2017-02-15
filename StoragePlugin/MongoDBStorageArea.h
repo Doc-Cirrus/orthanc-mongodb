@@ -56,8 +56,6 @@ namespace OrthancPlugins
     void Remove(const std::string& uuid,
                 OrthancPluginContentType type);
 
-    void Clear();
-
     // For unit tests only (not thread-safe)!
 	MongoDBConnection& GetConnection()
     {

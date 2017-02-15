@@ -32,13 +32,13 @@ namespace OrthancPlugins
         if (!database_name) 
         {
             Cleanup();
-            throw MongoDBException("Is not set");
+            throw MongoDBException("MongoDBGridFS::MongoDBGridFS - Cannot not parse mongodb URI.");
         }
         client_ = mongoc_client_pool_pop (pool_);
         if (!client_)
         {
             Cleanup();
-            throw MongoDBException("Could not initialize mongodb client");
+            throw MongoDBException("MongoDBGridFS::MongoDBGridFS - Cannot initialize mongodb client.");
         }
 
         bson_error_t error;
@@ -46,7 +46,7 @@ namespace OrthancPlugins
         if (!gridfs_) 
         {
             Cleanup();
-            throw MongoDBException("Is not set");
+            throw MongoDBException("MongoDBGridFS::MongoDBGridFS - Cannot initialize mongoc gridfs.");
         }
     }
 
@@ -147,7 +147,7 @@ namespace OrthancPlugins
 
         if (!file)
         {
-            throw MongoDBException("Could not create file.");
+            throw MongoDBException("MongoDBGridFS::CreateMongoDBFile - Could not create file.");
         }
         return file;
     }
@@ -158,7 +158,7 @@ namespace OrthancPlugins
         stream = mongoc_stream_gridfs_new(file);
         if (!stream)
         {
-            throw MongoDBException("Could not create stream.");
+            throw MongoDBException("MongoDBGridFS::CreateMongoDBStream - Could not create stream.");
         }
         return stream;
     }
