@@ -86,6 +86,8 @@ namespace OrthancPlugins
     //cache db name
     mongocxx::uri uri{connection->GetConnectionUri()};
     dbname_ = uri.database();
+
+    CreateIndices();
   }
 
   MongoDBBackend::~MongoDBBackend()  {}
@@ -93,6 +95,24 @@ namespace OrthancPlugins
   void MongoDBBackend::Open()  {}
 
   void MongoDBBackend::Close() {}
+
+  void MongoDBBackend::CreateIndices()
+  {
+    using namespace bsoncxx::builder::stream;
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+    db["Resources"].create_index(document{} << "parentId" << 1 << finalize);
+    db["Resources"].create_index(document{} << "publicId" << 1 << finalize);
+    db["Resources"].create_index(document{} << "resourceType" << 1 << finalize);
+    db["PatientRecyclingOrder"].create_index(document{} << "patientId" << 1 << finalize);
+    db["MainDicomTags"].create_index(document{} << "id" << 1 << finalize);
+    db["DicomIdentifiers"].create_index(document{} << "id" << 1 << finalize);
+    db["DicomIdentifiers"].create_index(document{} << "tagGroup" << 1 << "tagElement" << 1 << finalize);
+    db["DicomIdentifiers"].create_index(document{} << "value" << 1 << finalize);
+    db["Changes"].create_index(document{} << "internalId" << 1 << finalize);
+    db["AttachedFiles"].create_index(document{} << "id" << 1 << finalize);
+    db["Metadata"].create_index(document{} << "id" << 1 << finalize);
+  }
 
   void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment)
   {
