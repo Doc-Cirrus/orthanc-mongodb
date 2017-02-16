@@ -39,7 +39,8 @@ namespace OrthancPlugins
     boost::mutex mutex_;
 
     int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
-    
+
+    void CreateIndices();    
 
   public:
     MongoDBBackend(OrthancPluginContext* context,
