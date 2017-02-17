@@ -104,6 +104,7 @@ namespace OrthancPlugins
     db["Resources"].create_index(document{} << "parentId" << 1 << finalize);
     db["Resources"].create_index(document{} << "publicId" << 1 << finalize);
     db["Resources"].create_index(document{} << "resourceType" << 1 << finalize);
+    db["Resources"].create_index(document{} << "internalId" << 1 << finalize);
     db["PatientRecyclingOrder"].create_index(document{} << "patientId" << 1 << finalize);
     db["MainDicomTags"].create_index(document{} << "id" << 1 << finalize);
     db["DicomIdentifiers"].create_index(document{} << "id" << 1 << finalize);
