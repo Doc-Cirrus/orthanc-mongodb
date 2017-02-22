@@ -72,7 +72,7 @@ This chapter describes the process of installation with not too much detals and 
     wget https://github.com/mongodb/mongo-c-driver/releases/download/1.6.0/mongo-c-driver-1.6.0.tar.gz
     tar zxf mongo-c-driver-1.6.0.tar.gz
     cd mongo-c-driver
-    ./configure --enable-static
+    ./configure --enable-static --with-pic
     make
     sudo make install
     ```
