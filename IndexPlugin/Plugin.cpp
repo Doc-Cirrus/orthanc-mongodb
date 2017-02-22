@@ -44,9 +44,7 @@ extern "C"
   ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
   {
 
-#ifdef _WIN32
     mongoc_init();
-#endif
 
     context_ = context;
     assert(DisplayPerformanceWarning());
@@ -115,6 +113,8 @@ extern "C"
       delete backend_;
       backend_ = NULL;
     }
+
+    mongoc_cleanup();
   }
 
 

@@ -28,7 +28,7 @@ ELSE ()
     #Linux specific switches
     IF (NOT APPLE)
       set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")
-      set(LIBS ${LIBS} "uuid" "mongoc-1.0" "bson-1.0" "bsoncxx" "mongocxx")
+      set(LIBS ${LIBS} "uuid" "pthread" "rt")
     ENDIF()
 ENDIF ()
 
@@ -61,7 +61,7 @@ IF (APPLE)
   set (MONGOC_LIBS "-Wl,-all_load ${MONGOC_LIBS}")
 ENDIF()
 
-set(LIBS ${LIBS} ${LIBJSON_LIBS} ${BSON_LIBS} ${MONGOC_LIBS} ${BSONXX_LIBS} ${AMONGOCXX_LIBS})
+set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS} )
 link_libraries(${LIBS})
 
 ##################################################################

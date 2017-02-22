@@ -109,6 +109,8 @@ extern "C"
     context_ = context;
     assert(DisplayPerformanceWarning());
 
+    mongoc_init();
+
     /* Check the version of the Orthanc core */
     if (OrthancPluginCheckVersion(context_) == 0)
     {
@@ -175,6 +177,8 @@ extern "C"
       delete storage_;
       storage_ = NULL;
     }
+
+    mongoc_cleanup();
   }
 
 
