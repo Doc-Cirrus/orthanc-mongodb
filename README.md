@@ -150,6 +150,8 @@ Also it's possible to configure the plugin with separate config options:
 
 **NOTE: Setting up the ConnectionUri overrides the host, port, database params. So if the ConnectionUri is set, the other parameters except the ChunkSize will be ignored.**
 
+Testing is described with more details in [here](doc/testing.md)
+
 ## Known Issues:
 
 1. ConnectionUri must contain the database name due to the [bug in the mongocxx driver CXX-1187](https://jira.mongodb.org/browse/CXX-1187)
