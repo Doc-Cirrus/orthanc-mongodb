@@ -37,7 +37,7 @@ namespace OrthancPlugins
 
   static std::string ConvertWildcardToRegex(const std::string& query)
   {
-    std::string s = "";
+    std::string s = "(?i)^";
 
     for (size_t i = 0; i < query.size(); i++)
     {
