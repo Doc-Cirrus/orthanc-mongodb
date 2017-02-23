@@ -5,7 +5,7 @@ The repository contains two plugins to store the data in MongoDB database.
 
 ## Installation
 
-This chapter describes the process of installation with not too much detals and not nescessarily contain all howto to resolve possible problems that might appear.
+This chapter describes the process of installation with not too much details and not necessarily contain all how-to to resolve possible problems that might appear.
 
 ### Prerequisites
 - Install boost (compile or with package manager)
@@ -16,7 +16,7 @@ This chapter describes the process of installation with not too much detals and 
 
 ### CENTOS 6.8 dev environment setup
 
-* install pyton
+* install python
     ```yum install python```
 * install devtoolset-3
     ```
@@ -56,7 +56,7 @@ This chapter describes the process of installation with not too much detals and 
     sudo make install
     ```
 
-* donwload and install Orthanc
+* download and install Orthanc
     ```
     wget http://www.orthanc-server.com/downloads/get.php?path=/orthanc/Orthanc-1.2.0.tar.gz - O Orthanc-1.2.0.tar.gz
     tar zxf Orthanc-1.2.0.tar.gz
@@ -67,7 +67,7 @@ This chapter describes the process of installation with not too much detals and 
     cmake -DALLOW_DOWNLOADS=ON -DSTATIC_BUILD=ON ..
     ```
 
-* donwload builld and install mongo c driver
+* download builld and install mongo c driver
     ```
     wget https://github.com/mongodb/mongo-c-driver/releases/download/1.6.0/mongo-c-driver-1.6.0.tar.gz
     tar zxf mongo-c-driver-1.6.0.tar.gz
@@ -102,9 +102,9 @@ This chapter describes the process of installation with not too much detals and 
 ### Build Configuration options:
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
 * ```BUILD_TESTS``` - option to build tests, default off
-* ```BUILD_WITH_GCOV``` - option to inclode coverage default off
+* ```BUILD_WITH_GCOV``` - option to include coverage default off
 
-To run cmake with the custom congiguration use the command liek that:
+To run cmake with the custom configuration use the command like that:
 ```
 cmake -DORTHANC_ROOT=~/sources/Orthanc-1.2.0 ..
 ```
@@ -155,4 +155,9 @@ Testing is described with more details in [here](doc/testing.md)
 ## Known Issues:
 
 1. ConnectionUri must contain the database name due to the [bug in the mongocxx driver CXX-1187](https://jira.mongodb.org/browse/CXX-1187)
-2. 
+2. The Orthanc server should be compiled in Release or RelWithDebInfo mode to turn off assertions. There are asserts like that 
+   `./OrthancServer/ServerIndex.cpp:      assert(index_.currentStorageSize_ == index_.db_.GetTotalCompressedSize());``` it involves full collection scan 
+   to aggregate the total AttachedFiles significantly slows the performance down. 
+
+
+

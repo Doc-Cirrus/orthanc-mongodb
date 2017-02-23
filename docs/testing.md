@@ -2,7 +2,7 @@
 
 ## Brief test strategy
 
-The Orthanc MongoDB plugin allows storing DiCOM data in MogoDB.
+The Orthanc MongoDB plugin allows storing DICOM data in MongoDB.
 It's only data storage/retrieval level and testing for the plugin is focused on this part.
 Whole DICOM Orthanc functionality is out of the scope of the MongoDB plugin testing.
 
@@ -29,7 +29,7 @@ Load tests are done with the [dcm4che tools 3](https://dcm4che.atlassian.net/wik
 ## Manual Test Scenarios
 
 1. Upload test
-    * Open Ortank home -> got to upload and upload Test DCM file
+    * Open Ortanc home -> got to upload and upload Test DCM file
     * Refresh page, ensure the Patient/Study/Series/Instance information is correct
     * Verify DICOM tags
     * Preview instance image
@@ -39,10 +39,10 @@ Load tests are done with the [dcm4che tools 3](https://dcm4che.atlassian.net/wik
     * Refresh page
     * Delete patient
     * Refresh page
-    * Expected results: patient is deleted with all studies/series/instances hierarhy. There are no records regarding patient in DB.
+    * Expected results: patient is deleted with all studies/series/instances hierarchy. There are no records regarding patient in DB.
 3. Protect-unprotect
     * Upload patient
-    * Click on protect/un-ptrotect option
+    * Click on protect/un-protect option
     * Refresh page
     * Expected results: patient protected remains consistent.
 4. Send to remote modality
@@ -75,7 +75,7 @@ It's possible to generate similar set from Folder_with_samples like that:
 find Folder_with_samples -name '*.dcm' | xargs -L 1 -I {} dcmgen 1 {} generated_folder
 ```
 
-* Generate bunch of patients from exisitng seed data. The script generate 50000 unique patients with 4 series 5 instances each.
+* Generate bunch of patients from existing seed data. The script generate 50000 unique patients with 4 series 5 instances each.
 
 ```
 #!/bin/bash
@@ -87,7 +87,7 @@ do
    dcmgen 20:4 seed_small.dcm $GEN_FOLDER --override PatientID=`uuidgen` --override PatientName=`uuidgen`
 done
 ```
-seed_small.dcm - is a single file to generate data
+seed_small.dcm - is a single file to take sample data from and generate several DICOM tags.
 
 Then upload generated sources with storescu
 
@@ -97,7 +97,7 @@ curl http://localhost:8042/patients | grep -o "[0-9a-z\-]*" | grep -v "^$" | xar
 ```
 
 Selectively verify uploaded data in UI.
-Check Orthanc server lohs for errors.
+Check Orthanc server logs for errors.
 Check MongoDB server logs for errors.
 
 ## Test results
@@ -160,9 +160,13 @@ Test | Linux | Windows | OSX
 
 ### Load test results:
 
-There were couple of load cycles:
+There were couple of load cycles, of course all depends on the network/hardware setup.
+Tests were made on i3 (2 physical/4 logical cores) and HDD (magnetic).
+Loading to localhost, samples were on a separate HDD, MongoDB database on own HDD.
+
 ```
-Sent 244,255 objects (=127,645.219MB) in 10,871.803s (=11.741MB/s)
-Sent 732,765 objects (=382,892.125MB) in 35,922.105s (=10.659MB/s)
+Sent 244,255 objects (=127,645.219MB) in 10,871.803s (=11.741MB/s) - avg sample size: 0.5Mb
+Sent 732,765 objects (=382,892.125MB) in 35,922.105s (=10.659MB/s) - avg sample size: 0.5Mb
+Sent 240,000 objects (=342,417.25MB) in 18,605.527s (=18.404MB/s) - avg sample size: 1.43Mb
 ```
 
