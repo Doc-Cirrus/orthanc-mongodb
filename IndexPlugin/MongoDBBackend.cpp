@@ -58,6 +58,7 @@ namespace OrthancPlugins
         s += query[i];
       }
     }
+    s += "$";
     return s;
   }
 

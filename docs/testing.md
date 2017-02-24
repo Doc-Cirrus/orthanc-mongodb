@@ -84,7 +84,7 @@ GEN_FOLDER=generated
 for i in {1..50000}
 do
    echo "Generating: $i"
-   dcmgen 20:4 seed_small.dcm $GEN_FOLDER --override PatientID=`uuidgen` --override PatientName=`uuidgen`
+   dcmgen 20:4 seed_small.dcm $GEN_FOLDER --override PatientID=`uuidgen` --override PatientName=`uuidgen` --override StudyInstanceUID=`uuidgen`
 done
 ```
 seed_small.dcm - is a single file to take sample data from and generate several DICOM tags.
