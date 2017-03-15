@@ -19,7 +19,7 @@ This chapter describes the process of installation with not too much details and
 ## General Packages
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh
-yum -y install gcc gcc-c++ devtoolset-4 cmake boost-devel libuuid-devel
+yum -y install gcc gcc-c++ devtoolset-4 cmake boost-devel libuuid-devel openssl-devel cyrus-sasl-devel
 ```
 
 ## Prerequisite: Orthanc 1.2.0
