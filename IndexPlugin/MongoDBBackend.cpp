@@ -88,10 +88,23 @@ namespace OrthancPlugins
     mongocxx::uri uri{connection->GetConnectionUri()};
     dbname_ = uri.database();
 
+    CheckMonoDBMaster();
+
     CreateIndices();
   }
 
   MongoDBBackend::~MongoDBBackend()  {}
+
+  void MongoDBBackend::CheckMonoDBMaster()
+  {
+    using namespace bsoncxx::builder::stream;
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+    auto isMasterDoc = db.run_command(document{} << "isMaster" << 1 << finalize);
+    bool isMaster = isMasterDoc.view()["ismaster"].get_bool().value;
+    if (!isMaster)
+      throw MongoDBException("MongoDB server is not master, could not write.");
+  }
 
   void MongoDBBackend::Open()  {}
 

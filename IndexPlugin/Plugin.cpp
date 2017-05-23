@@ -94,7 +94,7 @@ extern "C"
       /* Register the MongoDB index into Orthanc */
       OrthancPlugins::DatabaseBackendAdapter::Register(context_, *backend_);
     }
-    catch (std::runtime_error& e)
+    catch (std::exception& e)
     {
       OrthancPluginLogError(context_, e.what());
       return -1;

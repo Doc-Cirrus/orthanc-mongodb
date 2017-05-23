@@ -40,7 +40,8 @@ namespace OrthancPlugins
 
     int64_t GetNextSequence(mongocxx::database& db, const std::string seqName);
 
-    void CreateIndices();    
+    void CreateIndices();
+    void CheckMonoDBMaster();
 
   public:
     MongoDBBackend(OrthancPluginContext* context,
