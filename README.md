@@ -1,5 +1,7 @@
 # MongoDB plugins for Orthanc DICOM Server
 
+See: https://github.com/Doc-Cirrus/orthanc-mongodb
+
 ## OVERVIEW
 The repository contains two plugins to store the data in MongoDB database.
 
