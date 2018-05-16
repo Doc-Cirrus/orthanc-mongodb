@@ -22,6 +22,7 @@ ELSE ()
     include(FindPkgConfig)
     pkg_search_module(BSONCXX REQUIRED libbsoncxx)
     pkg_search_module(MONGOCXX REQUIRED libmongocxx)
+    pkg_search_module(MONGOCLIB REQUIRED libmongoc-1.0)
     pkg_search_module(OPENSSL openssl)
     IF (OPENSSL_FOUND)
      find_library(CYRUS sasl2)
@@ -30,6 +31,7 @@ ELSE ()
     IF (CYRUS_FOUND)
       set(LIBS ${LIBS} ${CYRUS_LIBRARIES})
     ENDIF()
+    include_directories(${MONGOCLIB_INCLUDE_DIRS})
     include_directories(${BSONCXX_INCLUDE_DIRS})
     include_directories(${MONGOCXX_INCLUDE_DIRS})
     set(CMAKE_CXX_FLAGS "-std=c++14")
@@ -66,10 +68,10 @@ find_library(AMONGOCXX_LIBS mongocxx
 )
 
 IF (APPLE)
-  set (MONGOC_LIBS "-Wl,-all_load ${MONGOC_LIBS}")
+  set (MONGOC_LIBS "-Wl,-all_load -lz ${MONGOC_LIBS}")
 ENDIF()
 
-set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS} )
+set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS} "resolv")
 link_libraries(${LIBS})
 
 ##################################################################
