@@ -14,14 +14,14 @@ This chapter describes the process of installation with not too much details and
 - Install jsoncpp
 - Install/build mongoc library http://mongoc.org/libmongoc/current/installing.html
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
-- Download Ortanc sources
+- Download Ortanc sources or instakll orthanc-devel package
 
-### CentOS 6 Build Instructions
+### CentOS Build Instructions
 
 ## General Packages
 ```bash
-yum -y install centos-release-scl centos-release-scl-rh
-yum -y install gcc gcc-c++ devtoolset-4 cmake boost-devel libuuid-devel openssl-devel cyrus-sasl-devel
+yum -y install centos-release-scl centos-release-scl-rh epel-release
+yum -y install gcc gcc-c++ devtoolset-4 cmake boost-devel libuuid-devel openssl-devel cyrus-sasl-devel cmake3
 ```
 
 ## Prerequisite: Orthanc 1.2.0
@@ -47,24 +47,13 @@ make
 sudo make install
 ```
 
-## Prerequisite: Mongo C Driver
+## Prerequisite: Mongo C Driver 1.9.x
+https://github.com/mongodb/mongo-c-driver/releases
 ```bash
-curl -L --output mongo-c-driver-1.6.0.tar.gz https://github.com/mongodb/mongo-c-driver/releases/download/%{mongocversion}/mongo-c-driver-1.6.0.tar.gz
-tar -xzf mongo-c-driver-1.6.0.tar.gz
-cd mongo-c-driver-1.6.0
+cd mongo-c-driver-1.9.x
 ./configure --enable-static --with-pic --disable-automatic-init-and-cleanup
 make
 sudo make install
-```
-
-## Prerequisite: cmake 3.2+
-```bash
-curl -L --output cmake-3.7.2.tar.gz https://cmake.org/files/v3.7/cmake-3.7.2.tar.gz
-tar -xzf cmake-3.7.2.tar.gz
-cd cmake-3.7.2
-scl enable devtoolset-4 "./configure"
-scl enable devtoolset-4 "make"
-scl enable devtoolset-4 "sudo make install"
 ```
 
 ## Prerequisite: boost 1.60+
@@ -78,13 +67,11 @@ cd boost_1_63_0
 sudo ./b2 install || :
 ```
 
-## Prerequisite: MongoDB C++ Driver
+## Prerequisite: MongoDB C++ Driver 3.2.x
+https://github.com/mongodb/mongo-cxx-driver/releases
 ```bash
-curl -L --output r3.1.1.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/r3.1.1.tar.gz
-tar -xzf r3.1.1.tar.gz
-mkdir -p mongo-cxx-driver-r3.1.1/build
-cd mongo-cxx-driver-r3.1.1/build
-scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
+cd mongo-cxx-driver-r3.2.x/build
+scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
 # for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
 # use sudo for make too in this case
 scl enable devtoolset-4 "sudo make"
@@ -97,7 +84,7 @@ curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jso
 tar -xzf jsoncpp-1.8.0.tar.gz
 mkdir -p jsoncpp-1.8.0/build
 cd jsoncpp-1.8.0/build
-scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake -DCMAKE_BUILD_TYPE=Release .."
+scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release .."
 scl enable devtoolset-4 "make"
 scl enable devtoolset-4 "sudo make install"
 ```
@@ -106,7 +93,7 @@ scl enable devtoolset-4 "sudo make install"
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-scl enable devtoolset-4 "export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && cmake -DCMAKE_BUILD_TYPE=Release -DORTHANC_ROOT=/usr/include .."
+scl enable devtoolset-4 "export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && cmake3 -DCMAKE_BUILD_TYPE=Release -DORTHANC_ROOT=/usr/include .."
 scl enable devtoolset-4 "make"
 ```
 
