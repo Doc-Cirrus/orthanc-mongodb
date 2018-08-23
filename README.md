@@ -10,7 +10,6 @@ The repository contains two plugins to store the data in MongoDB database.
 This chapter describes the process of installation with not too much details and not necessarily contain all how-to to resolve possible problems that might appear.
 
 ### Prerequisites
-- Install boost (compile or with package manager)
 - Install jsoncpp
 - Install/build mongoc library http://mongoc.org/libmongoc/current/installing.html
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
@@ -22,17 +21,6 @@ This chapter describes the process of installation with not too much details and
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh epel-release
 yum -y install make devtoolset-7 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
-```
-
-## Prerequisite: boost 1.60+
-```bash
-curl -L --output boost_1_63_0.tar.gz https://sourceforge.net/projects/boost/files/boost/1.63.0/boost_1_63_0.tar.gz/download
-tar -xzf boost_1_63_0.tar.gz
-cd boost_1_63_0
-scl enable devtoolset-7 "./bootstrap.sh"
-# following operations may exit 1 when some of the targets fail
-scl enable devtoolset-7 "./b2 cflags=-fPIC" || :
-scl enable devtoolset-7 "sudo ./b2 install --prefix=/usr/local" || :
 ```
 
 ## Prerequisite: Mongo C Driver 1.12.x
