@@ -14,7 +14,7 @@ This chapter describes the process of installation with not too much details and
 - Install jsoncpp
 - Install/build mongoc library http://mongoc.org/libmongoc/current/installing.html
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
-- Download Ortanc sources or instakll orthanc-devel package
+- Download Ortanc sources or install orthanc-devel package
 
 ### CentOS 7 Build Instructions
 
@@ -38,6 +38,8 @@ scl enable devtoolset-7 "sudo ./b2 install" || :
 ## Prerequisite: Mongo C Driver 1.12.x
 https://github.com/mongodb/mongo-c-driver/releases
 ```bash
+curl -L --output mongo-c-driver-1.12.x.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.12.x.tar.gz
+tar -xzf mongo-c-driver-1.12.x.tar.gz
 cd mongo-c-driver-1.12.x
 scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DCMAKE_BUILD_TYPE=Release"
 scl enable devtoolset-7 "make"
@@ -47,6 +49,9 @@ scl enable devtoolset-7 "sudo make install"
 ## Prerequisite: MongoDB C++ Driver 3.3.x
 https://github.com/mongodb/mongo-cxx-driver/releases
 ```bash
+curl -L --output mongo-cxx-driver-3.3.x.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/3.3.x.tar.gz
+tar -xzf mongo-cxx-driver-3.3.x.tar.gz
+mkdir -p mongo-cxx-driver-3.3.x/build
 cd mongo-cxx-driver-r3.3.x/build
 scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
 # for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
