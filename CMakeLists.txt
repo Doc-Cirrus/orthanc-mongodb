@@ -110,6 +110,12 @@ IF (APPLE)
   target_link_libraries(OrthancMongoDBStorage ${APPLE_LIBS})
 ENDIF ()
 
+install(
+  TARGETS OrthancMongoDBIndex OrthancMongoDBStorage
+  RUNTIME DESTINATION lib    # Destination for Windows
+  LIBRARY DESTINATION share/orthanc/plugins    # Destination for Linux
+)
+
 IF (BUILD_TESTS)
 
   IF (BUILD_WITH_GCOV)
