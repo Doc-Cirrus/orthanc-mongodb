@@ -16,44 +16,12 @@ This chapter describes the process of installation with not too much details and
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
 - Download Ortanc sources or instakll orthanc-devel package
 
-### CentOS Build Instructions
+### CentOS 7 Build Instructions
 
 ## General Packages
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh epel-release
-yum -y install gcc gcc-c++ devtoolset-4 cmake boost-devel libuuid-devel openssl-devel cyrus-sasl-devel cmake3
-```
-
-## Prerequisite: Orthanc 1.2.0
-Its not nessesary to build Orthanc, if you have orthanc-devel packages installed. At the moment there exists no package for Orthanc 1.2.0 in any offical repository for CentOS 6.
-```bash
-yum -y install python curl-devel dcmtk-devel gtest-devel jsoncpp-devel libjpeg-devel libpng-devel sqlite-devel lua-devel >= 5.1.0 mongoose-devel openssl-devel pugixml-devel
-curl -L --output Orthanc-1.2.0.tar.gz http://www.orthanc-server.com/downloads/get.php?path=/orthanc/Orthanc-1.2.0.tar.gz
-tar -xzf Orthanc-1.2.0.tar.gz
-mkdir Orthanc-1.2.0/build
-cd Orthanc-1.2.0/build
-cmake .. \
-	-DCMAKE_BUILD_TYPE=Release \
-	-DDCMTK_LIBRARIES=CharLS \
-	-DSTANDALONE_BUILD:BOOL=ON \
-	-DSTATIC_BUILD:BOOL=ON \
-	-DALLOW_DOWNLOADS:BOOL=ON \
-	-DUSE_SYSTEM_SQLITE:BOOL=OFF \
-	-DUSE_SYSTEM_BOOST:BOOL=OFF \
-	-DUSE_SYSTEM_CURL:BOOL=OFF \
-	-DSYSTEM_MONGOOSE_USE_CALLBACKS=OFF \
-	-DUNIT_TESTS_WITH_HTTP_CONNEXIONS=OFF
-make
-sudo make install
-```
-
-## Prerequisite: Mongo C Driver 1.9.x
-https://github.com/mongodb/mongo-c-driver/releases
-```bash
-cd mongo-c-driver-1.9.x
-./configure --enable-static --with-pic --disable-automatic-init-and-cleanup
-make
-sudo make install
+yum -y install make devtoolset-7 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
 ```
 
 ## Prerequisite: boost 1.60+
@@ -61,21 +29,30 @@ sudo make install
 curl -L --output boost_1_63_0.tar.gz https://sourceforge.net/projects/boost/files/boost/1.63.0/boost_1_63_0.tar.gz/download
 tar -xzf boost_1_63_0.tar.gz
 cd boost_1_63_0
-./bootstrap.sh
+scl enable devtoolset-7 "./bootstrap.sh"
 # following operations may exit 1 when some of the targets fail
-./b2 cflags=-fPIC -j 2 || :
-sudo ./b2 install || :
+scl enable devtoolset-7 "./b2 cflags=-fPIC" || :
+scl enable devtoolset-7 "sudo ./b2 install" || :
 ```
 
-## Prerequisite: MongoDB C++ Driver 3.2.x
+## Prerequisite: Mongo C Driver 1.12.x
+https://github.com/mongodb/mongo-c-driver/releases
+```bash
+cd mongo-c-driver-1.12.x
+scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DCMAKE_BUILD_TYPE=Release"
+scl enable devtoolset-7 "make"
+scl enable devtoolset-7 "sudo make install"
+```
+
+## Prerequisite: MongoDB C++ Driver 3.3.x
 https://github.com/mongodb/mongo-cxx-driver/releases
 ```bash
-cd mongo-cxx-driver-r3.2.x/build
-scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
+cd mongo-cxx-driver-r3.3.x/build
+scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
 # for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
-# use sudo for make too in this case
-scl enable devtoolset-4 "sudo make"
-scl enable devtoolset-4 "sudo make install"
+# so use sudo for make too
+scl enable devtoolset-7 "sudo make"
+scl enable devtoolset-7 "sudo make install"
 ```
 
 ## Prerequisite: JsonCpp
@@ -84,17 +61,17 @@ curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jso
 tar -xzf jsoncpp-1.8.0.tar.gz
 mkdir -p jsoncpp-1.8.0/build
 cd jsoncpp-1.8.0/build
-scl enable devtoolset-4 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release .."
-scl enable devtoolset-4 "make"
-scl enable devtoolset-4 "sudo make install"
+scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release .."
+scl enable devtoolset-7 "make"
+scl enable devtoolset-7 "sudo make install"
 ```
 
 ## Build of this orthanc-mongodb plugin itself
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-scl enable devtoolset-4 "export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && cmake3 -DCMAKE_BUILD_TYPE=Release -DORTHANC_ROOT=/usr/include .."
-scl enable devtoolset-4 "make"
+scl enable devtoolset-7 "export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && cmake3 -DCMAKE_BUILD_TYPE=Release -DORTHANC_ROOT=/usr/include .."
+scl enable devtoolset-7 "make"
 ```
 
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
