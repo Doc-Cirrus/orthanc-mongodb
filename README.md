@@ -32,7 +32,7 @@ cd boost_1_63_0
 scl enable devtoolset-7 "./bootstrap.sh"
 # following operations may exit 1 when some of the targets fail
 scl enable devtoolset-7 "./b2 cflags=-fPIC" || :
-scl enable devtoolset-7 "sudo ./b2 install" || :
+scl enable devtoolset-7 "sudo ./b2 install --prefix=/usr/local" || :
 ```
 
 ## Prerequisite: Mongo C Driver 1.12.x
@@ -40,8 +40,9 @@ https://github.com/mongodb/mongo-c-driver/releases
 ```bash
 curl -L --output mongo-c-driver-1.12.x.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.12.x.tar.gz
 tar -xzf mongo-c-driver-1.12.x.tar.gz
-cd mongo-c-driver-1.12.x
-scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DCMAKE_BUILD_TYPE=Release"
+mkdir -p mongo-c-driver-1.12.x/build
+cd mongo-c-driver-1.12.x/build
+scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
 scl enable devtoolset-7 "make"
 scl enable devtoolset-7 "sudo make install"
 ```
@@ -53,7 +54,7 @@ curl -L --output mongo-cxx-driver-3.3.x.tar.gz https://github.com/mongodb/mongo-
 tar -xzf mongo-cxx-driver-3.3.x.tar.gz
 mkdir -p mongo-cxx-driver-3.3.x/build
 cd mongo-cxx-driver-r3.3.x/build
-scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
+scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
 # for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
 # so use sudo for make too
 scl enable devtoolset-7 "sudo make"
@@ -66,7 +67,7 @@ curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jso
 tar -xzf jsoncpp-1.8.0.tar.gz
 mkdir -p jsoncpp-1.8.0/build
 cd jsoncpp-1.8.0/build
-scl enable devtoolset-7 "export CXXFLAGS=-fPIC && cmake3 -DCMAKE_BUILD_TYPE=Release .."
+scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .."
 scl enable devtoolset-7 "make"
 scl enable devtoolset-7 "sudo make install"
 ```
@@ -75,8 +76,9 @@ scl enable devtoolset-7 "sudo make install"
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-scl enable devtoolset-7 "export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && cmake3 -DCMAKE_BUILD_TYPE=Release -DORTHANC_ROOT=/usr/include .."
+scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
 scl enable devtoolset-7 "make"
+scl enable devtoolset-7 "sudo make install"
 ```
 
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
