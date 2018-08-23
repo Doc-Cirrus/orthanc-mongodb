@@ -19,6 +19,8 @@
 
 #include <orthanc/OrthancCPlugin.h>
 
+#include <cassert>
+
 #include "MongoDBStorageArea.h"
 #include "../Core/MongoDBException.h"
 #include "../Core/Configuration.h"
