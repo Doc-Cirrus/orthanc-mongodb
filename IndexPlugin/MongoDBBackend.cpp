@@ -29,8 +29,6 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
 
-#include <boost/current_function.hpp>
-
 
 namespace OrthancPlugins
 {
@@ -182,7 +180,7 @@ namespace OrthancPlugins
   {
     using namespace bsoncxx::builder::stream;
    
-    boost::mutex::scoped_lock lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
 
     int64_t num = 1;
     auto collection = db["Sequences"];

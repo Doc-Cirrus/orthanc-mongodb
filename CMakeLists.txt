@@ -47,11 +47,7 @@ ENDIF ()
 
 ##################################################################
 #link against static libraries
-set(Boost_USE_STATIC_LIBS ON)
 set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib ${CMAKE_FIND_LIBRARY_SUFFIXES})
-
-find_package(Boost REQUIRED COMPONENTS system)
-set(LIBS ${LIBS} ${Boost_LIBRARIES})
 
 find_library(LIBJSON_LIBS jsoncpp
       PATHS "${LIBJSON_ROOT}/lib"
@@ -77,13 +73,10 @@ set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS}
 link_libraries(${LIBS})
 
 ##################################################################
-include_directories("${Boost_INCLUDE_DIRS}")
 include_directories ("${PROJECT_SOURCE_DIR}/Core")
 include_directories ("${PROJECT_SOURCE_DIR}/IndexPlugin")
 include_directories ("${PROJECT_SOURCE_DIR}/StoragePlugin")
 include_directories ("${ORTHANC_ROOT}/Plugins/Include")
-
-link_directories("${Boost_LIBRARY_DIRS}")
 ##################################################################
 
 set(CORE_SOURCES

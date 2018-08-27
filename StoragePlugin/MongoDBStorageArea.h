@@ -25,7 +25,7 @@
 
 #include <orthanc/OrthancCPlugin.h>
 #include <memory>
-#include <boost/thread/mutex.hpp>
+#include <mutex>
 #include <mongoc.h>
 
 namespace OrthancPlugins
@@ -34,7 +34,7 @@ namespace OrthancPlugins
   {
   private:
     std::unique_ptr<MongoDBConnection>  db_;
-    boost::mutex mutex_;
+    std::mutex mutex_;
     mongoc_client_pool_t *pool_;
     mongoc_uri_t *uri_;
 

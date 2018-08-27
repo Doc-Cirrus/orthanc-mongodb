@@ -20,14 +20,13 @@
 #pragma once
 
 #include <mongoc.h>
-#include <boost/core/noncopyable.hpp>
 #include <orthanc/OrthancCPlugin.h>
 
 #include "MongoDBException.h"
 
 namespace OrthancPlugins
 {  
-  class MongoDBGridFS : public boost::noncopyable
+  class MongoDBGridFS
   {
   private:
     // does not own that
@@ -50,6 +49,9 @@ namespace OrthancPlugins
   public:
     MongoDBGridFS(mongoc_client_pool_t *pool, mongoc_uri_t *uri, int chunk_size);
     ~MongoDBGridFS();
+
+    MongoDBGridFS(const MongoDBGridFS&) = delete;
+    MongoDBGridFS& operator=(const MongoDBGridFS&) = delete;
 
     void SaveFile(const std::string& uuid,
                     const void* content,

@@ -21,11 +21,10 @@
 
 #include <stdint.h>
 #include <string>
-#include <boost/noncopyable.hpp>
 
 namespace OrthancPlugins
 {
-  class MongoDBConnection : public boost::noncopyable
+  class MongoDBConnection
   {
   private:
     std::string uri_ = "";
@@ -39,8 +38,10 @@ namespace OrthancPlugins
 
   public:
     MongoDBConnection();
-    MongoDBConnection(const MongoDBConnection& other) = delete;
     ~MongoDBConnection() {}
+
+    MongoDBConnection(const MongoDBConnection&) = delete;
+    MongoDBConnection& operator=(const MongoDBConnection&) = delete;
 
     void SetConnectionUri(const std::string& uri);
     std::string GetConnectionUri() const;
