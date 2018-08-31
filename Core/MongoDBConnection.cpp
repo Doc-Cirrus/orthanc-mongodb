@@ -21,9 +21,13 @@
 #include "MongoDBConnection.h"
 
 #include <sstream>
+#include <mongocxx/instance.hpp>
+
 
 namespace OrthancPlugins
 {
+
+  static mongocxx::instance inst{}; //IMPORTANT: Before making any connections, you need to create one and only one instance of mongocxx::instance.
   
   MongoDBConnection::MongoDBConnection()
   {

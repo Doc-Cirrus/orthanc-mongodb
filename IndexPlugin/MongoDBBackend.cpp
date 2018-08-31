@@ -27,8 +27,6 @@
 #include <bsoncxx/types.hpp>
 
 #include <mongocxx/client.hpp>
-#include <mongocxx/instance.hpp>
-
 
 namespace OrthancPlugins
 {
@@ -311,20 +309,20 @@ namespace OrthancPlugins
     for (auto&& doc : deleted_files_vec)
     {
       auto v = doc.view();
-      GetOutput().SignalDeletedAttachment(v["uuid"].get_utf8().value.to_string().c_str(),
+      GetOutput().SignalDeletedAttachment(std::string(v["uuid"].get_utf8().value).c_str(),
                         v["fileType"].get_int32().value,
                         v["uncompressedSize"].get_int64().value,
-                        v["uncompressedHash"].get_utf8().value.to_string().c_str(),
+						std::string(v["uncompressedHash"].get_utf8().value).c_str(),
                         v["compressionType"].get_int32().value,
                         v["compressedSize"].get_int64().value,
-                        v["compressedHash"].get_utf8().value.to_string().c_str());
+						std::string(v["compressedHash"].get_utf8().value).c_str());
     }
 
     for (auto&& doc : deleted_resources_vec)
     {
       auto v = doc.view();
       GetOutput().SignalDeletedResource(
-          v["publicId"].get_utf8().value.to_string().c_str(),
+		  std::string(v["publicId"].get_utf8().value).c_str(),
           static_cast<OrthancPluginResourceType>(v["resourceType"].get_int32().value));
     }
   }
@@ -355,7 +353,7 @@ namespace OrthancPlugins
       document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
     for (auto&& doc : cursor)
     {
-        target.push_back(doc["publicId"].get_utf8().value.to_string());
+        target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
@@ -375,7 +373,7 @@ namespace OrthancPlugins
       document{} << "resourceType" << static_cast<int>(resourceType) << finalize, options);
     for (auto&& doc : cursor)
     {
-        target.push_back(doc["publicId"].get_utf8().value.to_string());
+        target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
@@ -406,7 +404,7 @@ namespace OrthancPlugins
         doc["changeType"].get_int32().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
         GetPublicId(doc["internalId"].get_int64().value),
-        doc["date"].get_utf8().value.to_string());
+		  std::string(doc["date"].get_utf8().value));
       count++;
     }
   }
@@ -436,7 +434,7 @@ namespace OrthancPlugins
       document{} << "parentId" << id << finalize);
     for (auto&& doc : cursor)
     {
-        target.push_back(doc["publicId"].get_utf8().value.to_string());
+        target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
@@ -465,13 +463,13 @@ namespace OrthancPlugins
       GetOutput().AnswerExportedResource(
         doc["id"].get_int64().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
-        doc["publicId"].get_utf8().value.to_string(),
-        doc["remoteModality"].get_utf8().value.to_string(),
-        doc["date"].get_utf8().value.to_string(),
-        doc["patientId"].get_utf8().value.to_string(),
-        doc["studyInstanceUid"].get_utf8().value.to_string(),
-        doc["seriesInstanceUid"].get_utf8().value.to_string(),
-        doc["sopInstanceUid"].get_utf8().value.to_string());
+		  std::string(doc["publicId"].get_utf8().value),
+		  std::string(doc["remoteModality"].get_utf8().value),
+		  std::string(doc["date"].get_utf8().value),
+		  std::string(doc["patientId"].get_utf8().value),
+		  std::string(doc["studyInstanceUid"].get_utf8().value),
+		  std::string(doc["seriesInstanceUid"].get_utf8().value),
+		  std::string(doc["sopInstanceUid"].get_utf8().value));
       count++;
     }
   }
@@ -496,7 +494,7 @@ namespace OrthancPlugins
         doc["changeType"].get_int32().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
         GetPublicId(doc["internalId"].get_int64().value),
-        doc["date"].get_utf8().value.to_string());
+		  std::string(doc["date"].get_utf8().value));
     }
   }
 
@@ -517,13 +515,13 @@ namespace OrthancPlugins
       GetOutput().AnswerExportedResource(
         doc["id"].get_int64().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
-        doc["publicId"].get_utf8().value.to_string(),
-        doc["remoteModality"].get_utf8().value.to_string(),
-        doc["date"].get_utf8().value.to_string(),
-        doc["patientId"].get_utf8().value.to_string(),
-        doc["studyInstanceUid"].get_utf8().value.to_string(),
-        doc["seriesInstanceUid"].get_utf8().value.to_string(),
-        doc["sopInstanceUid"].get_utf8().value.to_string());
+		  std::string(doc["publicId"].get_utf8().value),
+		  std::string(doc["remoteModality"].get_utf8().value),
+		  std::string(doc["date"].get_utf8().value),
+		  std::string(doc["patientId"].get_utf8().value),
+		  std::string(doc["studyInstanceUid"].get_utf8().value),
+		  std::string(doc["seriesInstanceUid"].get_utf8().value),
+		  std::string(doc["sopInstanceUid"].get_utf8().value));
     }
   }
 
@@ -541,7 +539,7 @@ namespace OrthancPlugins
     {
       GetOutput().AnswerDicomTag(static_cast<uint16_t>(doc["tagGroup"].get_int32().value),
                    static_cast<uint16_t>(doc["tagElement"].get_int32().value),
-                   doc["value"].get_utf8().value.to_string());
+				std::string(doc["value"].get_utf8().value));
     }
   }
 
@@ -556,7 +554,7 @@ namespace OrthancPlugins
 
     if (result)
     {
-      return result->view()["publicId"].get_utf8().value.to_string();
+      return std::string(result->view()["publicId"].get_utf8().value);
     }
     throw MongoDBException("Unknown resource");
   }
@@ -752,13 +750,13 @@ namespace OrthancPlugins
     {
       bsoncxx::document::view view = doc->view();
       GetOutput().AnswerAttachment(
-              view["uuid"].get_utf8().value.to_string(),
+		  std::string(view["uuid"].get_utf8().value),
               contentType,
               view["uncompressedSize"].get_int64().value,
-              view["uncompressedHash"].get_utf8().value.to_string(),
+		  std::string(view["uncompressedHash"].get_utf8().value),
               view["compressionType"].get_int32().value,
               view["compressedSize"].get_int64().value,
-              view["compressedHash"].get_utf8().value.to_string());
+		  std::string(view["compressedHash"].get_utf8().value));
       return true;
     }
     return false;
@@ -775,7 +773,7 @@ namespace OrthancPlugins
       document{} << "property" << property << finalize);
     if(doc)
     {
-        target = doc->view()["value"].get_utf8().value.to_string();
+        target = std::string(doc->view()["value"].get_utf8().value);
       return true;
     }
     return false;
@@ -865,7 +863,7 @@ namespace OrthancPlugins
     if(doc)
     {
       bsoncxx::document::view view = doc->view();
-      target = view["value"].get_utf8().value.to_string();
+      target = std::string(view["value"].get_utf8().value);
       return true;
     }
     return false;
