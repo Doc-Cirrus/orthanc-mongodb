@@ -30,7 +30,7 @@ curl -L --output mongo-c-driver-1.12.x.tar.gz https://github.com/mongodb/mongo-c
 tar -xzf mongo-c-driver-1.12.x.tar.gz
 mkdir -p mongo-c-driver-1.12.x/build
 cd mongo-c-driver-1.12.x/build
-scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
+scl enable devtoolset-7 "cmake3 -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
 scl enable devtoolset-7 "make"
 scl enable devtoolset-7 "sudo make install"
 ```
