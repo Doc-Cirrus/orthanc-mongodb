@@ -5,6 +5,7 @@ project(OrthancMongoDB)
 set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.2.0" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
+set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
 IF ( MSVC )
@@ -20,11 +21,16 @@ IF ( MSVC )
 ELSE ()
     #rely on pkg-config
     include(FindPkgConfig)
-    pkg_search_module(BSONCXX REQUIRED libbsoncxx)
-    pkg_search_module(MONGOCXX REQUIRED libmongocxx)
     pkg_search_module(MONGOCLIB REQUIRED libmongoc-1.0)
     pkg_search_module(JSONCPP REQUIRED jsoncpp)
     pkg_search_module(OPENSSL openssl)
+    IF (LINK_STATIC_LIBS)
+        pkg_search_module(BSONCXX REQUIRED libbsoncxx-static)
+        pkg_search_module(MONGOCXX REQUIRED libmongocxx-static)
+    ELSE()
+        pkg_search_module(BSONCXX REQUIRED libbsoncxx)
+        pkg_search_module(MONGOCXX REQUIRED libmongocxx)
+    ENDIF()
     IF (OPENSSL_FOUND)
      find_library(CYRUS sasl2)
       set(LIBS ${LIBS} ${OPENSSL_LIBRARIES} "sasl2")
@@ -40,34 +46,57 @@ ELSE ()
     #Linux specific switches
     IF (NOT APPLE)
       set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")
-      set(LIBS ${LIBS} "uuid" "pthread" "rt" "z" "resolv")
+      set(LIBS ${LIBS} "uuid" "pthread" "rt")
     ENDIF()
+    set(LIBS ${LIBS} "z" "resolv")
 ENDIF ()
 
 
-##################################################################
-#link against static libraries
-set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib ${CMAKE_FIND_LIBRARY_SUFFIXES})
+set(LIBJSON_LIB_NAMES  jsoncpp   )
+set(BSON_LIB_NAMES     bson-1.0  )
+set(MONGOC_LIB_NAMES   mongoc-1.0)
+set(BSONXX_LIB_NAMES   bsoncxx   )
+set(MONGOCXX_LIB_NAMES mongocxx  )
 
-find_library(LIBJSON_LIBS jsoncpp
+IF (LINK_STATIC_LIBS)
+    ##################################################################
+    #link against static libraries
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    set(LIBJSON_LIB_NAMES   jsoncpp_static                ${LIBJSON_LIB_NAMES} )
+    set(BSON_LIB_NAMES      bson-static-1.0 bson-1.0      ${BSON_LIB_NAMES}    )
+    set(MONGOC_LIB_NAMES    mongoc-static-1.0 mongoc-1.0  ${MONGOC_LIB_NAMES}  )
+    set(BSONXX_LIB_NAMES    bsoncxx-static                ${BSONXX_LIB_NAMES}  )
+    set(MONGOCXX_LIB_NAMES  mongocxx-static               ${MONGOCXX_LIB_NAMES})
+ENDIF()
+
+find_library(LIBJSON_LIBS 
+      NAMES ${LIBJSON_LIB_NAMES}
       PATHS "${LIBJSON_ROOT}/lib"
 )
-find_library(BSON_LIBS bson-1.0
+find_library(BSON_LIBS 
+      NAMES ${BSON_LIB_NAMES}
       PATHS "${MONGOC_ROOT}/lib"
 )
-find_library(MONGOC_LIBS mongoc-1.0
+find_library(MONGOC_LIBS 
+      NAMES ${MONGOC_LIB_NAMES}
       PATHS "${MONGOC_ROOT}/lib"
 )
-find_library(BSONXX_LIBS bsoncxx
+find_library(BSONXX_LIBS 
+      NAMES ${BSONXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
 )
-find_library(AMONGOCXX_LIBS mongocxx
+find_library(AMONGOCXX_LIBS 
+      NAMES ${MONGOCXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
 )
 
-IF (APPLE)
-  set (MONGOC_LIBS "-Wl,-all_load -lz ${MONGOC_LIBS}")
-ENDIF()
+
+message("Found libraries:")
+message("    LIBJSON_LIBS   " ${LIBJSON_LIBS} )
+message("    MONGOCXX_LIBS  " ${AMONGOCXX_LIBS} )
+message("    BSONXX_LIBS    " ${BSONXX_LIBS} )
+message("    MONGOC_LIBS    " ${MONGOC_LIBS} )
+message("    BSON_LIBS      " ${BSON_LIBS})
 
 set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
 link_libraries(${LIBS})
@@ -118,6 +147,11 @@ IF (BUILD_TESTS)
     IF(UNIX AND NOT APPLE)
       set(LIBS ${LIBS} gcov)
     ENDIF()
+  ENDIF()
+
+  IF (UNIX)
+      pkg_search_module(GTEST REQUIRED gtest)
+      include_directories(${GTEST_INCLUDE_DIRS})
   ENDIF()
 
   include_directories ("${PROJECT_SOURCE_DIR}/Tests")
