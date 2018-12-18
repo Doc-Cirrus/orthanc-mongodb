@@ -27,8 +27,9 @@
 namespace OrthancPlugins
 {
 
-  static mongocxx::instance inst{}; //IMPORTANT: Before making any connections, you need to create one and only one instance of mongocxx::instance.
-  
+ //IMPORTANT: Before making any connections, you need to create one and only one instance of mongocxx::instance.
+  static mongocxx::instance&  inst =  mongocxx::instance::current();  
+
   MongoDBConnection::MongoDBConnection()
   {
   }
