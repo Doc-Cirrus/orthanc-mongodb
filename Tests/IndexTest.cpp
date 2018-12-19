@@ -380,6 +380,38 @@ TEST_F (MongoDBBackendTest, MainDicomTags)
     backend_->DeleteResource(parentId); // delete resources
 }
 
+TEST_F (MongoDBBackendTest, LookupRange)
+{
+    int64_t parentId = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+
+    int64_t id1 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+    int64_t id2 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+    int64_t id3 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+    int64_t id4 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+
+    backend_->AttachChild(parentId, id1);
+    backend_->AttachChild(parentId, id2);
+    backend_->AttachChild(parentId, id3);
+    backend_->AttachChild(parentId, id4);
+
+    backend_->SetMainDicomTag(parentId, 0, 0, "");
+
+    backend_->SetIdentifierTag(id1, 0, 0, "1");
+    backend_->SetIdentifierTag(id2, 0, 0, "2");
+    backend_->SetIdentifierTag(id3, 0, 0, "3");
+    backend_->SetIdentifierTag(id4, 0, 0, "4");
+
+    std::list<int64_t> list;
+    backend_->LookupIdentifierRange(list, OrthancPluginResourceType_Patient,
+    0, 0, "2", "3");
+    ASSERT_EQ(list.size(), 2);
+    ASSERT_EQ(*list.begin(), id2);
+
+
+    backend_->ClearMainDicomTags(0);
+    backend_->DeleteResource(parentId); // delete resources
+}
+
 class ConfigurationTest : public ::testing::Test {
  protected:
 
