@@ -851,6 +851,51 @@ namespace OrthancPlugins
 
   }
 
+ void MongoDBBackend::LookupIdentifierRange(std::list<long int>& target,
+      OrthancPluginResourceType resourceType,
+      uint16_t group,
+      uint16_t element,
+      const char* start,
+      const char* end)
+  {
+    using namespace bsoncxx::builder::stream;
+
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    std::list<int64_t> internalIds;
+    GetAllInternalIds(internalIds, resourceType);
+   
+    if (internalIds.size() <= 0)
+    {
+      //not foundinternalIds
+      return;
+    }
+   
+    document in{};
+    auto bs = in << "$in" << open_array;
+    for (auto rid : internalIds)
+    {
+      bs << rid;
+    }
+    auto inValue = bs << close_array << finalize;
+    bsoncxx::document::view_or_value criteria;
+
+    criteria = document{} << "id" << inValue
+        << "tagGroup" << group
+        << "tagElement" << element
+        << "value" << open_document
+              << "$gte" << start 
+              << "$lte" << end
+        << close_document << finalize;
+
+    auto cursor = db["DicomIdentifiers"].find(criteria.view());
+    for (auto&& doc : cursor)
+    {
+        target.push_back(doc["id"].get_int64().value);
+    }
+  }
+
   bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType)
   {
     using namespace bsoncxx::builder::stream;

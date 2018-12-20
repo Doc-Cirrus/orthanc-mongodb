@@ -129,6 +129,13 @@ namespace OrthancPlugins
       OrthancPluginIdentifierConstraint constraint,
       const char* value);
 
+    virtual void LookupIdentifierRange(std::list<long int>& target, 
+      OrthancPluginResourceType resourceType, 
+      uint16_t group, 
+      uint16_t element, 
+      const char* start,
+      const char* end);
+
     virtual bool LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType);
 
     virtual bool LookupParent(int64_t& parentId /*out*/, int64_t resourceId);
