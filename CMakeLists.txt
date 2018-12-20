@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.2)
 project(OrthancMongoDB)
 
 set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.5.0" CACHE STRING "Orthanc server sources root.")
-set(BOOST_ROOT "${ORTHANC_ROOT}/build/boost_1_68_0" CACHE STRING "Boost root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
@@ -107,8 +106,6 @@ include_directories ("${PROJECT_SOURCE_DIR}/Core")
 include_directories ("${PROJECT_SOURCE_DIR}/IndexPlugin")
 include_directories ("${PROJECT_SOURCE_DIR}/StoragePlugin")
 include_directories ("${ORTHANC_ROOT}/Plugins/Include")
-include_directories ("${ORTHANC_ROOT}")
-include_directories ("${BOOST_ROOT}")
 ##################################################################
 add_definitions(-DHAS_ORTHANC_EXCEPTION=1 -DORTHANC_ENABLE_LOGGING=1 -DORTHANC_ENABLE_LOGGING_PLUGIN=1 -DORTHANC_ENABLE_LOGGING_STDIO=1)
 

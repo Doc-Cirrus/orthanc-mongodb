@@ -28,20 +28,9 @@
 
 #pragma once
 
-#if HAS_ORTHANC_EXCEPTION != 1
-#  error HAS_ORTHANC_EXCEPTION must be set to 1
-#endif
-
-
 #include <orthanc/OrthancCDatabasePlugin.h>
-#include <Core/OrthancException.h>
-
 
 #define ORTHANC_PLUGINS_DATABASE_CATCH                            \
-  catch (::Orthanc::OrthancException& e)                          \
-  {                                                               \
-    return static_cast<OrthancPluginErrorCode>(e.GetErrorCode()); \
-  }                                                               \
   catch (::std::runtime_error& e)                                 \
   {                                                               \
     LogError(backend, e);                                         \
@@ -63,7 +52,7 @@ namespace OrthancPlugins
   /**
    * @ingroup Callbacks
    **/
-  class DatabaseBackendOutput : public boost::noncopyable
+  class DatabaseBackendOutput
   {
     friend class DatabaseBackendAdapter;
 
@@ -249,7 +238,7 @@ namespace OrthancPlugins
   /**
    * @ingroup Callbacks
    **/
-  class IDatabaseBackend : public boost::noncopyable
+  class IDatabaseBackend
   {
     friend class DatabaseBackendAdapter;
 

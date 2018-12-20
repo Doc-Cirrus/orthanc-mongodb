@@ -176,7 +176,6 @@ RUN if ${ORTHANC_MONGODB_ENABLED} ; then \
       -DCMAKE_INSTALL_PREFIX=/install \
       -DCMAKE_PREFIX_PATH="/install" \
       -DORTHANC_ROOT:PATH=/orthanc \
-      -DBOOST_ROOT:path=/orthanc-build/boost_1_68_0 \
       ../orthanc-mongodb \
  && make -j ${JOBS} \
 # && ./IndexTest \
