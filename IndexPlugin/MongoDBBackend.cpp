@@ -1110,4 +1110,49 @@ namespace OrthancPlugins
    
   }
 
+  void MongoDBBackend::GetChildrenMetadata(std::list<std::basic_string<char> >&, int64_t, int32_t) 
+  {
+    
+  }
+
+  int64_t MongoDBBackend::GetLastChangeIndex()
+  {
+    return 0;
+  }
+
+  void MongoDBBackend::TagMostRecentPatient(int64_t)
+  {
+
+  }
+
+  bool MongoDBBackend::LookupResourceAndParent(int64_t&, OrthancPluginResourceType&, std::string&, const char*)
+  {
+    return false;
+  }
+
+  void MongoDBBackend::GetAllMetadata(std::map<int, std::basic_string<char> >&, int64_t)
+  {
+
+  }
+
+  void MongoDBBackend::LookupResources(const std::vector<OrthancPluginDatabaseConstraint>&, OrthancPluginResourceType, uint32_t, bool)
+  {
+
+  }
+
+  void MongoDBBackend::SetResourcesContent(uint32_t, const OrthancPluginResourcesContentTags*, 
+                                    uint32_t, const OrthancPluginResourcesContentTags*, 
+                                    uint32_t, const OrthancPluginResourcesContentMetadata*)
+  {
+
+  }
+
+  void MongoDBBackend::CreateInstance(OrthancPluginCreateInstanceResult& result,
+                                const char* hashPatient,
+                                const char* hashStudy,
+                                const char* hashSeries,
+                                const char* hashInstance) 
+  {
+    
+  }
 } //namespace OrthancPlugins

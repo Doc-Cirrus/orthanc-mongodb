@@ -2,10 +2,15 @@ cmake_minimum_required(VERSION 3.2)
 
 project(OrthancMongoDB)
 
-set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.5.0" CACHE STRING "Orthanc server sources root.")
+set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.5.7" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
+
+set(ORTHANC_OPTIMAL_VERSION_MAJOR    1)
+set(ORTHANC_OPTIMAL_VERSION_MINOR    5)
+set(ORTHANC_OPTIMAL_VERSION_REVISION 7)
+
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
 IF ( MSVC )
@@ -107,7 +112,16 @@ include_directories ("${PROJECT_SOURCE_DIR}/IndexPlugin")
 include_directories ("${PROJECT_SOURCE_DIR}/StoragePlugin")
 include_directories ("${ORTHANC_ROOT}/Plugins/Include")
 ##################################################################
-add_definitions(-DHAS_ORTHANC_EXCEPTION=1 -DORTHANC_ENABLE_LOGGING=1 -DORTHANC_ENABLE_LOGGING_PLUGIN=1 -DORTHANC_ENABLE_LOGGING_STDIO=1)
+add_definitions(
+	-DHAS_ORTHANC_EXCEPTION=1 
+	-DORTHANC_ENABLE_LOGGING=1 
+	-DORTHANC_ENABLE_LOGGING_PLUGIN=1 
+	-DORTHANC_ENABLE_LOGGING_STDIO=1
+  -DORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT=1
+	-DORTHANC_OPTIMAL_VERSION_MAJOR=${ORTHANC_OPTIMAL_VERSION_MAJOR}
+	-DORTHANC_OPTIMAL_VERSION_MINOR=${ORTHANC_OPTIMAL_VERSION_MINOR}
+	-DORTHANC_OPTIMAL_VERSION_REVISION=${ORTHANC_OPTIMAL_VERSION_REVISION}
+)
 
 set(CORE_SOURCES
   "Core/MongoDBConnection.cpp"
