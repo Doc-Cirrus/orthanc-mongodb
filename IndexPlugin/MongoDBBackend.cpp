@@ -1110,18 +1110,69 @@ namespace OrthancPlugins
    
   }
 
-  void MongoDBBackend::GetChildrenMetadata(std::list<std::basic_string<char> >&, int64_t, int32_t) 
+  void MongoDBBackend::GetChildrenMetadata(std::list<std::string>& target,
+                                     int64_t resourceId,
+                                     int32_t metadata)
   {
-    
+      //SELECT internalId FROM Resources WHERE parentId=${id}
+    using namespace bsoncxx::builder::stream;
+
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto resCursor = db["Resources"].find(document{} << "parentId" << resourceId << finalize);
+    //document with ids to lookup
+    document inCriteriaArray{};
+    auto inCriteriaStream = inCriteriaArray << "$in" << open_array;
+    for (auto&& d : resCursor)
+    {
+        int64_t parentId = d["internalId"].get_int64().value;
+        inCriteriaStream << parentId;
+    }
+    auto inCriteriaValue = inCriteriaStream << close_array << finalize;
+    bsoncxx::document::view_or_value byIdValue = document{} << "type" << metadata << "id" << inCriteriaValue << finalize;
+
+    auto metadataCursor = db["Metadata"].find(byIdValue);
+    for (auto&& doc : metadataCursor)
+    {
+      target.push_back(std::string(doc["value"].get_utf8().value));
+    }
+
   }
 
   int64_t MongoDBBackend::GetLastChangeIndex()
   {
-    return 0;
+        using namespace bsoncxx::builder::stream;
+        auto conn = pool_.acquire();
+        auto db = (*conn)[dbname_];
+        auto seqDoc = db["Sequences"].find_one(document{} << "name" << "Changes" << finalize);
+
+        if (seqDoc)
+        {
+            return seqDoc->view()["i"].get_int64().value;
+        } else {
+            return 0;
+        }
   }
 
-  void MongoDBBackend::TagMostRecentPatient(int64_t)
+  void MongoDBBackend::TagMostRecentPatient(int64_t patientId)
   {
+    using namespace bsoncxx::builder::stream;
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+    auto collection = db["PatientRecyclingOrder"];
+
+    auto recyclongOrderDoc = collection.find_one(document{} << "patientId" << patientId << finalize);
+
+    if (recyclongOrderDoc)
+    {
+        int64_t seq = recyclongOrderDoc->view()["i"].get_int64().value;
+        collection.delete_many(document{} << "id" << seq << finalize);
+        // Refresh the patient id if protected
+        seq = GetNextSequence(db, "PatientRecyclingOrder");
+        collection.insert_one(document{} << "id" << seq
+            <<  "patientId" << patientId << finalize);
+    }
 
   }
 
