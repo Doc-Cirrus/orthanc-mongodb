@@ -1154,13 +1154,13 @@ namespace OrthancPlugins
       auto metadataCursor = db["Metadata"].find(byIdValue);
       for (auto&& doc : metadataCursor)
       {
-        result[std::string(doc["type"].get_utf8().value)] = std::string(doc["value"].get_utf8().value)
+        result[doc["type"].get_int64().value] = std::string(doc["value"].get_utf8().value);
       }
   }
 
   void MongoDBBackend::LookupResources(const std::vector<OrthancPluginDatabaseConstraint>&, OrthancPluginResourceType, uint32_t, bool)
   {
-
+      // TODO
   }
 
   void MongoDBBackend::SetResourcesContent(
@@ -1183,11 +1183,11 @@ namespace OrthancPlugins
 
     for (uint32_t i = 0; i < countIdentifierTags; i++)
     {
-      dicomIdentifiersDocuments.push_back(document{}
-        << value << identifierTags[i].value 
-        << resource << identifierTags[i].resource 
-        << group << identifierTags[i].group 
-        << element << identifierTags[i].element
+      dicomIdentifiersDocuments.push_back(
+        document{} << "value" << identifierTags[i].value 
+        << "resource" << identifierTags[i].resource 
+        << "group" << identifierTags[i].group 
+        << "element" << identifierTags[i].element
         << finalize
       );
     }
@@ -1196,11 +1196,11 @@ namespace OrthancPlugins
 
     for (uint32_t i = 0; i < countMainDicomTags; i++)
     {
-      mainDicomTagsDocuments.push_back(document{}
-        << value << mainDicomTags[i].value 
-        << resource << mainDicomTags[i].resource 
-        << group << mainDicomTags[i].group 
-        << element << mainDicomTags[i].element
+      mainDicomTagsDocuments.push_back(
+        document{} << "value" << mainDicomTags[i].value 
+        << "resource" << mainDicomTags[i].resource 
+        << "group" << mainDicomTags[i].group 
+        << "element" << mainDicomTags[i].element
         << finalize
       );
     }
@@ -1210,15 +1210,15 @@ namespace OrthancPlugins
 
     for (uint32_t i = 0; i < countMetadata; i++)
     {
-      metadataDocuments.push_back(document{}
-        << id << metadata[i].resource 
-        << type << metadata[i].metadata 
-        << value << metadata[i].value
+      metadataDocuments.push_back(
+        document{} << "id" << metadata[i].resource 
+        << "type" << metadata[i].metadata 
+        << "value" << metadata[i].value
         << finalize
       );
 
       // not knowing how to do a $or in mongocxx 
-      metadataCollection.delete_one(document{} << id << metadata[i].resource << type << metadata[i].metadata << finalize);
+      metadataCollection.delete_one(document{} << "id" << metadata[i].resource << "type" << metadata[i].metadata << finalize);
     }
 
     metadataCollection.insert_many(metadataDocuments);
@@ -1236,42 +1236,38 @@ namespace OrthancPlugins
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    bsoncxx::document::view_or_value byInstanceIdValue = document{} << "publicId" << hashInstance << resourceType << 3 << finalize;
 
     auto collection = db["Resources"];
-    auto instance = collection.find_one(byInstanceIdValue);
+    auto instance = collection.find_one(document{} << "publicId" << hashInstance << "resourceType" << 3 << finalize);
 
     if (instance)
     {
-      result.instanceId = instance->view()["internalId"].get_utf8().value;
       result.isNewInstance = false;
+      result.instanceId = instance->view()["internalId"].get_int64().value;
     }
     else {
-        bsoncxx::document::view_or_value byPatientIdValue = document{} << "publicId" << hashPatient << resourceType << 0 << finalize;
-        bsoncxx::document::view_or_value byStudyIdValue = document{} << "publicId" << hashStudy << resourceType << 1 << finalize;
-        bsoncxx::document::view_or_value bySeriesIdValue = document{} << "publicId" << hashSeries << resourceType << 2 << finalize;
-
-        auto patient = collection.find_one(byPatientIdValue);
-        auto study = collection.find_one(byStudyIdValue);
-        auto series = collection.find_one(bySeriesIdValue);
+        auto patient = collection.find_one(document{} << "publicId" << hashPatient << "resourceType" << 0 << finalize);
+        auto study = collection.find_one(document{} << "publicId" << hashStudy << "resourceType" << 1 << finalize);
+        auto series = collection.find_one(document{} << "publicId" << hashSeries << "resourceType" << 2 << finalize);
 
         if (patient) {
           result.isNewPatient = false;
-          result.patientId = patient->view()["internalId"].get_utf8().value;
+          result.patientId = patient->view()["internalId"].get_int64().value;
         }
         else {
           if (!study && !series && !instance) {
-            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
           }
 
           int64_t seq = GetNextSequence(db, "Resources");
 
-          document << "internalId" << seq
-          <<  "resourceType" << 0
-          <<  "publicId" << hashPatient
-          <<  "parentId" << bsoncxx::types::b_null();
-
-          collection.insert_one(document.view());
+          collection.insert_one(
+            document{} << "internalId" << seq
+            <<  "resourceType" << 0
+            <<  "publicId" << hashPatient
+            <<  "parentId" << bsoncxx::types::b_null()
+            << finalize
+          );
 
           result.patientId = seq;
           result.isNewPatient = true;
@@ -1279,47 +1275,69 @@ namespace OrthancPlugins
 
         if (study) {
           result.isNewStudy = false;
-          result.studyId = study->view()["internalId"].get_utf8().value;
+          result.studyId = study->view()["internalId"].get_int64().value;
         }
         else {
           if (!series && !instance) {
-            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
           }
 
           int64_t seq = GetNextSequence(db, "Resources");
 
-          document << "internalId" << seq
-          <<  "resourceType" << 1
-          <<  "publicId" << hashStudy
-          <<  "parentId" << result.patientId;
+          collection.insert_one(
+            document{} << "internalId" << seq
+            <<  "resourceType" << 1
+            <<  "publicId" << hashStudy
+            <<  "parentId" << result.patientId
+            << finalize
+          );
 
-          collection.insert_one(document.view());
-
-          result.studyId = true;
-          result.isNewStudy = seq;
+          result.studyId = seq;
+          result.isNewStudy = true;
         }
 
         if (series) {
           result.isNewSeries = false;
-          result.seriesId = series->view()["internalId"].get_utf8().value;
+          result.seriesId = series->view()["internalId"].get_int64().value;
         }
         else {
           if (!instance) {
-            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
           }
 
           int64_t seq = GetNextSequence(db, "Resources");
+          collection.insert_one(
+            document{} << "internalId" << seq
+            <<  "resourceType" << 2
+            <<  "publicId" << hashSeries
+            <<  "parentId" << result.studyId 
+            << finalize
+          );
 
-          document << "internalId" << seq
-          <<  "resourceType" << 2
-          <<  "publicId" << hashSeries
-          <<  "parentId" << result.seriesId;
-
-          collection.insert_one(document.view());
-
-          result.studyId = true;
-          result.isNewStudy = seq;
+          result.seriesId = seq;
+          result.isNewSeries = true;
         }
+
+        int64_t seq = GetNextSequence(db, "Resources");
+        collection.insert_one(
+          document{} << "internalId" << seq
+          <<  "resourceType" << 2
+          <<  "publicId" << hashInstance
+          <<  "parentId" << result.seriesId
+          << finalize
+        );
+
+        result.isNewInstance = true;
+        result.instanceId = seq;
+
+        // recycle check
+        bsoncxx::document::view_or_value byPatientRecycle = document{} << "patientId" << result.patientId << finalize;
+        auto patientRecycle = db["PatientRecyclingOrder"].find_one(byPatientRecycle);
+
+        if (patientRecycle) {
+          //bsoncxx::document::view_or_value byPatientRecycleCount = document{} << "patientId" << result.patientId << finalize;
+        }
+
     }
 
   }
