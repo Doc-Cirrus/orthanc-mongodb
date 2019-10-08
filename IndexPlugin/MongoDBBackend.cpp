@@ -565,7 +565,7 @@ namespace OrthancPlugins
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["Resources"].count(
+    int64_t count = db["Resources"].count_documents(
       document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
     return count;
   }
@@ -642,7 +642,7 @@ namespace OrthancPlugins
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["Resources"].count(
+    int64_t count = db["Resources"].count_documents(
       document{} << "internalId" << internalId << finalize);
     return count > 0;
   }
@@ -653,7 +653,7 @@ namespace OrthancPlugins
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["PatientRecyclingOrder"].count(
+    int64_t count = db["PatientRecyclingOrder"].count_documents(
       document{} << "patientId" << internalId << finalize);
     return count > 0;
   }
@@ -791,50 +791,30 @@ namespace OrthancPlugins
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    std::list<int64_t> internalIds;
-    GetAllInternalIds(internalIds, resourceType);
-   
-    if (internalIds.size() <= 0)
-    {
-      //not foundinternalIds
-      return;
-    }
-   
-    document in{};
-    auto bs = in << "$in" << open_array;
-    for (auto rid : internalIds)
-    {
-      bs << rid;
-    }
-    auto inValue = bs << close_array << finalize;
     bsoncxx::document::view_or_value criteria;
 
     switch (constraint)
     {
     case OrthancPluginIdentifierConstraint_Equal:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
+      criteria = document{} << "tagGroup" << group
           << "tagElement" << element
           << "value" << value << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_SmallerOrEqual:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
+      criteria = document{} << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$lte" << value << close_document << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_GreaterOrEqual:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
+      criteria = document{} << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$gte" << value << close_document << finalize;
       break;
 
     case OrthancPluginIdentifierConstraint_Wildcard:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
+      criteria = document{} << "tagGroup" << group
           << "tagElement" << element
           << "value" << open_document << "$regex" << ConvertWildcardToRegex(value) << close_document << finalize;
       break;
@@ -863,26 +843,9 @@ namespace OrthancPlugins
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    std::list<int64_t> internalIds;
-    GetAllInternalIds(internalIds, resourceType);
-   
-    if (internalIds.size() <= 0)
-    {
-      //not foundinternalIds
-      return;
-    }
-   
-    document in{};
-    auto bs = in << "$in" << open_array;
-    for (auto rid : internalIds)
-    {
-      bs << rid;
-    }
-    auto inValue = bs << close_array << finalize;
     bsoncxx::document::view_or_value criteria;
 
-    criteria = document{} << "id" << inValue
-        << "tagGroup" << group
+    criteria = document{} << "tagGroup" << group
         << "tagElement" << element
         << "value" << open_document
               << "$gte" << start 
@@ -1107,7 +1070,6 @@ namespace OrthancPlugins
 
     db["MainDicomTags"].delete_many(document{} << "id" << internalId << finalize);
     db["DicomIdentifiers"].delete_many(document{} << "id" << internalId << finalize);
-   
   }
 
   void MongoDBBackend::GetChildrenMetadata(std::list<std::string>& target,
@@ -1158,6 +1120,7 @@ namespace OrthancPlugins
   void MongoDBBackend::TagMostRecentPatient(int64_t patientId)
   {
     using namespace bsoncxx::builder::stream;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
     auto collection = db["PatientRecyclingOrder"];
@@ -1170,8 +1133,7 @@ namespace OrthancPlugins
         collection.delete_many(document{} << "id" << seq << finalize);
         // Refresh the patient id if protected
         seq = GetNextSequence(db, "PatientRecyclingOrder");
-        collection.insert_one(document{} << "id" << seq
-            <<  "patientId" << patientId << finalize);
+        collection.insert_one(document{} << "id" << seq <<  "patientId" << patientId << finalize);
     }
 
   }
@@ -1181,9 +1143,19 @@ namespace OrthancPlugins
     return false;
   }
 
-  void MongoDBBackend::GetAllMetadata(std::map<int, std::basic_string<char> >&, int64_t)
+  void MongoDBBackend::GetAllMetadata(std::map<int32_t, std::string>& result, int64_t id)
   {
+      using namespace bsoncxx::builder::stream;
 
+      auto conn = pool_.acquire();
+      auto db = (*conn)[dbname_];
+      bsoncxx::document::view_or_value byIdValue = document{} << "id" << id << finalize;
+
+      auto metadataCursor = db["Metadata"].find(byIdValue);
+      for (auto&& doc : metadataCursor)
+      {
+        result[std::string(doc["type"].get_utf8().value)] = std::string(doc["value"].get_utf8().value)
+      }
   }
 
   void MongoDBBackend::LookupResources(const std::vector<OrthancPluginDatabaseConstraint>&, OrthancPluginResourceType, uint32_t, bool)
@@ -1191,10 +1163,65 @@ namespace OrthancPlugins
 
   }
 
-  void MongoDBBackend::SetResourcesContent(uint32_t, const OrthancPluginResourcesContentTags*, 
-                                    uint32_t, const OrthancPluginResourcesContentTags*, 
-                                    uint32_t, const OrthancPluginResourcesContentMetadata*)
+  void MongoDBBackend::SetResourcesContent(
+    uint32_t countIdentifierTags, const OrthancPluginResourcesContentTags* identifierTags,
+    uint32_t countMainDicomTags, const OrthancPluginResourcesContentTags* mainDicomTags,
+    uint32_t countMetadata, const OrthancPluginResourcesContentMetadata* metadata)
   {
+  using namespace bsoncxx::builder::stream;
+    
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto metadataCollection = db["Metadata"];
+    auto mainDicomTagsCollection = db["MainDicomTags"];
+    auto dicomIdentifiersCollection = db["DicomIdentifiers"];
+
+    std::vector< bsoncxx::document::value > dicomIdentifiersDocuments;
+    std::vector< bsoncxx::document::value > mainDicomTagsDocuments;
+    std::vector< bsoncxx::document::value > metadataDocuments;
+
+    for (uint32_t i = 0; i < countIdentifierTags; i++)
+    {
+      dicomIdentifiersDocuments.push_back(document{}
+        << value << identifierTags[i].value 
+        << resource << identifierTags[i].resource 
+        << group << identifierTags[i].group 
+        << element << identifierTags[i].element
+        << finalize
+      );
+    }
+
+    dicomIdentifiersCollection.insert_many(dicomIdentifiersDocuments);
+
+    for (uint32_t i = 0; i < countMainDicomTags; i++)
+    {
+      mainDicomTagsDocuments.push_back(document{}
+        << value << mainDicomTags[i].value 
+        << resource << mainDicomTags[i].resource 
+        << group << mainDicomTags[i].group 
+        << element << mainDicomTags[i].element
+        << finalize
+      );
+    }
+
+    mainDicomTagsCollection.insert_many(mainDicomTagsDocuments);
+    
+
+    for (uint32_t i = 0; i < countMetadata; i++)
+    {
+      metadataDocuments.push_back(document{}
+        << id << metadata[i].resource 
+        << type << metadata[i].metadata 
+        << value << metadata[i].value
+        << finalize
+      );
+
+      // not knowing how to do a $or in mongocxx 
+      metadataCollection.delete_one(document{} << id << metadata[i].resource << type << metadata[i].metadata << finalize);
+    }
+
+    metadataCollection.insert_many(metadataDocuments);
 
   }
 
@@ -1204,6 +1231,96 @@ namespace OrthancPlugins
                                 const char* hashSeries,
                                 const char* hashInstance) 
   {
-    
+    using namespace bsoncxx::builder::stream;
+
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    bsoncxx::document::view_or_value byInstanceIdValue = document{} << "publicId" << hashInstance << resourceType << 3 << finalize;
+
+    auto collection = db["Resources"];
+    auto instance = collection.find_one(byInstanceIdValue);
+
+    if (instance)
+    {
+      result.instanceId = instance->view()["internalId"].get_utf8().value;
+      result.isNewInstance = false;
+    }
+    else {
+        bsoncxx::document::view_or_value byPatientIdValue = document{} << "publicId" << hashPatient << resourceType << 0 << finalize;
+        bsoncxx::document::view_or_value byStudyIdValue = document{} << "publicId" << hashStudy << resourceType << 1 << finalize;
+        bsoncxx::document::view_or_value bySeriesIdValue = document{} << "publicId" << hashSeries << resourceType << 2 << finalize;
+
+        auto patient = collection.find_one(byPatientIdValue);
+        auto study = collection.find_one(byStudyIdValue);
+        auto series = collection.find_one(bySeriesIdValue);
+
+        if (patient) {
+          result.isNewPatient = false;
+          result.patientId = patient->view()["internalId"].get_utf8().value;
+        }
+        else {
+          if (!study && !series && !instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+          }
+
+          int64_t seq = GetNextSequence(db, "Resources");
+
+          document << "internalId" << seq
+          <<  "resourceType" << 0
+          <<  "publicId" << hashPatient
+          <<  "parentId" << bsoncxx::types::b_null();
+
+          collection.insert_one(document.view());
+
+          result.patientId = seq;
+          result.isNewPatient = true;
+        }
+
+        if (study) {
+          result.isNewStudy = false;
+          result.studyId = study->view()["internalId"].get_utf8().value;
+        }
+        else {
+          if (!series && !instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+          }
+
+          int64_t seq = GetNextSequence(db, "Resources");
+
+          document << "internalId" << seq
+          <<  "resourceType" << 1
+          <<  "publicId" << hashStudy
+          <<  "parentId" << result.patientId;
+
+          collection.insert_one(document.view());
+
+          result.studyId = true;
+          result.isNewStudy = seq;
+        }
+
+        if (series) {
+          result.isNewSeries = false;
+          result.seriesId = series->view()["internalId"].get_utf8().value;
+        }
+        else {
+          if (!instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant")
+          }
+
+          int64_t seq = GetNextSequence(db, "Resources");
+
+          document << "internalId" << seq
+          <<  "resourceType" << 2
+          <<  "publicId" << hashSeries
+          <<  "parentId" << result.seriesId;
+
+          collection.insert_one(document.view());
+
+          result.studyId = true;
+          result.isNewStudy = seq;
+        }
+    }
+
   }
 } //namespace OrthancPlugins
