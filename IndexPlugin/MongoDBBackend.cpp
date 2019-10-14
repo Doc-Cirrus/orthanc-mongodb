@@ -1373,6 +1373,7 @@ namespace OrthancPlugins
   {
     using bsoncxx::builder::basic::kvp;
     using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::sub_array;
     using bsoncxx::builder::basic::make_array;
     using bsoncxx::builder::basic::make_document;
 
@@ -1387,79 +1388,80 @@ namespace OrthancPlugins
     size_t normalCount = 0;
     size_t identifierCount = 0;
 
-    for (size_t i = 0; i < lookup.size(); i++)
-    { 
-      bsoncxx::document::view_or_value criteria;
+    std::map<std::string, bsoncxx::builder::basic::document> criterias;
+
+    for (size_t i = 0; i < lookup.size(); i++) {
       OrthancPluginDatabaseConstraint constraint = lookup[i];
 
       auto case_sensitive_option = constraint.isCaseSensitive == 0 ? "i" : "";
+      auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
+
+      if (criterias.find(query_identifier) == criterias.end()) {
+        criterias[query_identifier] = std::move(bsoncxx::builder::basic::document{});
+      }
+
+      auto &current_document = criterias.at(query_identifier);
 
       switch (constraint.type)
       {
         case OrthancPluginConstraintType_Equal:
-          criteria = make_document(
-            kvp("tagGroup", constraint.tagGroup),
-            kvp("tagElement" , constraint.tagElement),
-            kvp("value" , make_document(
-              kvp("$regex", constraint.values[0]),
-              kvp("$options", case_sensitive_option)
-            ))
+          current_document.append(
+            kvp("$regex", constraint.values[0]),
+            kvp("$options", case_sensitive_option)
           );
           break;
 
         case OrthancPluginConstraintType_SmallerOrEqual:
-          criteria = make_document(
-            kvp("tagGroup", constraint.tagGroup),
-            kvp("tagElement" , constraint.tagElement),
-            kvp("value" , make_document(
-              kvp("$lte", constraint.values[0])
-            ))
+          current_document.append(
+            kvp("$lte", constraint.values[0])
           );
           break;
 
         case OrthancPluginConstraintType_GreaterOrEqual:
-          criteria = make_document(
-            kvp("tagGroup", constraint.tagGroup),
-            kvp("tagElement" , constraint.tagElement),
-            kvp("value" , make_document(
-              kvp("$gte", constraint.values[0])
-            ))
+          current_document.append(
+            kvp("$gte", constraint.values[0])
           );
           break;
 
         case OrthancPluginConstraintType_List:
-         {
-          array array_builder = array{};
-
-          for (size_t i = 0; i < constraint.valuesCount; i++) {
-            array_builder.append(constraint.values[i]);
-          }
-
-          criteria = make_document(
-            kvp("tagGroup", constraint.tagGroup),
-            kvp("tagElement" , constraint.tagElement),
-            kvp("value" , make_document(
-              kvp("$in", array_builder.extract()))
-            )
+          current_document.append(
+            kvp("$in", [constraint](sub_array child) {
+              for (size_t i = 0; i < constraint.valuesCount; i++) {
+                child.append(constraint.values[i]);
+              }
+            })
           );
-
           break;
-         }
+         
 
         case OrthancPluginConstraintType_Wildcard:
-          criteria = make_document(
-            kvp("tagGroup", constraint.tagGroup),
-            kvp("tagElement" , constraint.tagElement),
-            kvp("value" , make_document(
-              kvp("$regex", ConvertWildcardToRegex(constraint.values[0])),
-              kvp("$options", case_sensitive_option)
-            ))
+          current_document.append(
+            kvp("$regex", ConvertWildcardToRegex(constraint.values[0])),
+            kvp("$options", case_sensitive_option)
           );
           break;
 
         default:
           throw MongoDBException("MongoDBBackend::LookupResources - invalid ConstraintType");
       }
+    }
+
+    for (size_t i = 0; i < lookup.size(); i++)
+    {
+      OrthancPluginDatabaseConstraint constraint = lookup[i];
+
+      auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
+      auto current_document_query = criterias.find(query_identifier);
+
+      if (current_document_query == criterias.end()) {
+        continue;
+      }
+
+      bsoncxx::document::view_or_value criteria = make_document(
+        kvp("tagGroup", constraint.tagGroup),
+        kvp("tagElement" , constraint.tagElement),
+        kvp("value" , current_document_query->second.extract())
+      );
 
       if (constraint.isIdentifierTag == 1) {
         identifierCount++;
@@ -1469,6 +1471,8 @@ namespace OrthancPlugins
         normalCount++;
         normalStream.append(criteria);
       }
+
+      criterias.erase(current_document_query);  
     }
 
     mongocxx::pipeline stages;
@@ -1541,7 +1545,6 @@ namespace OrthancPlugins
         ))
       );
 
-      auto project_stage = make_document(kvp("tags", 1));
       auto unwind_stage = "$tags";
       auto replace_root_stage = make_document(kvp("newRoot", "$tags"));
       auto group_tags_stage = make_document(
@@ -1605,11 +1608,6 @@ namespace OrthancPlugins
             ))
           ),
           make_document(
-            kvp("$project", make_document(
-              kvp("resources", 1)
-            ))
-          ),
-          make_document(
             kvp("$unwind", "$resources")
           ),
           make_document(
@@ -1636,7 +1634,6 @@ namespace OrthancPlugins
 
       stages.facet(search_facet_stage.view());
       stages.add_fields(add_field_stage.view());
-      stages.project(add_field_stage.view());
       stages.unwind(unwind_stage);
       stages.replace_root(replace_root_stage.view());
       stages.group(group_tags_stage.view());
@@ -1660,25 +1657,26 @@ namespace OrthancPlugins
 
       if (queryLevel == OrthancPluginResourceType_Study) {
         sort_build_lookup_pipe_stage.append(
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 30), kvp("id", "$resource")), // study_date
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 48), kvp("id", "$resource")) // study_time
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 32)), // study_date
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 48)) // study_time
         );
       }
 
       if (queryLevel == OrthancPluginResourceType_Series) {
         sort_build_lookup_pipe_stage.append(
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 33), kvp("id", "$resource")), // series_date
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 49), kvp("id", "$resource")) // series_time
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 33)), // series_date
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 49)) // series_time
         );
       }
 
       auto sort_build_lookup_stage = make_document(
           kvp("as", "sorts"), 
-          kvp("from", "DicomIdentifiers"),
+          kvp("from", "MainDicomTags"),
           kvp("let", make_document(kvp("resource", "$internalId"))),
           kvp("pipeline", make_array(
             make_document(
               kvp("$match", make_document(
+                kvp("$expr", make_document(kvp("$eq", make_array("$id", "$$resource")))),
                 kvp("$or", sort_build_lookup_pipe_stage.extract())
               ))
             )
