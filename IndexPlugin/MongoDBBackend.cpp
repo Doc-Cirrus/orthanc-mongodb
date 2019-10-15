@@ -85,7 +85,6 @@ namespace OrthancPlugins
     dbname_ = uri.database();
 
     CheckMonoDBMaster();
-
     CreateIndices();
   }
 
@@ -93,11 +92,16 @@ namespace OrthancPlugins
 
   void MongoDBBackend::CheckMonoDBMaster()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    auto isMasterDoc = db.run_command(document{} << "isMaster" << 1 << finalize);
+
+    auto isMasterDoc = db.run_command(make_document(kvp("isMaster", 1)));
+
     bool isMaster = isMasterDoc.view()["ismaster"].get_bool().value;
+
     if (!isMaster)
       throw MongoDBException("MongoDB server is not master, could not write.");
   }
@@ -108,75 +112,91 @@ namespace OrthancPlugins
 
   void MongoDBBackend::CreateIndices()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    db["Resources"].create_index(document{} << "parentId" << 1 << finalize);
-    db["Resources"].create_index(document{} << "publicId" << 1 << finalize);
-    db["Resources"].create_index(document{} << "resourceType" << 1 << finalize);
-    db["Resources"].create_index(document{} << "internalId" << 1 << finalize);
-    db["PatientRecyclingOrder"].create_index(document{} << "patientId" << 1 << finalize);
-    db["MainDicomTags"].create_index(document{} << "id" << 1 << finalize);
-    db["DicomIdentifiers"].create_index(document{} << "id" << 1 << finalize);
-    db["DicomIdentifiers"].create_index(document{} << "tagGroup" << 1 << "tagElement" << 1 << finalize);
-    db["DicomIdentifiers"].create_index(document{} << "value" << 1 << finalize);
-    db["Changes"].create_index(document{} << "internalId" << 1 << finalize);
-    db["AttachedFiles"].create_index(document{} << "id" << 1 << finalize);
-    db["Metadata"].create_index(document{} << "id" << 1 << finalize);
+    
+    db["Resources"].create_index(make_document(kvp("parentId", 1)));
+    db["Resources"].create_index(make_document(kvp("publicId", 1)));
+    db["Resources"].create_index(make_document(kvp("resourceType", 1)));
+    db["Resources"].create_index(make_document(kvp("internalId", 1)));
+    db["PatientRecyclingOrder"].create_index(make_document(kvp("patientId", 1)));
+    db["MainDicomTags"].create_index(make_document(kvp("id", 1)));
+    db["DicomIdentifiers"].create_index(make_document(kvp("id", 1)));
+    db["DicomIdentifiers"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1)));
+    db["DicomIdentifiers"].create_index(make_document(kvp("value", 1)));
+    db["Changes"].create_index(make_document(kvp("internalId", 1)));
+    db["AttachedFiles"].create_index(make_document(kvp("id", 1)));
+    db["Metadata"].create_index(make_document(kvp("id", 1)));
   }
 
   void MongoDBBackend::AddAttachment(int64_t id, const OrthancPluginAttachment& attachment)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
 
     auto collection = db["AttachedFiles"];
-    document << "id" << id
-        <<  "fileType" << attachment.contentType
-        <<  "uuid" << attachment.uuid
-        <<  "compressedSize" << static_cast<int64_t>(attachment.compressedSize)
-        <<  "uncompressedSize" << static_cast<int64_t>(attachment.uncompressedSize)
-        <<  "compressionType" << attachment.compressionType
-        <<  "uncompressedHash" << attachment.uncompressedHash
-        <<  "compressedHash" << attachment.compressedHash;
+    auto attachment_document = make_document(
+      kvp("id", id),
+      kvp("fileType", attachment.contentType),
+      kvp("uuid", attachment.uuid),
+      kvp("compressedSize", static_cast<int64_t>(attachment.compressedSize)),
+      kvp("uncompressedSize", static_cast<int64_t>(attachment.uncompressedSize)),
+      kvp("compressionType", attachment.compressionType),
+      kvp("uncompressedHash", attachment.uncompressedHash),
+      kvp("compressedHash", attachment.compressedHash)
+    );
 
-    collection.insert_one(document.view());
+    collection.insert_one(attachment_document.view());
   }
 
   void MongoDBBackend::AttachChild(int64_t parent, int64_t child)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["Resources"];
 
-    using namespace bsoncxx::builder::stream;
     collection.update_many(
-      document{} << "internalId" << child << finalize,
-      document{} << "$set" << open_document <<
-            "parentId" << parent << close_document << finalize
+      make_document(kvp("internalId", child)),
+      make_document(kvp("internalId", make_document(kvp("parentId", parent))))
     );
   }
 
   void MongoDBBackend::ClearChanges()
   {
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["Changes"];
-    collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
+    collection.delete_many({});
   }
 
   void MongoDBBackend::ClearExportedResources()
   {
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["ExportedResources"];
-    collection.delete_many(bsoncxx::builder::stream::document{} << bsoncxx::builder::stream::finalize);
+    collection.delete_many({});
   }
 
   int64_t MongoDBBackend::GetNextSequence(mongocxx::database& db, const std::string seqName)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
    
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -186,66 +206,81 @@ namespace OrthancPlugins
     mongocxx::options::find_one_and_update options;
     options.return_document(mongocxx::options::return_document::k_after);
     mongocxx::stdx::optional<bsoncxx::document::value> seqDoc = collection.find_one_and_update(
-      document{} << "name" << seqName << finalize,
-      document{} << "$inc" << open_document << "i" << int64_t(1) << close_document << finalize,
-      options);
+      make_document(kvp("name", seqName)),
+      make_document(kvp("$inc", make_document(kvp("i", int64_t(1))))),
+      options
+    );
 
-    if(seqDoc)
-    {
+    if(seqDoc) {
       bsoncxx::document::element element = seqDoc->view()["i"];
       num = element.get_int64().value;
-    } else
-    {
+    } 
+
+    else {
       collection.insert_one(
-        document{} << "name" << seqName << "i" << int64_t(1) << finalize);
+        make_document(
+          kvp("name", seqName), 
+          kvp("i", int64_t(1))
+      ));
     }
     return num;
   }
 
   int64_t MongoDBBackend::CreateResource(const char* publicId, OrthancPluginResourceType type)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
 
     int64_t seq = GetNextSequence(db, "Resources");
 
     auto collection = db["Resources"];
-    document << "internalId" << seq
-        <<  "resourceType" << static_cast<int>(type)
-        <<  "publicId" << publicId
-        <<  "parentId" << bsoncxx::types::b_null();
+    auto resource_document = make_document(
+      kvp("internalId", seq),
+      kvp("resourceType", static_cast<int>(type)),
+      kvp("publicId", publicId),
+      kvp("parentId", bsoncxx::types::b_null())
+    );
 
-    collection.insert_one(document.view());
+    collection.insert_one(resource_document.view());
     return seq;
   }
 
   void MongoDBBackend::DeleteAttachment(int64_t id, int32_t attachment)
   {
-   
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["AttachedFiles"];
-    collection.delete_many(
-      document{} << "id" << static_cast<int64_t>(id)
-          << "fileType" << attachment  << finalize);
+
+    collection.delete_many(make_document(
+      kvp("id", static_cast<int64_t>(id)),
+      kvp("fileType", attachment)
+    ));
   }
 
   void MongoDBBackend::DeleteMetadata(int64_t id, int32_t metadataType)
   {
-   
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["Metadata"];
-    collection.delete_many(
-      document{} << "id" << static_cast<int64_t>(id)
-          << "type" << metadataType << finalize);
+
+    collection.delete_many(make_document(
+      kvp("id", static_cast<int64_t>(id)),
+      kvp("type", metadataType)
+    ));
   }
 
+  // TODO BETTER Refactor
   void MongoDBBackend::DeleteResource(int64_t id)
   {
     using namespace bsoncxx::builder::stream;
@@ -329,39 +364,46 @@ namespace OrthancPlugins
 
   void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     auto cursor = db["Resources"].find(
-      document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+      make_document(kvp("resourceType", static_cast<int>(resourceType)))
+    );
+
     for (auto&& doc : cursor)
     {
-        target.push_back(doc["internalId"].get_int64().value);
+      target.push_back(doc["internalId"].get_int64().value);
     }
   }
 
   void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     auto cursor = db["Resources"].find(
-      document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+      make_document(kvp("resourceType", static_cast<int>(resourceType)))
+    );
+
     for (auto&& doc : cursor)
     {
-        target.push_back(std::string(doc["publicId"].get_utf8().value));
+      target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
-  void MongoDBBackend::GetAllPublicIds(std::list<std::string>& target, OrthancPluginResourceType resourceType,
-                     uint64_t since, uint64_t limit)
+  void MongoDBBackend::GetAllPublicIds(
+    std::list<std::string>& target, OrthancPluginResourceType resourceType,
+    uint64_t since, uint64_t limit)
   {
-   
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
@@ -370,28 +412,34 @@ namespace OrthancPlugins
     options.limit(limit).skip(since);
 
     auto cursor = db["Resources"].find(
-      document{} << "resourceType" << static_cast<int>(resourceType) << finalize, options);
+      make_document(kvp("resourceType", static_cast<int>(resourceType))), options
+    );
+
     for (auto&& doc : cursor)
     {
-        target.push_back(std::string(doc["publicId"].get_utf8().value));
+      target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
   /* Use GetOutput().AnswerChange() */
   void MongoDBBackend::GetChanges(bool& done /*out*/, int64_t since, uint32_t maxResults)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::options::find options{};
-    options.sort(document{} << "seq" << 1 << finalize).limit(maxResults + 1);
+    options.sort(make_document(kvp("seq", 1))).limit(maxResults + 1);
+
+    done = true;
+    uint32_t count = 0;
 
     auto cursor = db["Changes"].find(
-      document{} << "id" << open_document << "$gt" << since << close_document << finalize, options);
-    uint32_t count = 0;
-    done = true;
+      make_document(kvp("id", make_document(kvp("$gt", since)))), options
+    );
+
     for (auto&& doc : cursor)
     {
       if (count == maxResults)
@@ -404,55 +452,61 @@ namespace OrthancPlugins
         doc["changeType"].get_int32().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
         GetPublicId(doc["internalId"].get_int64().value),
-		  std::string(doc["date"].get_utf8().value));
+		    std::string(doc["date"].get_utf8().value)
+      );
+
       count++;
     }
   }
 
   void MongoDBBackend::GetChildrenInternalId(std::list<int64_t>& target /*out*/, int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto cursor = db["Resources"].find(document{} << "parentId" << id << finalize);
+    auto cursor = db["Resources"].find(make_document(kvp("parentId", id)));
+
     for (auto&& doc : cursor)
     {
-        target.push_back(doc["internalId"].get_int64().value);
+      target.push_back(doc["internalId"].get_int64().value);
     }
   }
 
   void MongoDBBackend::GetChildrenPublicId(std::list<std::string>& target /*out*/, int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto cursor = db["Resources"].find(
-      document{} << "parentId" << id << finalize);
+    auto cursor = db["Resources"].find(make_document(kvp("parentId", id)));
+
     for (auto&& doc : cursor)
     {
-        target.push_back(std::string(doc["publicId"].get_utf8().value));
+      target.push_back(std::string(doc["publicId"].get_utf8().value));
     }
   }
 
   /* Use GetOutput().AnswerExportedResource() */
   void MongoDBBackend::GetExportedResources(bool& done /*out*/, int64_t since, uint32_t maxResults)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::options::find options{};
-    options.sort(document{} << "id" << 1 << finalize).limit(maxResults + 1);
+    options.sort(make_document(kvp("id",  1))).limit(maxResults + 1);
 
-    auto cursor = db["ExportedResources"].find(
-      document{} << "id" << open_document << "$gt" << since << close_document << finalize, options);
-    int count = 0;
     done = true;
+    int count = 0;
+    auto cursor = db["ExportedResources"].find(make_document(kvp("id", make_document(kvp("$gt", since)))), options);
+
     for (auto&& doc : cursor)
     {
       if (count == maxResults)
@@ -463,13 +517,15 @@ namespace OrthancPlugins
       GetOutput().AnswerExportedResource(
         doc["id"].get_int64().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
-		  std::string(doc["publicId"].get_utf8().value),
-		  std::string(doc["remoteModality"].get_utf8().value),
-		  std::string(doc["date"].get_utf8().value),
-		  std::string(doc["patientId"].get_utf8().value),
-		  std::string(doc["studyInstanceUid"].get_utf8().value),
-		  std::string(doc["seriesInstanceUid"].get_utf8().value),
-		  std::string(doc["sopInstanceUid"].get_utf8().value));
+        std::string(doc["publicId"].get_utf8().value),
+        std::string(doc["remoteModality"].get_utf8().value),
+        std::string(doc["date"].get_utf8().value),
+        std::string(doc["patientId"].get_utf8().value),
+        std::string(doc["studyInstanceUid"].get_utf8().value),
+        std::string(doc["seriesInstanceUid"].get_utf8().value),
+        std::string(doc["sopInstanceUid"].get_utf8().value)
+      );
+
       count++;
     }
   }
@@ -477,16 +533,17 @@ namespace OrthancPlugins
   /* Use GetOutput().AnswerChange() */
   void MongoDBBackend::GetLastChange()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::options::find options{};
-    options.sort(document{} << "id" << -1 << finalize).limit(1);
+    options.sort(make_document(kvp("id",  -1))).limit(1);
 
-    auto cursor = db["Changes"].find(
-      document{} << finalize, options);
+    auto cursor = db["Changes"].find({}, options);
+
     for (auto&& doc : cursor)
     {
       GetOutput().AnswerChange(
@@ -494,63 +551,70 @@ namespace OrthancPlugins
         doc["changeType"].get_int32().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
         GetPublicId(doc["internalId"].get_int64().value),
-		  std::string(doc["date"].get_utf8().value));
+		    std::string(doc["date"].get_utf8().value)
+      );
     }
   }
 
   /* Use GetOutput().AnswerExportedResource() */
   void MongoDBBackend::GetLastExportedResource()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::options::find options{};
-    options.sort(document{} << "id" << -1 << finalize).limit(1);
+    options.sort(make_document(kvp("id",  -1))).limit(1);
 
-    auto cursor = db["ExportedResources"].find(document{} << finalize, options);
+    auto cursor = db["ExportedResources"].find({}, options);
     for (auto&& doc : cursor)
     {
       GetOutput().AnswerExportedResource(
         doc["id"].get_int64().value,
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value),
-		  std::string(doc["publicId"].get_utf8().value),
-		  std::string(doc["remoteModality"].get_utf8().value),
-		  std::string(doc["date"].get_utf8().value),
-		  std::string(doc["patientId"].get_utf8().value),
-		  std::string(doc["studyInstanceUid"].get_utf8().value),
-		  std::string(doc["seriesInstanceUid"].get_utf8().value),
-		  std::string(doc["sopInstanceUid"].get_utf8().value));
+        std::string(doc["publicId"].get_utf8().value),
+        std::string(doc["remoteModality"].get_utf8().value),
+        std::string(doc["date"].get_utf8().value),
+        std::string(doc["patientId"].get_utf8().value),
+        std::string(doc["studyInstanceUid"].get_utf8().value),
+        std::string(doc["seriesInstanceUid"].get_utf8().value),
+        std::string(doc["sopInstanceUid"].get_utf8().value)
+      );
     }
   }
 
   /* Use GetOutput().AnswerDicomTag() */
   void MongoDBBackend::GetMainDicomTags(int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto cursor = db["MainDicomTags"].find(
-      document{} << "id" << id << finalize);
+    auto cursor = db["MainDicomTags"].find(make_document(kvp("id",  id)));
+
     for (auto&& doc : cursor)
     {
-      GetOutput().AnswerDicomTag(static_cast<uint16_t>(doc["tagGroup"].get_int32().value),
-                   static_cast<uint16_t>(doc["tagElement"].get_int32().value),
-				std::string(doc["value"].get_utf8().value));
+      GetOutput().AnswerDicomTag(
+        static_cast<uint16_t>(doc["tagGroup"].get_int32().value),
+        static_cast<uint16_t>(doc["tagElement"].get_int32().value),
+				std::string(doc["value"].get_utf8().value)
+      );
     }
   }
 
   std::string MongoDBBackend::GetPublicId(int64_t resourceId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
+    auto result = db["Resources"].find_one(make_document(kvp("internalId", resourceId)));
 
     if (result)
     {
@@ -561,23 +625,28 @@ namespace OrthancPlugins
 
   uint64_t MongoDBBackend::GetResourceCount(OrthancPluginResourceType resourceType)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["Resources"].count(
-      document{} << "resourceType" << static_cast<int>(resourceType) << finalize);
+
+    int64_t count = db["Resources"].count_documents(
+      make_document(kvp("resourceType", static_cast<int>(resourceType)))
+    );
+
     return count;
   }
 
   OrthancPluginResourceType MongoDBBackend::GetResourceType(int64_t resourceId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto result = db["Resources"].find_one(document{} << "internalId" << resourceId << finalize);
+    auto result = db["Resources"].find_one(make_document(kvp("internalId", resourceId)));
 
     if (result)
     {
@@ -588,16 +657,19 @@ namespace OrthancPlugins
 
   uint64_t MongoDBBackend::GetTotalCompressedSize()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::pipeline stages;
-    bsoncxx::builder::stream::document group_stage;
-
-    group_stage << "_id" << bsoncxx::types::b_null()
-          << "totalSize" << open_document << "$sum" << "$compressedSize" << close_document;
+    auto group_stage = make_document(
+      kvp("_id", bsoncxx::types::b_null()),
+      kvp("totalSize", make_document(
+        kvp("$sum", "$compressedSize" )
+      ))
+    );
 
     stages.group(group_stage.view());
 
@@ -613,16 +685,19 @@ namespace OrthancPlugins
 
   uint64_t MongoDBBackend::GetTotalUncompressedSize()
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     mongocxx::pipeline stages;
-    bsoncxx::builder::stream::document group_stage;
-
-    group_stage << "_id" << bsoncxx::types::b_null()
-          << "totalSize" << open_document << "$sum" << "$uncompressedSize" << close_document;
+    auto group_stage = make_document(
+      kvp("_id", bsoncxx::types::b_null()),
+      kvp("totalSize", make_document(
+        kvp("$sum", "$uncompressedSize" )
+      ))
+    );
 
     stages.group(group_stage.view());
 
@@ -638,35 +713,44 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::IsExistingResource(int64_t internalId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["Resources"].count(
-      document{} << "internalId" << internalId << finalize);
+
+    int64_t count = db["Resources"].count_documents(
+      make_document(kvp("internalId", internalId))
+    );
+
     return count > 0;
   }
 
   bool MongoDBBackend::IsProtectedPatient(int64_t internalId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    int64_t count = db["PatientRecyclingOrder"].count(
-      document{} << "patientId" << internalId << finalize);
+
+    int64_t count = db["PatientRecyclingOrder"].count_documents(
+      make_document(kvp("patientId", internalId))
+    );
+
     return count > 0;
   }
 
   void MongoDBBackend::ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto cursor = db["Metadata"].find(
-      document{} << "id" << id << finalize);
+    auto cursor = db["Metadata"].find(make_document(kvp("id", id)));
+    
     for (auto&& doc : cursor)
     {
         target.push_back(doc["type"].get_int32().value);
@@ -675,13 +759,14 @@ namespace OrthancPlugins
 
   void MongoDBBackend::ListAvailableAttachments(std::list<int32_t>& target /*out*/, int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto cursor = db["AttachedFiles"].find(
-      document{} << "id" << id << finalize);
+    auto cursor = db["AttachedFiles"].find(make_document(kvp("id", id)));
+
     for (auto&& doc : cursor)
     {
         target.push_back(doc["fileType"].get_int32().value);
@@ -690,73 +775,87 @@ namespace OrthancPlugins
 
   void MongoDBBackend::LogChange(const OrthancPluginChange& change)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
-
-    int64_t seq = GetNextSequence(db, "Changes");
 
     int64_t id;
     OrthancPluginResourceType type;
-    if (!LookupResource(id, type, change.publicId) ||
-      type != change.resourceType)
+
+    if (!LookupResource(id, type, change.publicId) || type != change.resourceType)
     {
       throw MongoDBException("MongoDBBackend::LogChange - Can not lookup resource.");
     }
 
     auto collection = db["Changes"];
-    document << "id" << seq
-        <<  "changeType" << change.changeType
-        <<  "internalId" << id
-        <<  "resourceType" << change.resourceType
-        <<  "date" << change.date;
+    int64_t seq = GetNextSequence(db, "Changes");
 
-    collection.insert_one(document.view());
+    auto change_document = make_document(
+      kvp("id", seq),
+      kvp("changeType", change.changeType),
+      kvp("internalId", id),
+      kvp("resourceType", change.resourceType),
+      kvp("date", change.date)
+    );
+
+    collection.insert_one(change_document.view());
   }
 
   void MongoDBBackend::LogExportedResource(const OrthancPluginExportedResource& resource)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
 
     int64_t seq = GetNextSequence(db, "ExportedResources");
 
     auto collection = db["ExportedResources"];
-    document << "id" << seq
-        <<  "resourceType" << resource.resourceType
-        <<  "publicId" << resource.publicId
-        <<  "remoteModality" << resource.modality
-        <<  "patientId" << resource.patientId
-        <<  "studyInstanceUid" << resource.studyInstanceUid
-        <<  "seriesInstanceUid" << resource.seriesInstanceUid
-        <<  "sopInstanceUid" << resource.sopInstanceUid
-        <<  "date" << resource.date;
+    auto exported_document = make_document(
+      kvp("id", seq),
+      kvp("resourceType", resource.resourceType),
+      kvp("publicId", resource.publicId),
+      kvp("remoteModality", resource.modality),
+      kvp("patientId", resource.patientId),
+      kvp("studyInstanceUid", resource.studyInstanceUid),
+      kvp("seriesInstanceUid", resource.seriesInstanceUid),
+      kvp("sopInstanceUid", resource.sopInstanceUid),
+      kvp("date", resource.date)
+    );
 
-    collection.insert_one(document.view());
+    collection.insert_one(exported_document.view());
   }
 
   /* Use GetOutput().AnswerAttachment() */
   bool MongoDBBackend::LookupAttachment(int64_t id, int32_t contentType)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto doc = db["AttachedFiles"].find_one(
-      document{} << "id" << id << "fileType" << contentType << finalize);
+    auto doc = db["AttachedFiles"].find_one(make_document(
+      kvp("id", id), kvp("fileType", contentType)
+    ));
+    
     if(doc)
     {
       bsoncxx::document::view view = doc->view();
+
       GetOutput().AnswerAttachment(
-		  std::string(view["uuid"].get_utf8().value),
-              contentType,
-              view["uncompressedSize"].get_int64().value,
-		  std::string(view["uncompressedHash"].get_utf8().value),
-              view["compressionType"].get_int32().value,
-              view["compressedSize"].get_int64().value,
-		  std::string(view["compressedHash"].get_utf8().value));
+        std::string(view["uuid"].get_utf8().value),
+        contentType,
+        view["uncompressedSize"].get_int64().value,
+        std::string(view["uncompressedHash"].get_utf8().value),
+        view["compressionType"].get_int32().value,
+        view["compressedSize"].get_int64().value,
+        std::string(view["compressedHash"].get_utf8().value)
+      );
+
       return true;
     }
     return false;
@@ -764,16 +863,19 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::LookupGlobalProperty(std::string& target /*out*/, int32_t property)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     auto doc = db["GlobalProperties"].find_one(
-      document{} << "property" << property << finalize);
+      make_document(kvp("property", property))
+    );
+
     if(doc)
     {
-        target = std::string(doc->view()["value"].get_utf8().value);
+      target = std::string(doc->view()["value"].get_utf8().value);
       return true;
     }
     return false;
@@ -786,61 +888,50 @@ namespace OrthancPlugins
     OrthancPluginIdentifierConstraint constraint,
     const char* value)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    std::list<int64_t> internalIds;
-    GetAllInternalIds(internalIds, resourceType);
-   
-    if (internalIds.size() <= 0)
-    {
-      //not foundinternalIds
-      return;
-    }
-   
-    document in{};
-    auto bs = in << "$in" << open_array;
-    for (auto rid : internalIds)
-    {
-      bs << rid;
-    }
-    auto inValue = bs << close_array << finalize;
     bsoncxx::document::view_or_value criteria;
 
     switch (constraint)
     {
-    case OrthancPluginIdentifierConstraint_Equal:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
-          << "tagElement" << element
-          << "value" << value << finalize;
-      break;
+      case OrthancPluginIdentifierConstraint_Equal:
+        criteria = make_document(
+          kvp("tagGroup", group),
+          kvp("tagElement", element),
+          kvp("value", value)
+        );
+        break;
 
-    case OrthancPluginIdentifierConstraint_SmallerOrEqual:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
-          << "tagElement" << element
-          << "value" << open_document << "$lte" << value << close_document << finalize;
-      break;
+      case OrthancPluginIdentifierConstraint_SmallerOrEqual:
+        criteria = make_document(
+          kvp("tagGroup", group),
+          kvp("tagElement", element),
+          kvp("value", make_document(kvp("$lte", value)))
+        );
+        break;
 
-    case OrthancPluginIdentifierConstraint_GreaterOrEqual:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
-          << "tagElement" << element
-          << "value" << open_document << "$gte" << value << close_document << finalize;
-      break;
+      case OrthancPluginIdentifierConstraint_GreaterOrEqual:
+        criteria = make_document(
+          kvp("tagGroup", group),
+          kvp("tagElement", element),
+          kvp("value", make_document(kvp("$gte", value)))
+        );
+        break;
 
-    case OrthancPluginIdentifierConstraint_Wildcard:
-      criteria = document{} << "id" << inValue
-          << "tagGroup" << group
-          << "tagElement" << element
-          << "value" << open_document << "$regex" << ConvertWildcardToRegex(value) << close_document << finalize;
-      break;
+      case OrthancPluginIdentifierConstraint_Wildcard:
+        criteria = make_document(
+          kvp("tagGroup", group),
+          kvp("tagElement", element),
+          kvp("value", make_document(kvp("$regex", ConvertWildcardToRegex(value))))
+        );
+        break;
 
-    default:
-      throw MongoDBException("MongoDBBackend::LookupIdentifier - invalid OrthancPluginIdentifierConstraint");
+      default:
+        throw MongoDBException("MongoDBBackend::LookupIdentifier - invalid OrthancPluginIdentifierConstraint");
     }
 
     auto cursor = db["DicomIdentifiers"].find(criteria.view());
@@ -858,36 +949,19 @@ namespace OrthancPlugins
       const char* start,
       const char* end)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    std::list<int64_t> internalIds;
-    GetAllInternalIds(internalIds, resourceType);
-   
-    if (internalIds.size() <= 0)
-    {
-      //not foundinternalIds
-      return;
-    }
-   
-    document in{};
-    auto bs = in << "$in" << open_array;
-    for (auto rid : internalIds)
-    {
-      bs << rid;
-    }
-    auto inValue = bs << close_array << finalize;
-    bsoncxx::document::view_or_value criteria;
-
-    criteria = document{} << "id" << inValue
-        << "tagGroup" << group
-        << "tagElement" << element
-        << "value" << open_document
-              << "$gte" << start 
-              << "$lte" << end
-        << close_document << finalize;
+    auto criteria = make_document(
+      kvp("tagGroup", group),
+      kvp("tagElement", element),
+      kvp("value", make_document(
+        kvp("$gte", start), kvp("$lte", end)
+      ))
+    );
 
     auto cursor = db["DicomIdentifiers"].find(criteria.view());
     for (auto&& doc : cursor)
@@ -898,13 +972,14 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::LookupMetadata(std::string& target /*out*/, int64_t id, int32_t metadataType)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto doc = db["Metadata"].find_one(
-      document{} << "id" << id << "type" << metadataType << finalize);
+    auto doc = db["Metadata"].find_one(make_document(kvp("id", id), kvp("type", metadataType)));
+
     if(doc)
     {
       bsoncxx::document::view view = doc->view();
@@ -916,13 +991,15 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::LookupParent(int64_t& parentId /*out*/, int64_t resourceId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    auto doc = db["Resources"].find_one(
-      document{} << "internalId" << resourceId << finalize);
+
     bool res = false;
+    auto doc = db["Resources"].find_one(make_document(kvp("internalId", resourceId)));
+
     if (doc)
     {
       bsoncxx::document::element parent = doc->view()["parentId"];
@@ -937,13 +1014,16 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::LookupResource(int64_t& id /*out*/, OrthancPluginResourceType& type /*out*/, const char* publicId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     auto doc = db["Resources"].find_one(
-      document{} << "publicId" << publicId << finalize);
+      make_document(kvp("publicId", publicId))
+    );
+
     if(doc)
     {
       bsoncxx::document::view view = doc->view();
@@ -956,12 +1036,12 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto result = db["PatientRecyclingOrder"].find_one(document{} << finalize);
+    auto result = db["PatientRecyclingOrder"].find_one({});
 
     if (result)
     {
@@ -973,14 +1053,16 @@ namespace OrthancPlugins
 
   bool MongoDBBackend::SelectPatientToRecycle(int64_t& internalId /*out*/, int64_t patientIdToAvoid)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto result = db["PatientRecyclingOrder"].find_one(document{} << "patientId" <<
-          open_document << "$ne" << patientIdToAvoid << close_document << finalize,
-          mongocxx::options::find{}.sort(document{} << "id" << 1 << finalize));
+    auto result = db["PatientRecyclingOrder"].find_one(
+      make_document(kvp("patientId", make_document(kvp("$ne", patientIdToAvoid)))),
+      mongocxx::options::find{}.sort(make_document(kvp("id", 1)))
+    );
 
     if (result)
     {
@@ -992,19 +1074,19 @@ namespace OrthancPlugins
 
   void MongoDBBackend::SetGlobalProperty(int32_t property, const char* value)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document pdocument{};
-    pdocument << "property" << property
-        <<  "value" << value;
+
+    auto pdocument = make_document(kvp("property", property), kvp("value", value));
 
     auto collection = db["GlobalProperties"];
     auto doc = collection.find_one_and_update(
-      document{} << "property" << property << finalize,
-      pdocument.view()
+      make_document(kvp("property", property)), pdocument.view()
     );
+
     if (!doc)
     {
       collection.insert_one(pdocument.view());
@@ -1013,55 +1095,70 @@ namespace OrthancPlugins
 
   void MongoDBBackend::SetMainDicomTag(int64_t id, uint16_t group, uint16_t element, const char* value)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
 
     auto collection = db["MainDicomTags"];
-    document << "id" << id
-        <<  "tagGroup" << group
-        <<  "tagElement" << element
-        <<  "value" << value;
+    auto main_dicom_document = make_document(
+      kvp("id", id),
+      kvp("tagGroup", group),
+      kvp("tagElement", element),
+      kvp("value", value)
+    );
 
-    collection.insert_one(document.view());
+    collection.insert_one(main_dicom_document.view());
   }
 
   void MongoDBBackend::SetIdentifierTag(int64_t id, uint16_t group, uint16_t element, const char* value)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
     bsoncxx::builder::stream::document document{};
 
     auto collection = db["DicomIdentifiers"];
-    document << "id" << id
-        <<  "tagGroup" << group
-        <<  "tagElement" << element
-        <<  "value" << value;
+    auto dicom_identifier_document = make_document(
+      kvp("id", id),
+      kvp("tagGroup", group),
+      kvp("tagElement", element),
+      kvp("value", value)
+    );
 
-    collection.insert_one(document.view());
+    collection.insert_one(dicom_identifier_document.view());
   }
 
   void MongoDBBackend::SetMetadata(int64_t id, int32_t metadataType, const char* value)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
     auto collection = db["Metadata"];
 
-    collection.delete_many(document{} << "id" << id << "type" << metadataType << finalize);
+    collection.delete_many(make_document(kvp("id", id), kvp("type", metadataType)));
    
-    collection.insert_one(
-      document{} << "id" << id
-        <<  "type" << metadataType
-        <<  "value" << value << finalize);
+    collection.insert_one(make_document(
+      kvp("id", id), 
+      kvp("type", metadataType), 
+      kvp("value", value)
+    ));
   }
 
   void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
+
     auto collection = db["PatientRecyclingOrder"];
 
     if (isProtected)
@@ -1069,13 +1166,17 @@ namespace OrthancPlugins
       if (!IsProtectedPatient(internalId))
       {
         int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
-        collection.insert_one(document{} << "id" << seq
-            <<  "patientId" << internalId << finalize);
+        collection.insert_one(make_document(
+          kvp("id", seq), 
+          kvp("patientId", internalId)
+        ));
       }
     }
     else
     {
-      collection.delete_many(document{} << "patientId" << internalId << finalize);
+      collection.delete_many(make_document(
+          kvp("patientId", internalId)
+      ));
     }
 
   }
@@ -1100,102 +1201,607 @@ namespace OrthancPlugins
 
   void MongoDBBackend::ClearMainDicomTags(int64_t internalId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    db["MainDicomTags"].delete_many(document{} << "id" << internalId << finalize);
-    db["DicomIdentifiers"].delete_many(document{} << "id" << internalId << finalize);
-   
+    auto delete_document = make_document(
+        kvp("patientId", internalId)
+    );
+
+    db["MainDicomTags"].delete_many(delete_document.view());
+    db["DicomIdentifiers"].delete_many(delete_document.view());
   }
 
   void MongoDBBackend::GetChildrenMetadata(std::list<std::string>& target,
                                      int64_t resourceId,
                                      int32_t metadata)
   {
-      //SELECT internalId FROM Resources WHERE parentId=${id}
-    using namespace bsoncxx::builder::stream;
+    //SELECT internalId FROM Resources WHERE parentId=${id}
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto resCursor = db["Resources"].find(document{} << "parentId" << resourceId << finalize);
-    //document with ids to lookup
-    document inCriteriaArray{};
-    auto inCriteriaStream = inCriteriaArray << "$in" << open_array;
-    for (auto&& d : resCursor)
-    {
-        int64_t parentId = d["internalId"].get_int64().value;
-        inCriteriaStream << parentId;
-    }
-    auto inCriteriaValue = inCriteriaStream << close_array << finalize;
-    bsoncxx::document::view_or_value byIdValue = document{} << "type" << metadata << "id" << inCriteriaValue << finalize;
+    auto resCursor = db["Resources"].find(make_document(
+        kvp("parentId", resourceId)
+    ));
 
-    auto metadataCursor = db["Metadata"].find(byIdValue);
-    for (auto&& doc : metadataCursor)
-    {
+    //document with ids to lookup
+    auto inCriteriaArray = array{};
+    for (auto&& d : resCursor) {
+      int64_t parentId = d["internalId"].get_int64().value;
+      inCriteriaArray.append(parentId);
+    }
+
+    auto byIdValue = make_document(
+      kvp("type", metadata),
+      kvp("id", make_document(
+        kvp("$in", inCriteriaArray.extract())
+      ))
+    );
+
+    auto metadataCursor = db["Metadata"].find(byIdValue.view());
+    for (auto&& doc : metadataCursor) {
       target.push_back(std::string(doc["value"].get_utf8().value));
     }
-
   }
 
   int64_t MongoDBBackend::GetLastChangeIndex()
   {
-        using namespace bsoncxx::builder::stream;
-        auto conn = pool_.acquire();
-        auto db = (*conn)[dbname_];
-        auto seqDoc = db["Sequences"].find_one(document{} << "name" << "Changes" << finalize);
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
-        if (seqDoc)
-        {
-            return seqDoc->view()["i"].get_int64().value;
-        } else {
-            return 0;
-        }
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto seqDoc = db["Sequences"].find_one(make_document(kvp("name", "Changes")));
+
+    if (seqDoc){
+      return seqDoc->view()["i"].get_int64().value;
+    } 
+
+    else {
+      return 0;
+    }
   }
 
   void MongoDBBackend::TagMostRecentPatient(int64_t patientId)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    auto collection = db["PatientRecyclingOrder"];
 
-    auto recyclongOrderDoc = collection.find_one(document{} << "patientId" << patientId << finalize);
+    auto collection = db["PatientRecyclingOrder"];
+    auto recyclongOrderDoc = collection.find_one(make_document(kvp("patientId", patientId)));
 
     if (recyclongOrderDoc)
     {
         int64_t seq = recyclongOrderDoc->view()["i"].get_int64().value;
-        collection.delete_many(document{} << "id" << seq << finalize);
+        collection.delete_many(make_document(kvp("id", seq)));
+
         // Refresh the patient id if protected
         seq = GetNextSequence(db, "PatientRecyclingOrder");
-        collection.insert_one(document{} << "id" << seq
-            <<  "patientId" << patientId << finalize);
+        collection.insert_one(make_document(
+          kvp("id", seq), 
+          kvp("patientId", patientId)
+        ));
     }
 
   }
 
-  bool MongoDBBackend::LookupResourceAndParent(int64_t&, OrthancPluginResourceType&, std::string&, const char*)
+  bool MongoDBBackend::LookupResourceAndParent(int64_t& id, OrthancPluginResourceType& type, std::string& parentPublicId, const char* publicId)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    mongocxx::pipeline stages;
+    auto match_stage = make_document(kvp("publicId", publicId));
+    auto lookup_stage = make_document(
+      kvp("from", "Resources"),
+      kvp("foreignField", "internalId"),
+      kvp("localField", "parentId" ),
+      kvp("as", "parent")
+    );
+    auto unwind_stage = make_document(
+      kvp("path", "$parent"), 
+      kvp("preserveNullAndEmptyArrays", true)
+    );
+    auto group_stage = make_document(
+      kvp("_id", bsoncxx::types::b_null()),
+      kvp("internalId", make_document(kvp("$first", "$internalId"))),
+      kvp("resourceType", make_document(kvp("$first", "$resourceType"))),
+      kvp("publicId", make_document(kvp("$first", "$parent.publicId")))
+    );
+
+    stages.match(match_stage.view());
+    stages.lookup(lookup_stage.view());
+    stages.unwind(unwind_stage.view());
+    stages.group(group_stage.view());
+    stages.limit(1);
+
+    auto cursor = db["Resources"].aggregate(stages);
+
+    for (auto&& doc : cursor)
+    {
+      id = doc["internalId"].get_int64().value;
+      type = static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value);
+
+      bsoncxx::document::element publicId = doc["publicId"];
+
+      if (publicId.type() == bsoncxx::type::k_utf8) {
+        parentPublicId = std::string(publicId.get_utf8().value);
+      }
+      else {
+        parentPublicId.clear();
+      }
+
+      return true;
+    }
+
     return false;
   }
 
-  void MongoDBBackend::GetAllMetadata(std::map<int, std::basic_string<char> >&, int64_t)
+  void MongoDBBackend::GetAllMetadata(std::map<int32_t, std::string>& result, int64_t id)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
 
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto metadataCursor = db["Metadata"].find(make_document(kvp("id", id)));
+
+    for (auto&& doc : metadataCursor)
+    {
+      result[doc["type"].get_int32().value] = std::string(doc["value"].get_utf8().value);
+    }
   }
 
-  void MongoDBBackend::LookupResources(const std::vector<OrthancPluginDatabaseConstraint>&, OrthancPluginResourceType, uint32_t, bool)
+  void MongoDBBackend::LookupResources(
+    const std::vector<OrthancPluginDatabaseConstraint>& lookup,
+    OrthancPluginResourceType queryLevel, uint32_t limit, bool requestSomeInstance)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::sub_array;
+    using bsoncxx::builder::basic::make_array;
+    using bsoncxx::builder::basic::make_document;
 
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto resourcesCollection = db["Resources"];
+
+    auto normalStream = array{};
+    auto identifierStream = array{};
+
+    size_t normalCount = 0;
+    size_t identifierCount = 0;
+
+    std::map<std::string, bsoncxx::builder::basic::document> criterias;
+
+    for (size_t i = 0; i < lookup.size(); i++) {
+      OrthancPluginDatabaseConstraint constraint = lookup[i];
+
+      auto case_sensitive_option = constraint.isCaseSensitive == 0 ? "i" : "";
+      auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
+
+      if (criterias.find(query_identifier) == criterias.end()) {
+        criterias[query_identifier] = std::move(bsoncxx::builder::basic::document{});
+      }
+
+      auto &current_document = criterias.at(query_identifier);
+
+      switch (constraint.type)
+      {
+        case OrthancPluginConstraintType_Equal:
+          current_document.append(
+            kvp("$regex", constraint.values[0]),
+            kvp("$options", case_sensitive_option)
+          );
+          break;
+
+        case OrthancPluginConstraintType_SmallerOrEqual:
+          current_document.append(
+            kvp("$lte", constraint.values[0])
+          );
+          break;
+
+        case OrthancPluginConstraintType_GreaterOrEqual:
+          current_document.append(
+            kvp("$gte", constraint.values[0])
+          );
+          break;
+
+        case OrthancPluginConstraintType_List:
+          current_document.append(
+            kvp("$in", [constraint](sub_array child) {
+              for (size_t i = 0; i < constraint.valuesCount; i++) {
+                child.append(constraint.values[i]);
+              }
+            })
+          );
+          break;
+         
+
+        case OrthancPluginConstraintType_Wildcard:
+          current_document.append(
+            kvp("$regex", ConvertWildcardToRegex(constraint.values[0])),
+            kvp("$options", case_sensitive_option)
+          );
+          break;
+
+        default:
+          throw MongoDBException("MongoDBBackend::LookupResources - invalid ConstraintType");
+      }
+    }
+
+    for (size_t i = 0; i < lookup.size(); i++)
+    {
+      OrthancPluginDatabaseConstraint constraint = lookup[i];
+
+      auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
+      auto current_document_query = criterias.find(query_identifier);
+
+      if (current_document_query == criterias.end()) {
+        continue;
+      }
+
+      bsoncxx::document::view_or_value criteria = make_document(
+        kvp("tagGroup", constraint.tagGroup),
+        kvp("tagElement" , constraint.tagElement),
+        kvp("value" , current_document_query->second.extract())
+      );
+
+      if (constraint.isIdentifierTag == 1) {
+        identifierCount++;
+        identifierStream.append(criteria);
+      }
+      else {
+        normalCount++;
+        normalStream.append(criteria);
+      }
+
+      criterias.erase(current_document_query);  
+    }
+
+    mongocxx::pipeline stages;
+
+    if (normalCount > 0 || identifierCount > 0) {
+      bsoncxx::builder::basic::document search_facet_stage{};
+
+      if (normalCount > 0) {
+        search_facet_stage.append(
+          kvp("main_tags", make_array(
+            make_document(kvp("$limit", 1)),
+            make_document(
+              kvp("$lookup", make_document(
+                kvp("from", "MainDicomTags"),
+                kvp("as", "tags"),
+                kvp("pipeline", make_array(
+                  make_document(
+                    kvp("$match", make_document(
+                      kvp("$or", normalStream.extract())
+                    ))
+                  )
+                ))
+              ))
+            ),
+            make_document(
+              kvp("$unwind", "$tags")
+            ),
+            make_document(
+              kvp("$replaceRoot", make_document(
+                kvp("newRoot", "$tags")
+              ))
+            )
+          ))
+        );
+      }
+
+      if (identifierCount > 0) {
+        search_facet_stage.append(
+          kvp("identifier_tags", make_array(
+            make_document(kvp("$limit", 1)),
+            make_document(
+              kvp("$lookup", make_document(
+                kvp("from", "DicomIdentifiers"),
+                kvp("as", "tags"),
+                kvp("pipeline", make_array(
+                  make_document(
+                    kvp("$match", make_document(kvp("$or", identifierStream.extract())))
+                  )
+                ))
+              ))
+            ),
+            make_document(
+              kvp("$unwind", "$tags")
+            ),
+            make_document(
+              kvp("$replaceRoot", make_document(
+                kvp("newRoot", "$tags")
+              ))
+            )
+          ))
+        );
+      }
+
+      auto add_field_stage = make_document(
+        kvp("tags", make_document(
+          kvp("$concatArrays", make_array(
+            make_document(kvp("$ifNull", make_array("$main_tags", make_array()))),
+            make_document(kvp("$ifNull", make_array("$identifier_tags", make_array())))
+          ))
+        ))
+      );
+
+      auto unwind_stage = "$tags";
+      auto replace_root_stage = make_document(kvp("newRoot", "$tags"));
+      auto group_tags_stage = make_document(
+        kvp("_id", "$id"), kvp("count", make_document(kvp("$sum", 1)))
+      );
+
+      auto lookup_stage = make_document(
+        kvp("from", "Resources"),
+        kvp("as", "resources_obj"),
+        kvp("let", make_document(kvp("resource", "$_id"))),
+        kvp("pipeline", make_array(
+            make_document(
+              kvp("$match", make_document(kvp("$expr", make_document(kvp("$eq", make_array("$internalId",  "$$resource"))))))
+            ),
+            make_document(kvp("$facet", make_document(
+              kvp("level", make_array(
+                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel))))))
+              ),
+              kvp("children", make_array(
+                make_document(kvp("$match", make_document(
+                    kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
+                ))),
+                make_document(kvp("$graphLookup", make_document(
+                    kvp("from", "Resources"),
+                    kvp("startWith", "$internalId"),
+                    kvp("connectFromField", "internalId"),
+                    kvp("connectToField", "parentId"),
+                    kvp("as", "children")
+                ))),
+                make_document(kvp("$unwind", "$children")),
+                make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$children")))),
+                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
+              )
+            ),
+            kvp("parents", make_array(
+                make_document(kvp("$match", make_document(
+                    kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
+                ))),
+                make_document(kvp("$graphLookup", make_document(
+                    kvp("from", "Resources"),
+                    kvp("startWith", "$parentId"),
+                    kvp("connectFromField", "parentId"),
+                    kvp("connectToField", "internalId"),
+                    kvp("as", "parents")
+                ))),
+                make_document(kvp("$unwind", "$parents")),
+                make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$parents")))),
+                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
+              )
+            )
+          ))),
+          make_document(
+            kvp("$addFields", make_document(
+              kvp("resources", make_document(
+                kvp("$concatArrays", make_array(
+                  make_document(kvp("$ifNull", make_array("$level", make_array()))),
+                  make_document(kvp("$ifNull", make_array("$children", make_array()))),
+                  make_document(kvp("$ifNull", make_array("$parents", make_array())))
+                ))
+              ))
+            ))
+          ),
+          make_document(
+            kvp("$unwind", "$resources")
+          ),
+          make_document(
+            kvp("$replaceRoot", make_document(
+              kvp("newRoot", "$resources")
+            ))
+          )
+        ))
+      );
+
+      auto group_tags_resources_stage = make_document(
+        kvp("_id", "$resources_obj.internalId"), 
+        kvp("parentId", make_document(kvp("$first", "$resources_obj.parentId"))),
+        kvp("internalId", make_document(kvp("$first", "$resources_obj.internalId"))),
+        kvp("publicId", make_document(kvp("$first", "$resources_obj.publicId"))),
+        kvp("count", make_document(kvp("$sum", "$count")))
+      );
+
+      auto match_resources_stage = make_document(
+        kvp("count", make_document(
+          kvp("$gte", static_cast<int>(normalCount + identifierCount))
+        ))
+      );
+
+      stages.facet(search_facet_stage.view());
+      stages.add_fields(add_field_stage.view());
+      stages.unwind(unwind_stage);
+      stages.replace_root(replace_root_stage.view());
+      stages.group(group_tags_stage.view());
+      stages.lookup(lookup_stage.view());
+      stages.unwind("$resources_obj");
+      stages.group(group_tags_resources_stage.view());
+      stages.match(match_resources_stage.view());
+    }
+    else {
+      auto match_resources_no_search_stage = make_document(
+        kvp("resourceType", static_cast<int>(queryLevel))
+      );
+
+      stages.match(match_resources_no_search_stage.view());
+    }
+
+
+    // sort of the query by study or series
+    if (queryLevel == OrthancPluginResourceType_Study || queryLevel == OrthancPluginResourceType_Series) {
+      auto sort_build_lookup_pipe_stage = array{};
+
+      if (queryLevel == OrthancPluginResourceType_Study) {
+        sort_build_lookup_pipe_stage.append(
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 32)), // study_date
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 48)) // study_time
+        );
+      }
+
+      if (queryLevel == OrthancPluginResourceType_Series) {
+        sort_build_lookup_pipe_stage.append(
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 33)), // series_date
+          make_document(kvp("tagGroup", 8), kvp("tagElement", 49)) // series_time
+        );
+      }
+
+      auto sort_build_lookup_stage = make_document(
+          kvp("as", "sorts"), 
+          kvp("from", "MainDicomTags"),
+          kvp("let", make_document(kvp("resource", "$internalId"))),
+          kvp("pipeline", make_array(
+            make_document(
+              kvp("$match", make_document(
+                kvp("$expr", make_document(kvp("$eq", make_array("$id", "$$resource")))),
+                kvp("$or", sort_build_lookup_pipe_stage.extract())
+              ))
+            )
+          ))  
+      );
+
+      auto sort_build_stage = make_document(
+        kvp("sorts.0.value", -1), kvp("sorts.1.value", -1)
+      );
+
+      stages.lookup(sort_build_lookup_stage.view());
+      stages.sort(sort_build_stage.view());
+    }
+
+    if (limit != 0) {
+      stages.limit(limit);
+    }
+
+    if (requestSomeInstance) {
+      stages.graph_lookup(
+        make_document(
+          kvp("from", "Resources"),
+          kvp("startWith", "$internalId"),
+          kvp("connectFromField", "internalId"),
+          kvp("connectToField", "parentId"),
+          kvp("as", "children")
+        )
+      );
+      stages.unwind("$children");
+      stages.match(
+        make_document(kvp("children.resourceType", 3))
+      );
+      stages.group(
+        make_document(
+          kvp("_id", "$publicId"),
+          kvp("instance_id", make_document(kvp("$first", "$children.publicId")))
+        )
+      );
+    }
+
+    auto cursor = resourcesCollection.aggregate(stages, mongocxx::options::aggregate{});
+
+    for (auto&& doc : cursor) {
+      if (requestSomeInstance) {
+        GetOutput().AnswerMatchingResource(
+          std::string(doc["_id"].get_utf8().value), 
+          std::string(doc["instance_id"].get_utf8().value)
+        );
+      }
+      else {
+        GetOutput().AnswerMatchingResource(std::string(doc["publicId"].get_utf8().value));
+      }
+    }
   }
 
-  void MongoDBBackend::SetResourcesContent(uint32_t, const OrthancPluginResourcesContentTags*, 
-                                    uint32_t, const OrthancPluginResourcesContentTags*, 
-                                    uint32_t, const OrthancPluginResourcesContentMetadata*)
+  void MongoDBBackend::SetResourcesContent(
+    uint32_t countIdentifierTags, const OrthancPluginResourcesContentTags* identifierTags,
+    uint32_t countMainDicomTags, const OrthancPluginResourcesContentTags* mainDicomTags,
+    uint32_t countMetadata, const OrthancPluginResourcesContentMetadata* metadata)
   {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::make_document;
+    
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
 
+    auto metadataCollection = db["Metadata"];
+    auto mainDicomTagsCollection = db["MainDicomTags"];
+    auto dicomIdentifiersCollection = db["DicomIdentifiers"];
+
+    std::vector< bsoncxx::document::value > dicomIdentifiersDocuments;
+    std::vector< bsoncxx::document::value > mainDicomTagsDocuments;
+    std::vector< bsoncxx::document::value > metadataDocuments;
+
+    for (uint32_t i = 0; i < countIdentifierTags; i++)
+    {
+      dicomIdentifiersDocuments.push_back(
+        make_document(
+          kvp("id", identifierTags[i].resource),
+          kvp("tagGroup", identifierTags[i].group),
+          kvp("tagElement", identifierTags[i].element),
+          kvp("value", identifierTags[i].value)
+        )
+      );
+    }
+
+    if (countIdentifierTags > 0) dicomIdentifiersCollection.insert_many(dicomIdentifiersDocuments);
+
+    for (uint32_t i = 0; i < countMainDicomTags; i++)
+    { 
+      mainDicomTagsDocuments.push_back(
+        make_document(
+          kvp("id", mainDicomTags[i].resource),
+          kvp("tagGroup", mainDicomTags[i].group),
+          kvp("tagElement", mainDicomTags[i].element),
+          kvp("value", mainDicomTags[i].value)
+        )
+      );
+    }
+
+    if (countMainDicomTags > 0) mainDicomTagsCollection.insert_many(mainDicomTagsDocuments);
+
+    auto removeArray = array{};
+
+    for (uint32_t i = 0; i < countMetadata; i++)
+    {
+      metadataDocuments.push_back(
+        make_document(
+          kvp("id", metadata[i].resource),
+          kvp("type", metadata[i].metadata),
+          kvp("value", metadata[i].value)
+        )
+      );
+
+      removeArray.append(
+        make_document(kvp("id",  metadata[i].resource), kvp("type", metadata[i].metadata))
+      );
+    }
+
+    // just check for the $or not throw error
+    if (countMetadata > 0) {
+      metadataCollection.delete_many(make_document(kvp("$or", removeArray.extract())));
+      metadataCollection.insert_many(metadataDocuments);
+    }
   }
 
   void MongoDBBackend::CreateInstance(OrthancPluginCreateInstanceResult& result,
@@ -1204,6 +1810,146 @@ namespace OrthancPlugins
                                 const char* hashSeries,
                                 const char* hashInstance) 
   {
-    
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto collection = db["Resources"];
+    auto instance = collection.find_one(
+      make_document(kvp("publicId",  hashInstance), kvp("resourceType", 3))
+    );
+
+    if (instance)
+    {
+      result.isNewInstance = false;
+      result.instanceId = instance->view()["internalId"].get_int64().value;
+    }
+    else {
+        auto patient = collection.find_one(
+          make_document(kvp("publicId",  hashPatient), kvp("resourceType", 0))
+        );
+        auto study = collection.find_one(
+          make_document(kvp("publicId",  hashStudy), kvp("resourceType", 1))
+        );
+        auto series = collection.find_one(
+          make_document(kvp("publicId",  hashSeries), kvp("resourceType", 2))
+        );
+
+        if (patient) {
+          result.isNewPatient = false;
+          result.patientId = patient->view()["internalId"].get_int64().value;
+        }
+        else {
+          if (study && series && instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
+          }
+
+          int64_t patientId = GetNextSequence(db, "Resources");
+          auto patient_document = make_document(
+            kvp("internalId", patientId), 
+            kvp("resourceType", 0),
+            kvp("publicId", hashPatient),
+            kvp("parentId", bsoncxx::types::b_null())
+          );
+
+          collection.insert_one(patient_document.view());
+
+          result.isNewPatient = true;
+          result.patientId = patientId;
+        }
+
+        if (study) {
+          result.isNewStudy = false;
+          result.studyId = study->view()["internalId"].get_int64().value;
+        }
+        else {
+          if (series && instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
+          }
+
+          int64_t studyId = GetNextSequence(db, "Resources");
+          auto study_document = make_document(
+            kvp("internalId", studyId), 
+            kvp("resourceType", 1),
+            kvp("publicId", hashStudy),
+            kvp("parentId", result.patientId)
+          );
+
+          collection.insert_one(study_document.view());
+
+          result.studyId = studyId;
+          result.isNewStudy = true;
+        }
+
+        if (series) {
+          result.isNewSeries = false;
+          result.seriesId = series->view()["internalId"].get_int64().value;
+        }
+        else {
+          if (instance) {
+            throw MongoDBException("MongoDBBackend::CreateInstance - Broken invariant");
+          }
+
+          int64_t seriesId = GetNextSequence(db, "Resources");
+          auto series_document = make_document(
+            kvp("internalId", seriesId), 
+            kvp("resourceType", 2),
+            kvp("publicId", hashSeries),
+            kvp("parentId", result.studyId)
+          );
+
+          collection.insert_one(series_document.view());
+
+          result.seriesId = seriesId;
+          result.isNewSeries = true;
+        }
+
+        int64_t instanceId = GetNextSequence(db, "Resources");
+        auto instance_document = make_document(
+          kvp("internalId", instanceId), 
+          kvp("resourceType", 3),
+          kvp("publicId", hashInstance),
+          kvp("parentId", result.seriesId)
+        );
+
+        collection.insert_one(instance_document.view());
+
+        result.isNewInstance = true;
+        result.instanceId = instanceId;
+
+        // recycle check
+        auto recycleCollection = db["PatientRecyclingOrder"];
+        auto patientRecycle = recycleCollection.find_one(
+          make_document(kvp("patientId", result.patientId))
+        );
+
+        if (patientRecycle) {
+          int64_t patientSeq = patientRecycle->view()["seq"].get_int64().value;
+
+          mongocxx::options::count options{};
+          options.limit(2);
+          auto count_document = make_document(
+            kvp("seq", make_document(kvp("$gte", patientSeq)))
+          );
+
+          int64_t count = recycleCollection.count_documents(count_document.view(), options);
+
+          if (count == 2) {
+            recycleCollection.delete_many(make_document(kvp("seq", patientSeq)));
+
+            int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
+            auto recycle_document = make_document(
+              kvp("id", seq),
+              kvp("patientId", result.patientId )
+            );
+
+            recycleCollection.insert_one(recycle_document.view());
+          }
+        }
+
+    }
+
   }
 } //namespace OrthancPlugins
