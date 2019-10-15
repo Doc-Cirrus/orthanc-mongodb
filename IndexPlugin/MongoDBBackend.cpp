@@ -167,7 +167,7 @@ namespace OrthancPlugins
 
     collection.update_many(
       make_document(kvp("internalId", child)),
-      make_document(kvp("internalId", make_document(kvp("parentId", parent))))
+      make_document(kvp("$set", make_document(kvp("parentId", parent))))
     );
   }
 
