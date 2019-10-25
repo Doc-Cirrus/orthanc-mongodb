@@ -1478,12 +1478,12 @@ namespace OrthancPlugins
     mongocxx::pipeline stages;
 
     if (normalCount > 0 || identifierCount > 0) {
+      auto limit_stage = 1;
       bsoncxx::builder::basic::document search_facet_stage{};
 
       if (normalCount > 0) {
         search_facet_stage.append(
           kvp("main_tags", make_array(
-            make_document(kvp("$limit", 1)),
             make_document(
               kvp("$lookup", make_document(
                 kvp("from", "MainDicomTags"),
@@ -1496,14 +1496,6 @@ namespace OrthancPlugins
                   )
                 ))
               ))
-            ),
-            make_document(
-              kvp("$unwind", "$tags")
-            ),
-            make_document(
-              kvp("$replaceRoot", make_document(
-                kvp("newRoot", "$tags")
-              ))
             )
           ))
         );
@@ -1512,7 +1504,6 @@ namespace OrthancPlugins
       if (identifierCount > 0) {
         search_facet_stage.append(
           kvp("identifier_tags", make_array(
-            make_document(kvp("$limit", 1)),
             make_document(
               kvp("$lookup", make_document(
                 kvp("from", "DicomIdentifiers"),
@@ -1523,24 +1514,26 @@ namespace OrthancPlugins
                   )
                 ))
               ))
-            ),
-            make_document(
-              kvp("$unwind", "$tags")
-            ),
-            make_document(
-              kvp("$replaceRoot", make_document(
-                kvp("newRoot", "$tags")
-              ))
             )
           ))
         );
       }
 
-      auto add_field_stage = make_document(
+      auto facet_field_project_stage = make_document(
         kvp("tags", make_document(
           kvp("$concatArrays", make_array(
-            make_document(kvp("$ifNull", make_array("$main_tags", make_array()))),
-            make_document(kvp("$ifNull", make_array("$identifier_tags", make_array())))
+            make_document(
+              kvp("$ifNull", make_array(
+                make_document(kvp("$arrayElemAt", make_array("$identifier_tags.tags", 0))), 
+                make_array())
+              )
+            ),
+            make_document(
+              kvp("$ifNull", make_array(
+                make_document(kvp("$arrayElemAt", make_array("$main_tags.tags", 0))),
+                make_array())
+              )
+            )
           ))
         ))
       );
@@ -1551,79 +1544,88 @@ namespace OrthancPlugins
         kvp("_id", "$id"), kvp("count", make_document(kvp("$sum", 1)))
       );
 
-      auto lookup_stage = make_document(
+      auto resource_lookup_stage = make_document(
         kvp("from", "Resources"),
-        kvp("as", "resources_obj"),
-        kvp("let", make_document(kvp("resource", "$_id"))),
-        kvp("pipeline", make_array(
-            make_document(
-              kvp("$match", make_document(kvp("$expr", make_document(kvp("$eq", make_array("$internalId",  "$$resource"))))))
-            ),
-            make_document(kvp("$facet", make_document(
-              kvp("level", make_array(
-                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel))))))
-              ),
-              kvp("children", make_array(
-                make_document(kvp("$match", make_document(
-                    kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
-                ))),
-                make_document(kvp("$graphLookup", make_document(
-                    kvp("from", "Resources"),
-                    kvp("startWith", "$internalId"),
-                    kvp("connectFromField", "internalId"),
-                    kvp("connectToField", "parentId"),
-                    kvp("as", "children")
-                ))),
-                make_document(kvp("$unwind", "$children")),
-                make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$children")))),
-                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
-              )
-            ),
-            kvp("parents", make_array(
-                make_document(kvp("$match", make_document(
-                    kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
-                ))),
-                make_document(kvp("$graphLookup", make_document(
-                    kvp("from", "Resources"),
-                    kvp("startWith", "$parentId"),
-                    kvp("connectFromField", "parentId"),
-                    kvp("connectToField", "internalId"),
-                    kvp("as", "parents")
-                ))),
-                make_document(kvp("$unwind", "$parents")),
-                make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$parents")))),
-                make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
-              )
-            )
-          ))),
-          make_document(
-            kvp("$addFields", make_document(
-              kvp("resources", make_document(
-                kvp("$concatArrays", make_array(
-                  make_document(kvp("$ifNull", make_array("$level", make_array()))),
-                  make_document(kvp("$ifNull", make_array("$children", make_array()))),
-                  make_document(kvp("$ifNull", make_array("$parents", make_array())))
-                ))
-              ))
-            ))
-          ),
-          make_document(
-            kvp("$unwind", "$resources")
-          ),
-          make_document(
-            kvp("$replaceRoot", make_document(
-              kvp("newRoot", "$resources")
-            ))
-          )
+        kvp("as", "resources"),
+        kvp("localField", "_id"),
+        kvp("foreignField", "internalId")
+      );
+
+      auto resource_lookup_project_stage = make_document(
+        kvp("count", 1),
+        kvp("internalId", make_document(
+          kvp("$arrayElemAt", make_array("$resources.internalId", 0))
+        )),
+        kvp("resourceType", make_document(
+          kvp("$arrayElemAt", make_array("$resources.resourceType", 0))
+        )),
+        kvp("publicId", make_document(
+          kvp("$arrayElemAt", make_array("$resources.publicId", 0))
+        )),
+        kvp("parentId", make_document(
+          kvp("$arrayElemAt", make_array("$resources.parentId", 0))
         ))
       );
 
+      auto resource_facet_stage = make_document(
+        kvp("level", make_array(
+          make_document(
+            kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel))))
+          ))
+        ),
+        kvp("children", make_array(
+          make_document(kvp("$match", make_document(
+            kvp("resourceType", make_document(kvp("$lt", static_cast<int>(queryLevel))))
+          ))),
+          make_document(kvp("$graphLookup", make_document(
+            kvp("from", "Resources"),
+            kvp("startWith", "$internalId"),
+            kvp("connectFromField", "internalId"),
+            kvp("connectToField", "parentId"),
+            kvp("as", "children")
+          ))),
+          make_document(kvp("$unwind", "$children")),
+          make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$children")))),
+          make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
+        )),
+        kvp("parents", make_array(
+          make_document(kvp("$match", make_document(
+            kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
+          ))),
+          make_document(kvp("$graphLookup", make_document(
+            kvp("from", "Resources"),
+            kvp("startWith", "$parentId"),
+            kvp("connectFromField", "parentId"),
+            kvp("connectToField", "internalId"),
+            kvp("as", "parents")
+          ))),
+          make_document(kvp("$unwind", "$parents")),
+          make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$parents")))),
+          make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
+          )
+        )
+      );
+
+      auto resources_add_field_stage = make_document(
+        kvp("resources", make_document(
+          kvp("$concatArrays", make_array(
+            make_document(kvp("$ifNull", make_array("$level", make_array()))),
+            make_document(kvp("$ifNull", make_array("$children", make_array()))),
+            make_document(kvp("$ifNull", make_array("$parents", make_array())))
+          ))
+        ))
+      );
+
+      auto resource_replace_root_stage = make_document(
+        kvp("newRoot", "$resources")
+      );
+
       auto group_tags_resources_stage = make_document(
-        kvp("_id", "$resources_obj.internalId"), 
-        kvp("parentId", make_document(kvp("$first", "$resources_obj.parentId"))),
-        kvp("internalId", make_document(kvp("$first", "$resources_obj.internalId"))),
-        kvp("publicId", make_document(kvp("$first", "$resources_obj.publicId"))),
-        kvp("count", make_document(kvp("$sum", "$count")))
+        kvp("_id", "$internalId"), 
+        kvp("parentId", make_document(kvp("$first", "$parentId"))),
+        kvp("internalId", make_document(kvp("$first", "$internalId"))),
+        kvp("publicId", make_document(kvp("$first", "$publicId"))),
+        kvp("count", make_document(kvp("$sum", 1)))
       );
 
       auto match_resources_stage = make_document(
@@ -1632,13 +1634,20 @@ namespace OrthancPlugins
         ))
       );
 
+      stages.limit(limit_stage);
       stages.facet(search_facet_stage.view());
-      stages.add_fields(add_field_stage.view());
+      stages.project(facet_field_project_stage.view());
       stages.unwind(unwind_stage);
       stages.replace_root(replace_root_stage.view());
       stages.group(group_tags_stage.view());
-      stages.lookup(lookup_stage.view());
-      stages.unwind("$resources_obj");
+
+      stages.lookup(resource_lookup_stage.view());
+      stages.project(resource_lookup_project_stage.view());
+      stages.facet(resource_facet_stage.view());
+      stages.add_fields(resources_add_field_stage.view());
+      stages.unwind("$resources");
+      stages.replace_root(resource_replace_root_stage.view());
+      
       stages.group(group_tags_resources_stage.view());
       stages.match(match_resources_stage.view());
     }
