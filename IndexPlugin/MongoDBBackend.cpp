@@ -1705,25 +1705,35 @@ namespace OrthancPlugins
     }
 
     if (requestSomeInstance) {
-      stages.graph_lookup(
-        make_document(
-          kvp("from", "Resources"),
-          kvp("startWith", "$internalId"),
-          kvp("connectFromField", "internalId"),
-          kvp("connectToField", "parentId"),
-          kvp("as", "children")
-        )
-      );
-      stages.unwind("$children");
-      stages.match(
-        make_document(kvp("children.resourceType", 3))
-      );
-      stages.group(
-        make_document(
-          kvp("_id", "$publicId"),
-          kvp("instance_id", make_document(kvp("$first", "$children.publicId")))
-        )
-      );
+      if (queryLevel == OrthancPluginResourceType_Instance) {
+        stages.add_fields(
+          make_document(
+            kvp("_id", "$publicId"),
+            kvp("instance_id", "$publicId")
+          )
+        );
+      }
+      else {
+        stages.graph_lookup(
+          make_document(
+            kvp("from", "Resources"),
+            kvp("startWith", "$internalId"),
+            kvp("connectFromField", "internalId"),
+            kvp("connectToField", "parentId"),
+            kvp("as", "children")
+          )
+        );
+        stages.unwind("$children");
+        stages.match(
+          make_document(kvp("children.resourceType", 3))
+        );
+        stages.group(
+          make_document(
+            kvp("_id", "$publicId"),
+            kvp("instance_id", make_document(kvp("$first", "$children.publicId")))
+          )
+        );
+      }
     }
 
     auto cursor = resourcesCollection.aggregate(stages, mongocxx::options::aggregate{});
