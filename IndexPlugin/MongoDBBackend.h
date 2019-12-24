@@ -42,6 +42,8 @@ namespace OrthancPlugins
 
     void CreateIndices();
     void CheckMonoDBMaster();
+    void ExecuteSetResourcesContentTags(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentTags* tags);
+    void ExecuteSetResourcesContentMetadata(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentMetadata* meta);
 
   public:
     MongoDBBackend(OrthancPluginContext* context,

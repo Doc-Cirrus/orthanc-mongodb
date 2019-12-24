@@ -22,6 +22,8 @@
 #include "Configuration.h"
 #include "MongoDBException.h"
 
+#include <thread>
+
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
 #include <bsoncxx/types.hpp>
@@ -283,82 +285,85 @@ namespace OrthancPlugins
   // TODO BETTER Refactor
   void MongoDBBackend::DeleteResource(int64_t id)
   {
-    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    /* find all resources to delete */
-    std::vector<int64_t> resources_to_delete;
-    std::vector<int64_t> parent_resources_vec {id};
-    while (!parent_resources_vec.empty())
-    {
-      int64_t resId = parent_resources_vec.back();
-      parent_resources_vec.pop_back();
-      resources_to_delete.push_back(resId); // collect the resource id's to delete
-      auto resCursor = db["Resources"].find(document{} << "parentId" << resId << finalize);
-      for (auto&& d : resCursor)
-      {
-        int64_t parentId = d["internalId"].get_int64().value;
-        parent_resources_vec.push_back(parentId);
-      }
-    }
-
-    //document with ids to delete
-    document inCriteriaArray{};
-    auto inCriteriaStream = inCriteriaArray << "$in" << open_array;
-    for (auto delId : resources_to_delete)
-    {
-      inCriteriaStream << delId;
-    }
-    auto inCriteriaValue = inCriteriaStream << close_array << finalize;
-    bsoncxx::document::view_or_value byIdValue = document{} << "id" << inCriteriaValue << finalize;
-    bsoncxx::document::view_or_value byInternalIdValue = document{} << "internalId" << inCriteriaValue << finalize;
-    bsoncxx::document::view_or_value byPatientIdValue = document{} << "patientId" << inCriteriaValue << finalize;
-
-    // Get the resources to delete for SignalDeletedAttachment
+    /* item for signal */
     std::vector<bsoncxx::document::value> deleted_files_vec;
-    auto attachedCursor = db["AttachedFiles"].find(byIdValue);
+    std::vector<bsoncxx::document::view> deleted_resources_vec;
+
+    /* find all resources to delete */
+    mongocxx::pipeline stages;
+    auto resources_to_delete = array{};
+
+    auto match_stage = make_document(kvp("internalId", id));
+    auto graph_lookup_stage = make_document(
+      kvp("from", "Resources"),
+      kvp("startWith", "$internalId"),
+      kvp("connectFromField", "internalId"),
+      kvp("connectToField", "parentId"),
+      kvp("as", "children")
+    );
+    auto unwind_stage = "$children";
+    auto replace_root_stage = make_document(kvp("newRoot", "$children"));
+
+    stages.match(match_stage.view());
+    stages.graph_lookup(graph_lookup_stage.view());
+    stages.unwind(unwind_stage);
+    stages.replace_root(replace_root_stage.view());
+
+    auto cursor = db["Resources"].aggregate(stages, mongocxx::options::aggregate{});
+
+    for (auto&& doc : cursor) {
+      int64_t parentId = doc["internalId"].get_int64().value;
+      resources_to_delete.append(parentId);
+      deleted_resources_vec.push_back(doc);
+    }
+
+    auto inCriteria = make_document(kvp("$in", resources_to_delete.extract()));
+    auto byIdValue = make_document(kvp("id", inCriteria.view()));
+    auto byPatientIdValue = make_document(kvp("patientId", inCriteria.view()));
+    auto byInternalIdValue = make_document(kvp("internalId", inCriteria.view()));
+
+    auto attachedCursor = db["AttachedFiles"].find(byIdValue.view());
     for (auto&& doc : attachedCursor)
     {
       deleted_files_vec.push_back(bsoncxx::document::value(doc));
     }
 
-    // Get the resources to delete for SignalDeletedResource
-    std::vector<bsoncxx::document::value> deleted_resources_vec;
-    auto resourcesCursor = db["Resources"].find(document{} << "internalId" << id << finalize);
-    for (auto&& doc : resourcesCursor)
-    {
-      deleted_resources_vec.push_back(bsoncxx::document::value(doc));
-    }
-
     // Delete
-    db["Metadata"].delete_many(byIdValue);
-    db["AttachedFiles"].delete_many(byIdValue);
-    db["Changes"].delete_many(byInternalIdValue);
-    db["PatientRecyclingOrder"].delete_many(byPatientIdValue);
-    db["MainDicomTags"].delete_many(byIdValue);
-    db["DicomIdentifiers"].delete_many(byIdValue);
-    db["Resources"].delete_many(byInternalIdValue);
+    db["Metadata"].delete_many(byIdValue.view());
+    db["AttachedFiles"].delete_many(byIdValue.view());
+    db["Changes"].delete_many(byInternalIdValue.view());
+    db["PatientRecyclingOrder"].delete_many(byPatientIdValue.view());
+    db["MainDicomTags"].delete_many(byIdValue.view());
+    db["DicomIdentifiers"].delete_many(byIdValue.view());
+    db["Resources"].delete_many(byInternalIdValue.view());
 
     for (auto&& doc : deleted_files_vec)
     {
       auto v = doc.view();
-      GetOutput().SignalDeletedAttachment(std::string(v["uuid"].get_utf8().value).c_str(),
-                        v["fileType"].get_int32().value,
-                        v["uncompressedSize"].get_int64().value,
-						std::string(v["uncompressedHash"].get_utf8().value).c_str(),
-                        v["compressionType"].get_int32().value,
-                        v["compressedSize"].get_int64().value,
-						std::string(v["compressedHash"].get_utf8().value).c_str());
+      GetOutput().SignalDeletedAttachment(
+        std::string(v["uuid"].get_utf8().value).c_str(),
+        v["fileType"].get_int32().value,
+        v["uncompressedSize"].get_int64().value,
+        std::string(v["uncompressedHash"].get_utf8().value).c_str(),
+        v["compressionType"].get_int32().value,
+        v["compressedSize"].get_int64().value,
+        std::string(v["compressedHash"].get_utf8().value).c_str()
+      );
     }
 
     for (auto&& doc : deleted_resources_vec)
     {
-      auto v = doc.view();
       GetOutput().SignalDeletedResource(
-		  std::string(v["publicId"].get_utf8().value).c_str(),
-          static_cast<OrthancPluginResourceType>(v["resourceType"].get_int32().value));
+		    std::string(doc["publicId"].get_utf8().value).c_str(),
+        static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value)
+      );
     }
   }
 
@@ -1119,7 +1124,6 @@ namespace OrthancPlugins
 
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
-    bsoncxx::builder::stream::document document{};
 
     auto collection = db["DicomIdentifiers"];
     auto dicom_identifier_document = make_document(
@@ -1142,13 +1146,24 @@ namespace OrthancPlugins
 
     auto collection = db["Metadata"];
 
-    collection.delete_many(make_document(kvp("id", id), kvp("type", metadataType)));
-   
-    collection.insert_one(make_document(
+    mongocxx::options::bulk_write options;
+    options.ordered(true);
+    auto bulk = collection.create_bulk_write(options);
+
+    auto deleteDocument = make_document(kvp("id", id), kvp("type", metadataType));
+    auto insertDocument = make_document(
       kvp("id", id), 
       kvp("type", metadataType), 
       kvp("value", value)
-    ));
+    );
+
+    mongocxx::model::delete_many delete_op{deleteDocument.view()};
+    mongocxx::model::insert_one insert_op{insertDocument.view()};
+
+    bulk.append(delete_op);
+    bulk.append(insert_op);
+
+    bulk.execute();
   }
 
   void MongoDBBackend::SetProtectedPatient(int64_t internalId, bool isProtected)
@@ -1208,7 +1223,7 @@ namespace OrthancPlugins
     auto db = (*conn)[dbname_];
 
     auto delete_document = make_document(
-        kvp("patientId", internalId)
+        kvp("id", internalId)
     );
 
     db["MainDicomTags"].delete_many(delete_document.view());
@@ -1756,71 +1771,9 @@ namespace OrthancPlugins
     uint32_t countMainDicomTags, const OrthancPluginResourcesContentTags* mainDicomTags,
     uint32_t countMetadata, const OrthancPluginResourcesContentMetadata* metadata)
   {
-    using bsoncxx::builder::basic::kvp;
-    using bsoncxx::builder::basic::array;
-    using bsoncxx::builder::basic::make_document;
-    
-    auto conn = pool_.acquire();
-    auto db = (*conn)[dbname_];
-
-    auto metadataCollection = db["Metadata"];
-    auto mainDicomTagsCollection = db["MainDicomTags"];
-    auto dicomIdentifiersCollection = db["DicomIdentifiers"];
-
-    std::vector< bsoncxx::document::value > dicomIdentifiersDocuments;
-    std::vector< bsoncxx::document::value > mainDicomTagsDocuments;
-    std::vector< bsoncxx::document::value > metadataDocuments;
-
-    for (uint32_t i = 0; i < countIdentifierTags; i++)
-    {
-      dicomIdentifiersDocuments.push_back(
-        make_document(
-          kvp("id", identifierTags[i].resource),
-          kvp("tagGroup", identifierTags[i].group),
-          kvp("tagElement", identifierTags[i].element),
-          kvp("value", identifierTags[i].value)
-        )
-      );
-    }
-
-    if (countIdentifierTags > 0) dicomIdentifiersCollection.insert_many(dicomIdentifiersDocuments);
-
-    for (uint32_t i = 0; i < countMainDicomTags; i++)
-    { 
-      mainDicomTagsDocuments.push_back(
-        make_document(
-          kvp("id", mainDicomTags[i].resource),
-          kvp("tagGroup", mainDicomTags[i].group),
-          kvp("tagElement", mainDicomTags[i].element),
-          kvp("value", mainDicomTags[i].value)
-        )
-      );
-    }
-
-    if (countMainDicomTags > 0) mainDicomTagsCollection.insert_many(mainDicomTagsDocuments);
-
-    auto removeArray = array{};
-
-    for (uint32_t i = 0; i < countMetadata; i++)
-    {
-      metadataDocuments.push_back(
-        make_document(
-          kvp("id", metadata[i].resource),
-          kvp("type", metadata[i].metadata),
-          kvp("value", metadata[i].value)
-        )
-      );
-
-      removeArray.append(
-        make_document(kvp("id",  metadata[i].resource), kvp("type", metadata[i].metadata))
-      );
-    }
-
-    // just check for the $or not throw error
-    if (countMetadata > 0) {
-      metadataCollection.delete_many(make_document(kvp("$or", removeArray.extract())));
-      metadataCollection.insert_many(metadataDocuments);
-    }
+    MongoDBBackend::ExecuteSetResourcesContentTags("DicomIdentifiers", countIdentifierTags, identifierTags);
+    MongoDBBackend::ExecuteSetResourcesContentTags("MainDicomTags", countMainDicomTags, mainDicomTags);
+    MongoDBBackend::ExecuteSetResourcesContentMetadata("Metadata", countMetadata, metadata);
   }
 
   void MongoDBBackend::CreateInstance(OrthancPluginCreateInstanceResult& result,
@@ -1846,6 +1799,8 @@ namespace OrthancPlugins
       result.instanceId = instance->view()["internalId"].get_int64().value;
     }
     else {
+        auto bulk = collection.create_bulk_write();
+
         auto patient = collection.find_one(
           make_document(kvp("publicId",  hashPatient), kvp("resourceType", 0))
         );
@@ -1873,7 +1828,8 @@ namespace OrthancPlugins
             kvp("parentId", bsoncxx::types::b_null())
           );
 
-          collection.insert_one(patient_document.view());
+          mongocxx::model::insert_one insert_patient{patient_document.view()};
+          bulk.append(insert_patient);
 
           result.isNewPatient = true;
           result.patientId = patientId;
@@ -1896,7 +1852,8 @@ namespace OrthancPlugins
             kvp("parentId", result.patientId)
           );
 
-          collection.insert_one(study_document.view());
+          mongocxx::model::insert_one insert_study{study_document.view()};
+          bulk.append(insert_study);
 
           result.studyId = studyId;
           result.isNewStudy = true;
@@ -1919,7 +1876,8 @@ namespace OrthancPlugins
             kvp("parentId", result.studyId)
           );
 
-          collection.insert_one(series_document.view());
+          mongocxx::model::insert_one insert_series{series_document.view()};
+          bulk.append(insert_series);
 
           result.seriesId = seriesId;
           result.isNewSeries = true;
@@ -1933,7 +1891,10 @@ namespace OrthancPlugins
           kvp("parentId", result.seriesId)
         );
 
-        collection.insert_one(instance_document.view());
+        mongocxx::model::insert_one insert_instance{instance_document.view()};
+        bulk.append(insert_instance); 
+
+        bulk.execute();
 
         result.isNewInstance = true;
         result.instanceId = instanceId;
@@ -1967,8 +1928,73 @@ namespace OrthancPlugins
             recycleCollection.insert_one(recycle_document.view());
           }
         }
+    }
+  
+  }
 
+  //  helpers functions
+  void MongoDBBackend::ExecuteSetResourcesContentTags(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentTags* tags) {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_document;
+    
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto collection = db[collectionName];
+    auto bulk = collection.create_bulk_write();
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+      auto doc = make_document(
+        kvp("id", tags[i].resource),
+        kvp("tagGroup", tags[i].group),
+        kvp("tagElement", tags[i].element),
+        kvp("value", tags[i].value)
+      );
+
+      mongocxx::model::insert_one insert_op{doc.view()};
+      bulk.append(insert_op);
     }
 
+    if (count > 0) bulk.execute();
   }
+
+  void MongoDBBackend::ExecuteSetResourcesContentMetadata(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentMetadata* meta) {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::make_document;
+    
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+
+    auto collection = db[collectionName];
+    auto bulk = collection.create_bulk_write();
+
+    auto removeArray = array{};
+    std::vector< bsoncxx::document::value > metaDocuments;
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+      auto insertDoc = make_document(
+        kvp("id", meta[i].resource),
+        kvp("type", meta[i].metadata),
+        kvp("value", meta[i].value)
+      );
+
+      auto removeDoc = make_document(
+        kvp("id",  meta[i].resource), 
+        kvp("type", meta[i].metadata)
+      );
+
+      mongocxx::model::insert_one insert_op{insertDoc.view()};
+      mongocxx::model::delete_one delete_one{removeDoc.view()};
+
+      bulk.append(insert_op);
+      bulk.append(delete_one);
+    }
+
+    // just check for the $or not throw error
+    if (count > 0) bulk.execute();
+  }
+
 } //namespace OrthancPlugins
