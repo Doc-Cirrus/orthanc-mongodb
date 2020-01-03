@@ -700,7 +700,7 @@ namespace OrthancPlugins
     auto group_stage = make_document(
       kvp("_id", bsoncxx::types::b_null()),
       kvp("totalSize", make_document(
-        kvp("$sum", "$uncompressedSize" )
+        kvp("$sum", "$uncompressedSize")
       ))
     );
 
@@ -1395,7 +1395,7 @@ namespace OrthancPlugins
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    auto resourcesCollection = db["Resources"];
+    auto collection = db["Resources"];
 
     auto normalStream = array{};
     auto identifierStream = array{};
@@ -1408,7 +1408,7 @@ namespace OrthancPlugins
     for (size_t i = 0; i < lookup.size(); i++) {
       OrthancPluginDatabaseConstraint constraint = lookup[i];
 
-      auto case_sensitive_option = constraint.isCaseSensitive == 0 ? "i" : "";
+      auto case_sensitive_option = constraint.isCaseSensitive ? "" : "i";
       auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
 
       if (criterias.find(query_identifier) == criterias.end()) {
@@ -1451,8 +1451,7 @@ namespace OrthancPlugins
 
         case OrthancPluginConstraintType_Wildcard:
           current_document.append(
-            kvp("$regex", ConvertWildcardToRegex(constraint.values[0])),
-            kvp("$options", case_sensitive_option)
+            kvp("$regex", ConvertWildcardToRegex(constraint.values[0]))
           );
           break;
 
@@ -1492,47 +1491,69 @@ namespace OrthancPlugins
 
     mongocxx::pipeline stages;
 
-    if (normalCount > 0 || identifierCount > 0) {
+    if (normalCount > 0 && identifierCount == 0) {
+      auto normal_match_stage = make_document(
+        kvp("$or", normalStream.extract())
+      );
+
+      stages.match(normal_match_stage.view());
+      collection = db["MainDicomTags"];
+    }
+
+    else if(normalCount == 0 && identifierCount > 0) {
+      auto identifier_match_stage = make_document(
+        kvp("$or", identifierStream.extract())
+      );
+
+      stages.match(identifier_match_stage.view());
+      collection = db["DicomIdentifiers"];
+    }
+
+    else if (normalCount == 0 && identifierCount == 0) {
+      auto match_resources_no_search_stage = make_document(
+        kvp("resourceType", static_cast<int>(queryLevel))
+      );
+
+      stages.match(match_resources_no_search_stage.view());
+    }
+
+    else if (normalCount > 0 && identifierCount > 0) {
       auto limit_stage = 1;
       bsoncxx::builder::basic::document search_facet_stage{};
 
-      if (normalCount > 0) {
-        search_facet_stage.append(
-          kvp("main_tags", make_array(
-            make_document(
-              kvp("$lookup", make_document(
-                kvp("from", "MainDicomTags"),
-                kvp("as", "tags"),
-                kvp("pipeline", make_array(
-                  make_document(
-                    kvp("$match", make_document(
-                      kvp("$or", normalStream.extract())
-                    ))
-                  )
-                ))
+      search_facet_stage.append(
+        kvp("main_tags", make_array(
+          make_document(
+            kvp("$lookup", make_document(
+              kvp("from", "MainDicomTags"),
+              kvp("as", "tags"),
+              kvp("pipeline", make_array(
+                make_document(
+                  kvp("$match", make_document(
+                    kvp("$or", normalStream.extract())
+                  ))
+                )
               ))
-            )
-          ))
-        );
-      }
+            ))
+          )
+        ))
+      );
 
-      if (identifierCount > 0) {
-        search_facet_stage.append(
-          kvp("identifier_tags", make_array(
-            make_document(
-              kvp("$lookup", make_document(
-                kvp("from", "DicomIdentifiers"),
-                kvp("as", "tags"),
-                kvp("pipeline", make_array(
-                  make_document(
-                    kvp("$match", make_document(kvp("$or", identifierStream.extract())))
-                  )
-                ))
+      search_facet_stage.append(
+        kvp("identifier_tags", make_array(
+          make_document(
+            kvp("$lookup", make_document(
+              kvp("from", "DicomIdentifiers"),
+              kvp("as", "tags"),
+              kvp("pipeline", make_array(
+                make_document(
+                  kvp("$match", make_document(kvp("$or", identifierStream.extract())))
+                )
               ))
-            )
-          ))
-        );
-      }
+            ))
+          )
+        ))
+      );
 
       auto facet_field_project_stage = make_document(
         kvp("tags", make_document(
@@ -1555,6 +1576,15 @@ namespace OrthancPlugins
 
       auto unwind_stage = "$tags";
       auto replace_root_stage = make_document(kvp("newRoot", "$tags"));
+
+      stages.limit(limit_stage);
+      stages.facet(search_facet_stage.view());
+      stages.project(facet_field_project_stage.view());
+      stages.unwind(unwind_stage);
+      stages.replace_root(replace_root_stage.view());
+    }
+
+    if (normalCount > 0 || identifierCount > 0) {
       auto group_tags_stage = make_document(
         kvp("_id", "$id"), kvp("count", make_document(kvp("$sum", 1)))
       );
@@ -1617,8 +1647,7 @@ namespace OrthancPlugins
           make_document(kvp("$unwind", "$parents")),
           make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$parents")))),
           make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
-          )
-        )
+        ))
       );
 
       auto resources_add_field_stage = make_document(
@@ -1648,14 +1677,8 @@ namespace OrthancPlugins
           kvp("$gte", static_cast<int>(normalCount + identifierCount))
         ))
       );
-
-      stages.limit(limit_stage);
-      stages.facet(search_facet_stage.view());
-      stages.project(facet_field_project_stage.view());
-      stages.unwind(unwind_stage);
-      stages.replace_root(replace_root_stage.view());
+      
       stages.group(group_tags_stage.view());
-
       stages.lookup(resource_lookup_stage.view());
       stages.project(resource_lookup_project_stage.view());
       stages.facet(resource_facet_stage.view());
@@ -1666,14 +1689,6 @@ namespace OrthancPlugins
       stages.group(group_tags_resources_stage.view());
       stages.match(match_resources_stage.view());
     }
-    else {
-      auto match_resources_no_search_stage = make_document(
-        kvp("resourceType", static_cast<int>(queryLevel))
-      );
-
-      stages.match(match_resources_no_search_stage.view());
-    }
-
 
     // sort of the query by study or series
     if (queryLevel == OrthancPluginResourceType_Study || queryLevel == OrthancPluginResourceType_Series) {
@@ -1751,7 +1766,7 @@ namespace OrthancPlugins
       }
     }
 
-    auto cursor = resourcesCollection.aggregate(stages, mongocxx::options::aggregate{});
+    auto cursor = collection.aggregate(stages, mongocxx::options::aggregate{});
 
     for (auto&& doc : cursor) {
       if (requestSomeInstance) {
