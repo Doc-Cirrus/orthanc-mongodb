@@ -282,7 +282,6 @@ namespace OrthancPlugins
     ));
   }
 
-  // TODO BETTER Refactor
   void MongoDBBackend::DeleteResource(int64_t id)
   {
     using bsoncxx::builder::basic::kvp;
@@ -1321,16 +1320,19 @@ namespace OrthancPlugins
 
     mongocxx::pipeline stages;
     auto match_stage = make_document(kvp("publicId", publicId));
+
     auto lookup_stage = make_document(
       kvp("from", "Resources"),
       kvp("foreignField", "internalId"),
       kvp("localField", "parentId" ),
       kvp("as", "parent")
     );
+
     auto unwind_stage = make_document(
       kvp("path", "$parent"), 
       kvp("preserveNullAndEmptyArrays", true)
     );
+
     auto group_stage = make_document(
       kvp("_id", bsoncxx::types::b_null()),
       kvp("internalId", make_document(kvp("$first", "$internalId"))),
@@ -1399,6 +1401,7 @@ namespace OrthancPlugins
 
     auto normalStream = array{};
     auto identifierStream = array{};
+    std::vector<std::string> normalLevels;
 
     size_t normalCount = 0;
     size_t identifierCount = 0;
@@ -1484,6 +1487,11 @@ namespace OrthancPlugins
       else {
         normalCount++;
         normalStream.append(criteria);
+        
+        auto levelAttr = "$" + std::to_string(constraint.level);
+        if (std::find(normalLevels.begin(), normalLevels.end(), levelAttr) == normalLevels.end()) {
+            normalLevels.push_back(levelAttr);
+        }
       }
 
       criterias.erase(current_document_query);  
@@ -1518,215 +1526,96 @@ namespace OrthancPlugins
     }
 
     else if (normalCount > 0 && identifierCount > 0) {
-      auto limit_stage = 1;
-      bsoncxx::builder::basic::document search_facet_stage{};
+      mongocxx::pipeline identifiers_stages;
 
-      search_facet_stage.append(
-        kvp("main_tags", make_array(
-          make_document(
-            kvp("$lookup", make_document(
-              kvp("from", "MainDicomTags"),
-              kvp("as", "tags"),
-              kvp("pipeline", make_array(
-                make_document(
-                  kvp("$match", make_document(
-                    kvp("$or", normalStream.extract())
-                  ))
-                )
-              ))
-            ))
-          )
-        ))
+      auto identifier_match_stage = make_document(
+        kvp("$or", identifierStream.extract())
       );
 
-      search_facet_stage.append(
-        kvp("identifier_tags", make_array(
-          make_document(
-            kvp("$lookup", make_document(
-              kvp("from", "DicomIdentifiers"),
-              kvp("as", "tags"),
-              kvp("pipeline", make_array(
-                make_document(
-                  kvp("$match", make_document(kvp("$or", identifierStream.extract())))
-                )
-              ))
-            ))
-          )
-        ))
+      auto graph_lookup_stage = make_document(
+        kvp("as", "resources"),
+        kvp("startWith", "$id"),
+        kvp("from", "Resources"),
+        kvp("connectToField", "internalId"),
+        kvp("connectFromField", std::to_string(queryLevel))
       );
 
-      auto facet_field_project_stage = make_document(
-        kvp("tags", make_document(
-          kvp("$concatArrays", make_array(
-            make_document(
-              kvp("$ifNull", make_array(
-                make_document(kvp("$arrayElemAt", make_array("$identifier_tags.tags", 0))), 
-                make_array())
-              )
-            ),
-            make_document(
-              kvp("$ifNull", make_array(
-                make_document(kvp("$arrayElemAt", make_array("$main_tags.tags", 0))),
-                make_array())
-              )
-            )
-          ))
-        ))
+      auto resource_replace_root_stage = make_document(
+        kvp("newRoot", "$resources")
+      );
+  
+      auto project_stage = make_document(
+        kvp("_id", 1), kvp("resources", make_document(
+          kvp("$concatArrays", [normalLevels](sub_array child) {
+            for (size_t i = 0; i < normalLevels.size(); i++) {
+              child.append(normalLevels[i]);
+            }
+          }))
+        )
       );
 
-      auto unwind_stage = "$tags";
-      auto replace_root_stage = make_document(kvp("newRoot", "$tags"));
+      auto group_stage = make_document(
+        kvp("_id", "$resources")
+      );
 
-      stages.limit(limit_stage);
-      stages.facet(search_facet_stage.view());
-      stages.project(facet_field_project_stage.view());
-      stages.unwind(unwind_stage);
-      stages.replace_root(replace_root_stage.view());
+      identifiers_stages.match(identifier_match_stage.view());
+      identifiers_stages.graph_lookup(graph_lookup_stage.view());
+      identifiers_stages.unwind("$resources");
+      identifiers_stages.replace_root(resource_replace_root_stage.view());
+      identifiers_stages.project(project_stage.view());
+      identifiers_stages.unwind("$resources");
+      identifiers_stages.group(group_stage.view());
+
+      auto main_tags_ids = array{};
+      auto identifier_cursor = db["DicomIdentifiers"].aggregate(identifiers_stages, mongocxx::options::aggregate{});
+
+      for (auto&& doc : identifier_cursor) {
+        main_tags_ids.append(doc["_id"].get_int64().value);
+      }
+
+      auto normal_pre_match_stage = make_document(
+        kvp("id", make_document(kvp("$in", main_tags_ids.extract())))
+      );
+
+      auto normal_match_stage = make_document(
+        kvp("$or", normalStream.extract())
+      );
+
+      stages.match(normal_pre_match_stage.view());
+      stages.match(normal_match_stage.view());
+
+      collection = db["MainDicomTags"];
     }
 
     if (normalCount > 0 || identifierCount > 0) {
-      auto group_tags_stage = make_document(
-        kvp("_id", "$id"), kvp("count", make_document(kvp("$sum", 1)))
-      );
-
-      auto resource_lookup_stage = make_document(
-        kvp("from", "Resources"),
+      auto graph_lookup_stage = make_document(
         kvp("as", "resources"),
-        kvp("localField", "_id"),
-        kvp("foreignField", "internalId")
-      );
-
-      auto resource_lookup_project_stage = make_document(
-        kvp("count", 1),
-        kvp("internalId", make_document(
-          kvp("$arrayElemAt", make_array("$resources.internalId", 0))
-        )),
-        kvp("resourceType", make_document(
-          kvp("$arrayElemAt", make_array("$resources.resourceType", 0))
-        )),
-        kvp("publicId", make_document(
-          kvp("$arrayElemAt", make_array("$resources.publicId", 0))
-        )),
-        kvp("parentId", make_document(
-          kvp("$arrayElemAt", make_array("$resources.parentId", 0))
-        ))
-      );
-
-      auto resource_facet_stage = make_document(
-        kvp("level", make_array(
-          make_document(
-            kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel))))
-          ))
-        ),
-        kvp("children", make_array(
-          make_document(kvp("$match", make_document(
-            kvp("resourceType", make_document(kvp("$lt", static_cast<int>(queryLevel))))
-          ))),
-          make_document(kvp("$graphLookup", make_document(
-            kvp("from", "Resources"),
-            kvp("startWith", "$internalId"),
-            kvp("connectFromField", "internalId"),
-            kvp("connectToField", "parentId"),
-            kvp("as", "children")
-          ))),
-          make_document(kvp("$unwind", "$children")),
-          make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$children")))),
-          make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
-        )),
-        kvp("parents", make_array(
-          make_document(kvp("$match", make_document(
-            kvp("resourceType", make_document(kvp("$gt", static_cast<int>(queryLevel))))
-          ))),
-          make_document(kvp("$graphLookup", make_document(
-            kvp("from", "Resources"),
-            kvp("startWith", "$parentId"),
-            kvp("connectFromField", "parentId"),
-            kvp("connectToField", "internalId"),
-            kvp("as", "parents")
-          ))),
-          make_document(kvp("$unwind", "$parents")),
-          make_document(kvp("$replaceRoot", make_document(kvp("newRoot", "$parents")))),
-          make_document(kvp("$match", make_document(kvp("resourceType", static_cast<int>(queryLevel)))))
-        ))
-      );
-
-      auto resources_add_field_stage = make_document(
-        kvp("resources", make_document(
-          kvp("$concatArrays", make_array(
-            make_document(kvp("$ifNull", make_array("$level", make_array()))),
-            make_document(kvp("$ifNull", make_array("$children", make_array()))),
-            make_document(kvp("$ifNull", make_array("$parents", make_array())))
-          ))
-        ))
+        kvp("startWith", "$id"),
+        kvp("from", "Resources"),
+        kvp("connectToField", "internalId"),
+        kvp("connectFromField", std::to_string(queryLevel))
       );
 
       auto resource_replace_root_stage = make_document(
         kvp("newRoot", "$resources")
       );
 
-      auto group_tags_resources_stage = make_document(
-        kvp("_id", "$internalId"), 
-        kvp("parentId", make_document(kvp("$first", "$parentId"))),
-        kvp("internalId", make_document(kvp("$first", "$internalId"))),
-        kvp("publicId", make_document(kvp("$first", "$publicId"))),
-        kvp("count", make_document(kvp("$sum", 1)))
+      auto match_resources_stage = make_document(
+        kvp("resourceType", queryLevel)
       );
 
-      auto match_resources_stage = make_document(
-        kvp("count", make_document(
-          kvp("$gte", static_cast<int>(normalCount + identifierCount))
-        ))
-      );
-      
-      stages.group(group_tags_stage.view());
-      stages.lookup(resource_lookup_stage.view());
-      stages.project(resource_lookup_project_stage.view());
-      stages.facet(resource_facet_stage.view());
-      stages.add_fields(resources_add_field_stage.view());
+      stages.graph_lookup(graph_lookup_stage.view());
       stages.unwind("$resources");
       stages.replace_root(resource_replace_root_stage.view());
-      
-      stages.group(group_tags_resources_stage.view());
       stages.match(match_resources_stage.view());
     }
 
     // sort of the query by study or series
     if (queryLevel == OrthancPluginResourceType_Study || queryLevel == OrthancPluginResourceType_Series) {
-      auto sort_build_lookup_pipe_stage = array{};
-
-      if (queryLevel == OrthancPluginResourceType_Study) {
-        sort_build_lookup_pipe_stage.append(
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 32)), // study_date
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 48)) // study_time
-        );
-      }
-
-      if (queryLevel == OrthancPluginResourceType_Series) {
-        sort_build_lookup_pipe_stage.append(
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 33)), // series_date
-          make_document(kvp("tagGroup", 8), kvp("tagElement", 49)) // series_time
-        );
-      }
-
-      auto sort_build_lookup_stage = make_document(
-          kvp("as", "sorts"), 
-          kvp("from", "MainDicomTags"),
-          kvp("let", make_document(kvp("resource", "$internalId"))),
-          kvp("pipeline", make_array(
-            make_document(
-              kvp("$match", make_document(
-                kvp("$expr", make_document(kvp("$eq", make_array("$id", "$$resource")))),
-                kvp("$or", sort_build_lookup_pipe_stage.extract())
-              ))
-            )
-          ))  
-      );
-
       auto sort_build_stage = make_document(
-        kvp("sorts.0.value", -1), kvp("sorts.1.value", -1)
+        kvp("sorts.0", -1), kvp("sorts.1", -1)
       );
 
-      stages.lookup(sort_build_lookup_stage.view());
       stages.sort(sort_build_stage.view());
     }
 
@@ -1734,45 +1623,13 @@ namespace OrthancPlugins
       stages.limit(limit);
     }
 
-    if (requestSomeInstance) {
-      if (queryLevel == OrthancPluginResourceType_Instance) {
-        stages.add_fields(
-          make_document(
-            kvp("_id", "$publicId"),
-            kvp("instance_id", "$publicId")
-          )
-        );
-      }
-      else {
-        stages.graph_lookup(
-          make_document(
-            kvp("from", "Resources"),
-            kvp("startWith", "$internalId"),
-            kvp("connectFromField", "internalId"),
-            kvp("connectToField", "parentId"),
-            kvp("as", "children")
-          )
-        );
-        stages.unwind("$children");
-        stages.match(
-          make_document(kvp("children.resourceType", 3))
-        );
-        stages.group(
-          make_document(
-            kvp("_id", "$publicId"),
-            kvp("instance_id", make_document(kvp("$first", "$children.publicId")))
-          )
-        );
-      }
-    }
-
     auto cursor = collection.aggregate(stages, mongocxx::options::aggregate{});
 
     for (auto&& doc : cursor) {
       if (requestSomeInstance) {
         GetOutput().AnswerMatchingResource(
-          std::string(doc["_id"].get_utf8().value), 
-          std::string(doc["instance_id"].get_utf8().value)
+          std::string(doc["publicId"].get_utf8().value), 
+          std::string(doc["instancePublicId"].get_utf8().value)
         );
       }
       else {
@@ -1798,6 +1655,7 @@ namespace OrthancPlugins
                                 const char* hashInstance) 
   {
     using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::make_array;
     using bsoncxx::builder::basic::make_document;
 
     auto conn = pool_.acquire();
@@ -1840,7 +1698,14 @@ namespace OrthancPlugins
             kvp("internalId", patientId), 
             kvp("resourceType", 0),
             kvp("publicId", hashPatient),
-            kvp("parentId", bsoncxx::types::b_null())
+            kvp("parentId", bsoncxx::types::b_null()),
+
+            kvp("0", make_array(patientId)),
+            kvp("1", make_array()),
+            kvp("2", make_array()),
+            kvp("3", make_array()),
+
+            kvp("instancePublicId", hashInstance)
           );
 
           mongocxx::model::insert_one insert_patient{patient_document.view()};
@@ -1864,7 +1729,15 @@ namespace OrthancPlugins
             kvp("internalId", studyId), 
             kvp("resourceType", 1),
             kvp("publicId", hashStudy),
-            kvp("parentId", result.patientId)
+            kvp("parentId", result.patientId),
+
+            kvp("0", make_array(result.patientId)),
+            kvp("1", make_array(studyId)),
+            kvp("2", make_array()),
+            kvp("3", make_array()),
+
+            kvp("sorts", make_array()),
+            kvp("instancePublicId", hashInstance)
           );
 
           mongocxx::model::insert_one insert_study{study_document.view()};
@@ -1888,7 +1761,15 @@ namespace OrthancPlugins
             kvp("internalId", seriesId), 
             kvp("resourceType", 2),
             kvp("publicId", hashSeries),
-            kvp("parentId", result.studyId)
+            kvp("parentId", result.studyId),
+
+            kvp("0", make_array(result.patientId)),
+            kvp("1", make_array(result.studyId)),
+            kvp("2", make_array(seriesId)),
+            kvp("3", make_array()),
+
+            kvp("sorts", make_array()),
+            kvp("instancePublicId", hashInstance)
           );
 
           mongocxx::model::insert_one insert_series{series_document.view()};
@@ -1903,16 +1784,68 @@ namespace OrthancPlugins
           kvp("internalId", instanceId), 
           kvp("resourceType", 3),
           kvp("publicId", hashInstance),
-          kvp("parentId", result.seriesId)
+          kvp("parentId", result.seriesId),
+
+          kvp("0", make_array(result.patientId)),
+          kvp("1", make_array(result.studyId)),
+          kvp("2", make_array(result.seriesId)),
+          kvp("3", make_array(instanceId)),
+
+          kvp("instancePublicId", hashInstance)
         );
 
         mongocxx::model::insert_one insert_instance{instance_document.view()};
-        bulk.append(insert_instance); 
-
-        bulk.execute();
+        bulk.append(insert_instance);
 
         result.isNewInstance = true;
         result.instanceId = instanceId;
+
+        if (patient) {
+          auto find_patient_document = make_document(kvp("internalId", patient->view()["internalId"].get_int64().value));
+          auto update_patient_document = make_document(
+            kvp("$addToSet", make_document(
+              kvp("0", result.patientId),
+              kvp("1", result.studyId),
+              kvp("2", result.seriesId),
+              kvp("3", result.instanceId)
+            ))
+          );
+
+          mongocxx::model::update_one update_patient{find_patient_document.view(), update_patient_document.view()};
+          bulk.append(update_patient);
+        } 
+
+        if (study) {
+          auto find_study_document = make_document(kvp("internalId", study->view()["internalId"].get_int64().value));
+          auto update_study_document = make_document(
+            kvp("$addToSet", make_document(
+              kvp("0", result.patientId),
+              kvp("1", result.studyId),
+              kvp("2", result.seriesId),
+              kvp("3", result.instanceId)
+            ))
+          );
+
+          mongocxx::model::update_one update_study{find_study_document.view(), update_study_document.view()};
+          bulk.append(update_study);
+        }
+
+        if (series) {
+          auto find_series_document = make_document(kvp("internalId", series->view()["internalId"].get_int64().value));
+          auto update_series_document = make_document(
+            kvp("$addToSet", make_document(
+              kvp("0", result.patientId),
+              kvp("1", result.studyId),
+              kvp("2", result.seriesId),
+              kvp("3", result.instanceId)
+            ))
+          );
+
+          mongocxx::model::update_one update_series{find_series_document.view(), update_series_document.view()};
+          bulk.append(update_series);
+        }
+
+        bulk.execute();
 
         // recycle check
         auto recycleCollection = db["PatientRecyclingOrder"];
@@ -1937,7 +1870,7 @@ namespace OrthancPlugins
             int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
             auto recycle_document = make_document(
               kvp("id", seq),
-              kvp("patientId", result.patientId )
+              kvp("patientId", result.patientId)
             );
 
             recycleCollection.insert_one(recycle_document.view());
@@ -1956,6 +1889,7 @@ namespace OrthancPlugins
     auto db = (*conn)[dbname_];
 
     auto collection = db[collectionName];
+    auto resourceCollection = db["Resources"];
     auto bulk = collection.create_bulk_write();
 
     for (uint32_t i = 0; i < count; i++)
@@ -1969,6 +1903,16 @@ namespace OrthancPlugins
 
       mongocxx::model::insert_one insert_op{doc.view()};
       bulk.append(insert_op);
+
+      // study and series date and time for sorting
+      if (collectionName == "MainDicomTags" && tags[i].group == 8 && (tags[i].element == 32 || tags[i].element == 48 || tags[i].element == 33 || tags[i].element == 49)) {
+        auto resource_find = make_document(kvp("internalId", tags[i].resource));
+        auto resource_update = make_document(
+          kvp("$addToSet", make_document(kvp("sorts", tags[i].value)))
+        );
+
+        resourceCollection.update_one(resource_find.view(), resource_update.view());
+      }
     }
 
     if (count > 0) bulk.execute();
