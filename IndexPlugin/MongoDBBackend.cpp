@@ -1453,9 +1453,12 @@ namespace OrthancPlugins
          
 
         case OrthancPluginConstraintType_Wildcard:
-          current_document.append(
-            kvp("$regex", ConvertWildcardToRegex(constraint.values[0]))
-          );
+          if (constraint.values[0] != "*"){
+            current_document.append(
+              kvp("$regex", ConvertWildcardToRegex(constraint.values[0]))
+            );
+          }
+
           break;
 
         default:
@@ -1609,6 +1612,16 @@ namespace OrthancPlugins
       stages.replace_root(resource_replace_root_stage.view());
       stages.match(match_resources_stage.view());
     }
+
+    // final stages
+    auto group_resources = make_document(
+      kvp("_id", "$internalId"), 
+      kvp("item", make_document(kvp("$first", "$$ROOT")))
+    );
+    auto replace_root = make_document(kvp("newRoot", "$item"));
+
+    stages.group(group_resources.view());
+    stages.replace_root(replace_root.view());
 
     // sort of the query by study or series
     if (queryLevel == OrthancPluginResourceType_Study || queryLevel == OrthancPluginResourceType_Series) {
