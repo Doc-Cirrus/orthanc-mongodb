@@ -1405,14 +1405,26 @@ namespace OrthancPlugins
 
     size_t normalCount = 0;
     size_t identifierCount = 0;
+    bool identifierExact = false;
 
     std::map<std::string, bsoncxx::builder::basic::document> criterias;
+    std::vector<OrthancPluginDatabaseConstraint> lookup_sorted(lookup.size());
 
-    for (size_t i = 0; i < lookup.size(); i++) {
-      OrthancPluginDatabaseConstraint constraint = lookup[i];
+    partial_sort_copy(std::begin(lookup), std::end(lookup), std::begin(lookup_sorted), std::end(lookup_sorted), [queryLevel](OrthancPluginDatabaseConstraint left, OrthancPluginDatabaseConstraint right) {
+        if (left.level == queryLevel && right.level != queryLevel) return true;
+        else return false;
+    });  
+
+    for (size_t i = 0; i < lookup_sorted.size(); i++) {
+      OrthancPluginDatabaseConstraint constraint = lookup_sorted[i];
 
       auto case_sensitive_option = constraint.isCaseSensitive ? "" : "i";
       auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
+
+      if (identifierExact && constraint.type == OrthancPluginConstraintType_Equal && constraint.isIdentifierTag == 1) break;
+      if (constraint.level == queryLevel && constraint.type == OrthancPluginConstraintType_Equal && constraint.isIdentifierTag == 1) {
+        identifierExact = true;
+      }
 
       if (criterias.find(query_identifier) == criterias.end()) {
         criterias[query_identifier] = std::move(bsoncxx::builder::basic::document{});
@@ -1424,9 +1436,12 @@ namespace OrthancPlugins
       {
         case OrthancPluginConstraintType_Equal:
           current_document.append(
-            kvp("$regex", constraint.values[0]),
-            kvp("$options", case_sensitive_option)
+            kvp("$eq", constraint.values[0])
           );
+            /* TODO see what to do with slow regex issue
+            kvp("$regex", constraint.values[0])
+            kvp("$options", case_sensitive_option)
+            */
           break;
 
         case OrthancPluginConstraintType_SmallerOrEqual:
@@ -1466,9 +1481,9 @@ namespace OrthancPlugins
       }
     }
 
-    for (size_t i = 0; i < lookup.size(); i++)
+    for (size_t i = 0; i < lookup_sorted.size(); i++)
     {
-      OrthancPluginDatabaseConstraint constraint = lookup[i];
+      OrthancPluginDatabaseConstraint constraint = lookup_sorted[i];
 
       auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
       auto current_document_query = criterias.find(query_identifier);
