@@ -189,6 +189,193 @@ TEST_F (MongoDBBackendTest, Resource)
     ASSERT_FALSE(backend_->LookupAttachment(childId, 0));
 }
 
+#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE)      // Macro introduced in 1.3.1
+#  if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 5, 4)
+TEST_F (MongoDBBackendTest, LookupResourceAndParent)
+{
+    OrthancPluginResourceType type;
+    std::string parentPublicId;
+    bool lookup;
+
+    const char *testParentPublicId = "testParentPublicId";
+    const char *testChildPublicId = "testChildPublicId";
+
+    int64_t id = 0;
+    int64_t parentId = backend_->CreateResource(testParentPublicId, OrthancPluginResourceType_Series);
+    int64_t childId = backend_->CreateResource(testChildPublicId, OrthancPluginResourceType_Patient);
+
+    backend_->AttachChild(parentId, childId);
+
+    lookup = backend_->LookupResourceAndParent(id, type, parentPublicId, testChildPublicId);
+    ASSERT_TRUE(lookup);
+    ASSERT_EQ(childId, id);
+    ASSERT_EQ(testParentPublicId, parentPublicId);
+    ASSERT_EQ(OrthancPluginResourceType_Patient, type);
+
+    lookup = backend_->LookupResourceAndParent(id, type, parentPublicId, testParentPublicId);
+    ASSERT_TRUE(lookup);
+    ASSERT_EQ(parentId, id);
+    ASSERT_EQ("", parentPublicId);
+    ASSERT_EQ(OrthancPluginResourceType_Series, type);
+}
+#  endif
+#endif
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+TEST_F (MongoDBBackendTest, LookupResources)
+{
+    std::vector<int64_t> resources =
+    {
+        backend_->CreateResource("a", OrthancPluginResourceType_Study),
+        backend_->CreateResource("b", OrthancPluginResourceType_Study),
+        backend_->CreateResource("c", OrthancPluginResourceType_Study),
+        backend_->CreateResource("d", OrthancPluginResourceType_Series),
+        backend_->CreateResource("e", OrthancPluginResourceType_Series),
+        backend_->CreateResource("f", OrthancPluginResourceType_Series),
+        backend_->CreateResource("g", OrthancPluginResourceType_Instance),
+    };
+
+    backend_->SetIdentifierTag(resources[0], 0, 1, "tag");
+    backend_->SetIdentifierTag(resources[1], 0, 1, "tag");
+    backend_->SetIdentifierTag(resources[2], 0, 1, "tag");
+    backend_->SetMainDicomTag(resources[3], 0, 1, "tag");
+    backend_->SetMainDicomTag(resources[4], 0, 1, "tag");
+    backend_->SetMainDicomTag(resources[5], 1, 0, "tag");
+    backend_->SetMainDicomTag(resources[6], 1, 1, "tag");
+
+    DatabaseAnswerCount = 0;
+
+    const char *pattern[] = {"tag", ""};
+
+    std::vector<OrthancPluginDatabaseConstraint> constraints
+    {
+        {
+            .level = OrthancPluginResourceType_Study,
+            .tagGroup = 0,
+            .tagElement = 1,
+            .isIdentifierTag = 1,
+            .isCaseSensitive = 1,
+            .isMandatory = 0,
+            .type = OrthancPluginConstraintType_Equal,
+            .valuesCount = 1,
+            .values = pattern
+        }
+    };
+
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Study, resources.size(), 0);
+    ASSERT_EQ(3, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].type = OrthancPluginConstraintType_SmallerOrEqual;
+    constraints[0].isCaseSensitive = 0;
+    /**
+        .level = OrthancPluginResourceType_Study,
+        .tagGroup = 0,
+        .tagElement = 1,
+        .isIdentifierTag = 1,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_SmallerOrEqual,
+        .valuesCount = 1,
+        .values = pattern
+     **/
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Study, resources.size(), 0);
+    ASSERT_EQ(3, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].type = OrthancPluginConstraintType_GreaterOrEqual;
+    constraints[0].level = OrthancPluginResourceType_Series;
+    constraints[0].isIdentifierTag = 0;
+    /**
+        .level = OrthancPluginResourceType_Series,
+        .tagGroup = 0,
+        .tagElement = 1,
+        .isIdentifierTag = 0,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_GreaterOrEqual,
+        .valuesCount = 1,
+        .values = pattern
+     **/
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Series, resources.size(), 0);
+    ASSERT_EQ(2, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].type = OrthancPluginConstraintType_Wildcard;
+    /**
+        .level = OrthancPluginResourceType_Series,
+        .tagGroup = 0,
+        .tagElement = 1,
+        .isIdentifierTag = 0,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_Wildcard,
+        .valuesCount = 1,
+        .values = pattern
+     **/
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Series, resources.size(), 0);
+    ASSERT_EQ(2, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].type = OrthancPluginConstraintType_List;
+    constraints[0].valuesCount = 2;
+    /**
+        .level = OrthancPluginResourceType_Series,
+        .tagGroup = 0,
+        .tagElement = 1,
+        .isIdentifierTag = 0,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_List,
+        .valuesCount = 2,
+        .values = pattern
+     **/
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Series, resources.size(), 0);
+    ASSERT_EQ(2, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].tagGroup = 1;
+    constraints[0].tagElement = 0;
+    constraints[0].valuesCount = 1;
+    /**
+        .level = OrthancPluginResourceType_Series,
+        .tagGroup = 1,
+        .tagElement = 0,
+        .isIdentifierTag = 0,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_List,
+        .valuesCount = 1,
+        .values = pattern
+     **/
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Series, resources.size(), 0);
+    ASSERT_EQ(1, DatabaseAnswerCount);
+
+    DatabaseAnswerCount = 0;
+
+    constraints[0].tagElement = 1;
+    /**
+        .level = OrthancPluginResourceType_Series,
+        .tagGroup = 1,
+        .tagElement = 1,
+        .isIdentifierTag = 0,
+        .isCaseSensitive = 0,
+        .isMandatory = 0,
+        .type = OrthancPluginConstraintType_List,
+        .valuesCount = 1,
+        .values = pattern
+     **/
+    backend_->AttachChild(resources[6], backend_->CreateResource("", OrthancPluginResourceType_Instance));
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Instance, resources.size(), 1);
+    ASSERT_EQ(1, DatabaseAnswerCount);
+}
+#endif
+
 OrthancPluginChange change = {
     0, //seq;
     0, //changeType;
@@ -199,9 +386,12 @@ OrthancPluginChange change = {
 
 TEST_F (MongoDBBackendTest, Changes)
 {
+    int changesCounter = 10;
     int64_t id = backend_->CreateResource(change.publicId, OrthancPluginResourceType_Patient);
 
-    for (int i = 0; i < 10; i++)
+    ASSERT_EQ(0, backend_->GetLastChangeIndex());
+
+    for (int i = 0; i < changesCounter; i++)
     {
         backend_->LogChange(change);
     }
@@ -221,6 +411,7 @@ TEST_F (MongoDBBackendTest, Changes)
     DatabaseAnswerCount = 0;
     backend_->GetLastChange();
     ASSERT_EQ(DatabaseAnswerCount, 1);
+    ASSERT_EQ(changesCounter, backend_->GetLastChangeIndex());
 
     backend_->ClearChanges();
 }
@@ -284,6 +475,83 @@ TEST_F (MongoDBBackendTest, Metadata)
     backend_->DeleteMetadata(id, 0);
 
     ASSERT_FALSE(backend_->LookupMetadata(res, id, 0));
+}
+
+#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE)      // Macro introduced in 1.3.1
+#  if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 5, 4)
+TEST_F (MongoDBBackendTest, AllMetadata)
+{
+    std::map<int32_t, std::string> md;
+
+    int64_t id = backend_->CreateResource(change.publicId, OrthancPluginResourceType_Patient);
+
+    backend_->GetAllMetadata(md, id);
+    ASSERT_EQ(0u, md.size());
+
+    backend_->SetMetadata(id, 3, "PINNACLE");
+    backend_->GetAllMetadata(md, id);
+    ASSERT_EQ(1u, md.size());
+    ASSERT_EQ("PINNACLE", md[3]);
+    backend_->SetMetadata(id, 5, "TUTU");
+    backend_->GetAllMetadata(md, id);
+    ASSERT_EQ(2u, md.size());
+
+    std::map<int32_t, std::string> md2;
+    backend_->GetAllMetadata(md2, id);
+    ASSERT_EQ(2u, md2.size());
+    ASSERT_EQ("TUTU", md2[5]);
+    ASSERT_EQ("PINNACLE", md2[3]);
+
+    md.clear();
+    md2.clear();
+
+    backend_->DeleteMetadata(id, 5);
+    backend_->GetAllMetadata(md, id);
+    ASSERT_EQ(1u, md.size());
+    ASSERT_EQ("PINNACLE", md[3]);
+
+    backend_->GetAllMetadata(md2, id);
+    ASSERT_EQ(1u, md2.size());
+    ASSERT_EQ("PINNACLE", md2[3]);
+
+    backend_->DeleteMetadata(id, 3);
+
+    md.clear();
+
+    backend_->GetAllMetadata(md, id);
+    ASSERT_EQ(0u, md.size());
+}
+#  endif
+#endif
+
+TEST_F (MongoDBBackendTest, ChildrenMetadata)
+{
+    std::list<std::string> values;
+
+    int64_t parentId = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+
+    int64_t id1 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+    int64_t id2 = backend_->CreateResource("", OrthancPluginResourceType_Patient);
+
+    backend_->AttachChild(parentId, id1);
+    backend_->AttachChild(parentId, id2);
+
+    backend_->GetChildrenMetadata(values, parentId, 0);
+    ASSERT_EQ(values.size(), 0);
+
+    backend_->SetMetadata(id1, 0, "meta");
+    backend_->SetMetadata(id2, 0, "meta");
+
+    backend_->GetChildrenMetadata(values, parentId, 0);
+    ASSERT_EQ(values.size(), 2);
+
+    backend_->DeleteMetadata(id1, 0);
+    backend_->DeleteMetadata(id2, 0);
+
+    values.clear();
+
+    backend_->GetChildrenMetadata(values, parentId, 0);
+    ASSERT_EQ(values.size(), 0);
 }
 
 TEST_F(MongoDBBackendTest, GlobalProperty)
