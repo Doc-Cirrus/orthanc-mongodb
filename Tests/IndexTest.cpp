@@ -579,14 +579,30 @@ TEST_F (MongoDBBackendTest, ProtectedPatient)
     ASSERT_EQ(isProtected, false);
 
     int64_t rId;
-    ASSERT_FALSE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(rId, id2); // now patient with id1 is the newest in PatientRecyclingOrder
+
     backend_->SetProtectedPatient(id1, true);
     backend_->SetProtectedPatient(id2, true);
+
+    rId = 0;
+    ASSERT_FALSE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(0, rId);
+
+    backend_->SetProtectedPatient(id1, false);
+    backend_->SetProtectedPatient(id2, false);
 
     ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
     ASSERT_EQ(rId, id1);
 
+    rId = 0;
     ASSERT_TRUE(backend_->SelectPatientToRecycle(rId, id1));
+    ASSERT_EQ(rId, id2);
+
+    rId = 0;
+
+    backend_->SetProtectedPatient(id1, true);
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
     ASSERT_EQ(rId, id2);
 }
 
