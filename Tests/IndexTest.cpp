@@ -888,54 +888,6 @@ TEST_F (MongoDBBackendTest, CreateInstance)
 }
 #endif
 
-class ConfigurationTest : public ::testing::Test {
- protected:
-
-    std::unique_ptr<OrthancPluginContext> context_;
-
-  virtual void SetUp()
-  {
-    context_ = std::make_unique<OrthancPluginContext>();
-    context_->InvokeService = &PluginServiceMock;
-  }
-
-  // virtual void TearDown() {}
-
-};
-
-TEST_F(ConfigurationTest, Configuration)
-{
-    std::string conf_str = R"(
-        {
-            "MongoDB" : {
-                "host" : "customhost",
-                "port" : 27001,
-                "user" : "user",
-                "database" : "database",
-                "password" : "password",
-                "authenticationDatabase" : "admin",
-                "ChunkSize" : 1000
-            }
-        }
-    )";
-
-    Json::Reader r;
-    Json::Value v;
-    r.parse(conf_str, v);
-
-    std::unique_ptr<OrthancPlugins::MongoDBConnection> connection =
-            std::unique_ptr<OrthancPlugins::MongoDBConnection>(OrthancPlugins::CreateConnection(context_.get(), v));
-
-    ASSERT_EQ("mongodb://user:password@customhost:27001/database?authSource=admin", connection->GetConnectionUri());
-    ASSERT_EQ(connection->GetHost(), "customhost");
-    ASSERT_EQ(connection->GetTcpPort(), 27001);
-    ASSERT_EQ(connection->GetUser(), "user");
-    ASSERT_EQ(connection->GetPassword(), "password");
-    ASSERT_EQ(connection->GetDatabase(), "database");
-    ASSERT_EQ(connection->GetAuthenticationDatabase(), "admin");
-    ASSERT_EQ(connection->GetChunkSize(), 1000);
-}
-
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

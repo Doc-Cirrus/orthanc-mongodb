@@ -179,12 +179,18 @@ IF (BUILD_TESTS)
         "Tests/StorageTest.cpp"
   )
 
+  set(TEST_SOURCES_CONFIGURATION
+        "Tests/ConfigurationTest.cpp"
+  )
+
   IF (UNIX AND NOT APPLE)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -lm")
   ENDIF()
 
   add_executable(IndexTest ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES} ${TEST_SOURCES_INDEX})
   add_executable(StorageTest ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES} ${TEST_SOURCES_STORAGE})
+  add_executable(ConfigurationTest ${CORE_SOURCES} ${TEST_SOURCES_CONFIGURATION})
   target_link_libraries(IndexTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
   target_link_libraries(StorageTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
+  target_link_libraries(ConfigurationTest ${APPLE_LIBS} ${LIBS} ${GOOGLE_TEST_LIB})
 ENDIF()
