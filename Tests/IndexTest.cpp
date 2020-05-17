@@ -217,6 +217,9 @@ TEST_F (MongoDBBackendTest, LookupResourceAndParent)
     ASSERT_EQ(parentId, id);
     ASSERT_EQ("", parentPublicId);
     ASSERT_EQ(OrthancPluginResourceType_Series, type);
+
+    lookup = backend_->LookupResourceAndParent(id, type, parentPublicId, "");
+    ASSERT_FALSE(lookup);
 }
 #  endif
 #endif
@@ -558,8 +561,13 @@ TEST_F(MongoDBBackendTest, GlobalProperty)
 {
     backend_->SetGlobalProperty(0, "property");
     std::string p;
-    backend_->LookupGlobalProperty(p, 0);
+    ASSERT_TRUE(backend_->LookupGlobalProperty(p, 0));
     ASSERT_EQ(p, "property");
+
+    p.clear();
+
+    ASSERT_FALSE(backend_->LookupGlobalProperty(p, 1));
+    ASSERT_TRUE(p.empty());
 }
 
 TEST_F (MongoDBBackendTest, ProtectedPatient)
@@ -604,6 +612,11 @@ TEST_F (MongoDBBackendTest, ProtectedPatient)
     backend_->SetProtectedPatient(id1, true);
     ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
     ASSERT_EQ(rId, id2);
+
+    rId = 0;
+
+    backend_->SetProtectedPatient(id2, true);
+    ASSERT_FALSE(backend_->SelectPatientToRecycle(rId, id1));
 }
 
 TEST_F (MongoDBBackendTest, MainDicomTags)
@@ -814,10 +827,10 @@ TEST_F (MongoDBBackendTest, CreateInstance)
 
     // Create instance with existing hash
     backend_->CreateInstance(output,
-                        "",
-                        "",
-                        "",
-                        instanceHashes[3].first.c_str());
+                            "",
+                            "",
+                            "",
+                            instanceHashes[3].first.c_str());
 
     ASSERT_FALSE(output.isNewInstance);
     ASSERT_EQ(instanceHashes[3].second, output.instanceId);
@@ -829,10 +842,10 @@ TEST_F (MongoDBBackendTest, CreateInstance)
     studyHash = OrthancPlugins::GenerateUuid();
     instanceHash = OrthancPlugins::GenerateUuid();
     backend_->CreateInstance(output,
-                        patientHash.c_str(),
-                        studyHash.c_str(),
-                        instanceHashes[2].first.c_str(),
-                        instanceHash.c_str());
+                            patientHash.c_str(),
+                            studyHash.c_str(),
+                            instanceHashes[2].first.c_str(),
+                            instanceHash.c_str());
 
     ASSERT_TRUE(output.isNewPatient);
     ASSERT_TRUE(output.isNewStudy);
@@ -847,10 +860,10 @@ TEST_F (MongoDBBackendTest, CreateInstance)
     seriesHash = OrthancPlugins::GenerateUuid();
     instanceHash = OrthancPlugins::GenerateUuid();
     backend_->CreateInstance(output,
-                        patientHash.c_str(),
-                        instanceHashes[1].first.c_str(),
-                        seriesHash.c_str(),
-                        instanceHash.c_str());
+                            patientHash.c_str(),
+                            instanceHashes[1].first.c_str(),
+                            seriesHash.c_str(),
+                            instanceHash.c_str());
 
     ASSERT_TRUE(output.isNewPatient);
     ASSERT_FALSE(output.isNewStudy);
@@ -870,10 +883,10 @@ TEST_F (MongoDBBackendTest, CreateInstance)
     seriesHash = OrthancPlugins::GenerateUuid();
     instanceHash = OrthancPlugins::GenerateUuid();
     backend_->CreateInstance(output,
-                        instanceHashes[0].first.c_str(),
-                        studyHash.c_str(),
-                        seriesHash.c_str(),
-                        instanceHash.c_str());
+                            instanceHashes[0].first.c_str(),
+                            studyHash.c_str(),
+                            seriesHash.c_str(),
+                            instanceHash.c_str());
 
     ASSERT_FALSE(output.isNewPatient);
     ASSERT_EQ(instanceHashes[0].second, output.patientId);
@@ -923,7 +936,6 @@ TEST_F (MongoDBBackendTest, SetResourcesContent)
             .element = 0,
             .value = metadataVal2.c_str()
         },
-
     };
     std::vector<OrthancPluginResourcesContentMetadata> metadata =
     {
