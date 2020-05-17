@@ -696,6 +696,198 @@ TEST_F (MongoDBBackendTest, LookupRange)
     backend_->DeleteResource(parentId); // delete resources
 }
 
+TEST_F (MongoDBBackendTest, TagMostRecentPatient)
+{
+    std::vector<int64_t> patients =
+    {
+        backend_->CreateResource("hash1", OrthancPluginResourceType_Patient),
+        backend_->CreateResource("hash2", OrthancPluginResourceType_Patient),
+        backend_->CreateResource("hash3", OrthancPluginResourceType_Patient),
+    };
+
+    int64_t rId;
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(patients[0], rId);
+
+    rId = 0;
+
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId, patients[0]));
+    ASSERT_EQ(patients[1], rId);
+
+    rId = 0;
+
+    // Tag patients[0] as the most recent
+    backend_->TagMostRecentPatient(patients[0]);
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(patients[1], rId);
+
+    rId = 0;
+
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId, patients[1]));
+    ASSERT_EQ(patients[2], rId);
+
+    rId = 0;
+
+    // Tag patients[1] as the most recent
+    backend_->TagMostRecentPatient(patients[1]);
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(patients[2], rId);
+
+    // Delete patients[0]
+    backend_->DeleteResource(patients[0]);
+
+    rId = 0;
+
+    // Tag patients[0] as the most recent - no effect
+    backend_->TagMostRecentPatient(patients[0]);
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(patients[2], rId);
+
+    rId = 0;
+
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId, patients[2]));
+    ASSERT_EQ(patients[1], rId);
+
+    // Delete patients[2]
+    backend_->DeleteResource(patients[2]);
+
+    rId = 0;
+
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(patients[1], rId);
+
+    // Delete patients[1]
+    backend_->DeleteResource(patients[1]);
+
+    rId = 0;
+
+    ASSERT_FALSE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(0, rId);
+}
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+TEST_F (MongoDBBackendTest, CreateInstance)
+{
+    ASSERT_TRUE(backend_->HasCreateInstance());
+
+    std::string patientHash, studyHash, seriesHash, instanceHash;
+
+    // Store hash and id for each resource type of first created instance
+    std::vector<std::pair<std::string, int64_t>> instanceHashes =
+    {
+        // Patient hash
+        std::make_pair(OrthancPlugins::GenerateUuid(), 0),
+        // Study hash
+        std::make_pair(OrthancPlugins::GenerateUuid(), 0),
+        // Series hash
+        std::make_pair(OrthancPlugins::GenerateUuid(), 0),
+        // Instance hash
+        std::make_pair(OrthancPlugins::GenerateUuid(), 0)
+    };
+
+    OrthancPluginCreateInstanceResult output;
+    memset(&output, 0, sizeof(output));
+
+    backend_->CreateInstance(output,
+                            instanceHashes[0].first.c_str(),
+                            instanceHashes[1].first.c_str(),
+                            instanceHashes[2].first.c_str(),
+                            instanceHashes[3].first.c_str());
+
+    ASSERT_TRUE(output.isNewPatient);
+    ASSERT_NE(0, output.patientId);
+    instanceHashes[0].second = output.patientId;
+
+    ASSERT_TRUE(output.isNewStudy);
+    ASSERT_NE(0, output.studyId);
+    instanceHashes[1].second = output.studyId;
+
+    ASSERT_TRUE(output.isNewSeries);
+    ASSERT_NE(0, output.seriesId);
+    instanceHashes[2].second = output.seriesId;
+
+    ASSERT_TRUE(output.isNewInstance);
+    ASSERT_NE(0, output.instanceId);
+    instanceHashes[3].second = output.instanceId;
+
+    memset(&output, 0, sizeof(output));
+
+    // Create instance with existing hash
+    backend_->CreateInstance(output,
+                        "",
+                        "",
+                        "",
+                        instanceHashes[3].first.c_str());
+
+    ASSERT_FALSE(output.isNewInstance);
+    ASSERT_EQ(instanceHashes[3].second, output.instanceId);
+
+    memset(&output, 0, sizeof(output));
+
+    // Create new instance with existing series hash
+    patientHash = OrthancPlugins::GenerateUuid();
+    studyHash = OrthancPlugins::GenerateUuid();
+    instanceHash = OrthancPlugins::GenerateUuid();
+    backend_->CreateInstance(output,
+                        patientHash.c_str(),
+                        studyHash.c_str(),
+                        instanceHashes[2].first.c_str(),
+                        instanceHash.c_str());
+
+    ASSERT_TRUE(output.isNewPatient);
+    ASSERT_TRUE(output.isNewStudy);
+    ASSERT_FALSE(output.isNewSeries);
+    ASSERT_EQ(instanceHashes[2].second, output.seriesId);
+    ASSERT_TRUE(output.isNewInstance);
+
+    memset(&output, 0, sizeof(output));
+
+    // Create new instance with existing study hash
+    patientHash = OrthancPlugins::GenerateUuid();
+    seriesHash = OrthancPlugins::GenerateUuid();
+    instanceHash = OrthancPlugins::GenerateUuid();
+    backend_->CreateInstance(output,
+                        patientHash.c_str(),
+                        instanceHashes[1].first.c_str(),
+                        seriesHash.c_str(),
+                        instanceHash.c_str());
+
+    ASSERT_TRUE(output.isNewPatient);
+    ASSERT_FALSE(output.isNewStudy);
+    ASSERT_EQ(instanceHashes[1].second, output.studyId);
+    ASSERT_TRUE(output.isNewSeries);
+    ASSERT_TRUE(output.isNewInstance);
+
+    memset(&output, 0, sizeof(output));
+
+    int64_t rId;
+    // Check that the first created patient is the first one in PatientRecyclingOrder
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_EQ(instanceHashes[0].second, rId);
+
+    // Create new instance with existing patient hash
+    studyHash = OrthancPlugins::GenerateUuid();
+    seriesHash = OrthancPlugins::GenerateUuid();
+    instanceHash = OrthancPlugins::GenerateUuid();
+    backend_->CreateInstance(output,
+                        instanceHashes[0].first.c_str(),
+                        studyHash.c_str(),
+                        seriesHash.c_str(),
+                        instanceHash.c_str());
+
+    ASSERT_FALSE(output.isNewPatient);
+    ASSERT_EQ(instanceHashes[0].second, output.patientId);
+    ASSERT_TRUE(output.isNewStudy);
+    ASSERT_TRUE(output.isNewSeries);
+    ASSERT_TRUE(output.isNewInstance);
+
+    rId = 0;
+    // Check that now the first created patient is not the first one in PatientRecyclingOrder
+    ASSERT_TRUE(backend_->SelectPatientToRecycle(rId));
+    ASSERT_NE(instanceHashes[0].second, rId);
+}
+#endif
+
 class ConfigurationTest : public ::testing::Test {
  protected:
 
