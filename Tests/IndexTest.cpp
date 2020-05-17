@@ -888,6 +888,95 @@ TEST_F (MongoDBBackendTest, CreateInstance)
 }
 #endif
 
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+TEST_F (MongoDBBackendTest, SetResourcesContent)
+{
+    std::string metadataVal1 = OrthancPlugins::GenerateUuid();
+    std::string metadataVal2 = OrthancPlugins::GenerateUuid();
+
+    std::vector<OrthancPluginResourcesContentTags> identifierTags =
+    {
+        {
+            .resource = 1,
+            .group = 0,
+            .element = 0,
+            .value = metadataVal1.c_str()
+        },
+        {
+            .resource = 2,
+            .group = 0,
+            .element = 0,
+            .value = metadataVal2.c_str()
+        },
+    };
+    std::vector<OrthancPluginResourcesContentTags> mainDicomTags =
+    {
+        {
+            .resource = 1,
+            .group = 1,
+            .element = 0,
+            .value = metadataVal1.c_str()
+        },
+        {
+            .resource = 1,
+            .group = 1,
+            .element = 0,
+            .value = metadataVal2.c_str()
+        },
+
+    };
+    std::vector<OrthancPluginResourcesContentMetadata> metadata =
+    {
+        {
+            .resource = 1,
+            .metadata = 0,
+            .value = metadataVal1.c_str()
+        },
+        {
+            .resource = 2,
+            .metadata = 0,
+            .value = metadataVal2.c_str()
+        },
+    };
+
+    backend_->SetResourcesContent(identifierTags.size(), &identifierTags[0],
+                                  mainDicomTags.size(), &mainDicomTags[0],
+                                  metadata.size(), &metadata[0]);
+
+    std::list<int64_t> list;
+    OrthancPluginResourceType dummy;
+
+    // Test identifier tags
+    backend_->LookupIdentifier(list, dummy, 0, 0, OrthancPluginIdentifierConstraint_Equal, metadataVal1.c_str());
+    ASSERT_EQ(1, list.size());
+    ASSERT_EQ(1, list.front());
+
+    list.clear();
+
+    backend_->LookupIdentifier(list, dummy, 0, 0, OrthancPluginIdentifierConstraint_Equal, metadataVal2.c_str());
+    ASSERT_EQ(1, list.size());
+    ASSERT_EQ(2, list.front());
+
+    list.clear();
+    DatabaseAnswerCount = 0;
+
+    // Test main dicom tags
+    backend_->GetMainDicomTags(1);
+    ASSERT_EQ(DatabaseAnswerCount, 2);
+
+    DatabaseAnswerCount = 0;
+
+    std::string res;
+
+    // Test metadata
+    ASSERT_TRUE(backend_->LookupMetadata(res, 1, 0));
+    ASSERT_EQ(metadataVal1, res);
+
+    ASSERT_TRUE(backend_->LookupMetadata(res, 2, 0));
+    ASSERT_EQ(metadataVal2, res);
+}
+#endif
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
