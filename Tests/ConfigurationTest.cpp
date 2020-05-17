@@ -93,6 +93,39 @@ TEST_F(ConfigurationTest, Configuration)
   ASSERT_EQ(connection->GetChunkSize(), 1000);
 }
 
+TEST_F(ConfigurationTest, Parsers)
+{
+  int intTest = 12432;
+  bool booleanTest = true;
+  std::string stringTest = "string for testing";
+
+  std::string test_str = R"(
+        {
+            "MongoDB" : {
+                "testInteger" : 12432,
+                "testBoolean" : true,
+                "testString" : "string for testing"
+            }
+        }
+    )";
+
+  Json::Reader r;
+  Json::Value configuration;
+  r.parse(test_str, configuration);
+
+  auto obj = configuration["MongoDB"];
+
+  ASSERT_EQ(intTest, OrthancPlugins::GetIntegerValue(obj, "testInteger", 0));
+  ASSERT_EQ(0, OrthancPlugins::GetIntegerValue(obj, "testIntegerNotExisting", 0));
+
+  ASSERT_EQ(booleanTest, OrthancPlugins::GetBooleanValue(obj, "testBoolean", 0));
+  ASSERT_EQ(0, OrthancPlugins::GetBooleanValue(obj, "testBooleanNotExisting", 0));
+
+  std::string empty = {};
+  ASSERT_EQ(stringTest, OrthancPlugins::GetStringValue(obj, "testString", empty));
+  ASSERT_EQ(empty, OrthancPlugins::GetStringValue(obj, "testStringNotExisting", empty));
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
