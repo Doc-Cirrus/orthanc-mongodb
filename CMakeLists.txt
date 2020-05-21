@@ -6,6 +6,7 @@ set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.5.7" CACHE STRING "Orthanc 
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
+set(AUTO_INSTALL_DEPENDENCIES OFF CACHE BOOL "Option to install some required libraries automatically. Libraries wiill be installed in project build folder.")
 
 set(ORTHANC_OPTIMAL_VERSION_MAJOR    1)
 set(ORTHANC_OPTIMAL_VERSION_MINOR    5)
@@ -26,16 +27,21 @@ IF ( MSVC )
 ELSE ()
     #rely on pkg-config
     include(FindPkgConfig)
-    pkg_search_module(MONGOCLIB REQUIRED libmongoc-1.0)
-    pkg_search_module(JSONCPP REQUIRED jsoncpp)
-    pkg_search_module(OPENSSL openssl)
-    IF (LINK_STATIC_LIBS)
+    IF (NOT AUTO_INSTALL_DEPENDENCIES)
+      pkg_search_module(MONGOCLIB REQUIRED libmongoc-1.0)
+      IF (LINK_STATIC_LIBS)
         pkg_search_module(BSONCXX REQUIRED libbsoncxx-static)
         pkg_search_module(MONGOCXX REQUIRED libmongocxx-static)
-    ELSE()
+      ELSE()
         pkg_search_module(BSONCXX REQUIRED libbsoncxx)
         pkg_search_module(MONGOCXX REQUIRED libmongocxx)
-    ENDIF()
+      ENDIF()
+    ELSE ()
+      # Install and build next components: libbson, libmongoc, libbsoncxx, libmongocxx
+      include(CMake/autoconfig.cmake)
+    ENDIF ()
+    pkg_search_module(JSONCPP REQUIRED jsoncpp)
+    pkg_search_module(OPENSSL openssl)
     IF (OPENSSL_FOUND)
      find_library(CYRUS sasl2)
       set(LIBS ${LIBS} ${OPENSSL_LIBRARIES} "sasl2")
@@ -43,6 +49,7 @@ ELSE ()
     IF (CYRUS_FOUND)
       set(LIBS ${LIBS} ${CYRUS_LIBRARIES})
     ENDIF()
+    include_directories(${BSON_INCLUDE_DIRS})
     include_directories(${MONGOCLIB_INCLUDE_DIRS})
     include_directories(${BSONCXX_INCLUDE_DIRS})
     include_directories(${MONGOCXX_INCLUDE_DIRS})
@@ -60,7 +67,7 @@ ENDIF ()
 set(LIBJSON_LIB_NAMES  jsoncpp   )
 set(BSON_LIB_NAMES     bson-1.0  )
 set(MONGOC_LIB_NAMES   mongoc-1.0)
-set(BSONXX_LIB_NAMES   bsoncxx   )
+set(BSONCXX_LIB_NAMES   bsoncxx  )
 set(MONGOCXX_LIB_NAMES mongocxx  )
 
 IF (LINK_STATIC_LIBS)
@@ -70,7 +77,7 @@ IF (LINK_STATIC_LIBS)
     set(LIBJSON_LIB_NAMES   jsoncpp_static                ${LIBJSON_LIB_NAMES} )
     set(BSON_LIB_NAMES      bson-static-1.0 bson-1.0      ${BSON_LIB_NAMES}    )
     set(MONGOC_LIB_NAMES    mongoc-static-1.0 mongoc-1.0  ${MONGOC_LIB_NAMES}  )
-    set(BSONXX_LIB_NAMES    bsoncxx-static                ${BSONXX_LIB_NAMES}  )
+    set(BSONCXX_LIB_NAMES   bsoncxx-static                ${BSONCXX_LIB_NAMES} )
     set(MONGOCXX_LIB_NAMES  mongocxx-static               ${MONGOCXX_LIB_NAMES})
 ENDIF()
 
@@ -78,32 +85,33 @@ find_library(LIBJSON_LIBS
       NAMES ${LIBJSON_LIB_NAMES}
       PATHS "${LIBJSON_ROOT}/lib"
 )
-find_library(BSON_LIBS 
+IF (NOT AUTO_INSTALL_DEPENDENCIES)
+  find_library(BSON_LIBS
       NAMES ${BSON_LIB_NAMES}
       PATHS "${MONGOC_ROOT}/lib"
-)
-find_library(MONGOC_LIBS 
+  )
+  find_library(MONGOC_LIBS
       NAMES ${MONGOC_LIB_NAMES}
       PATHS "${MONGOC_ROOT}/lib"
-)
-find_library(BSONXX_LIBS 
-      NAMES ${BSONXX_LIB_NAMES}
+  )
+  find_library(BSONCXX_LIBS
+      NAMES ${BSONCXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
-)
-find_library(AMONGOCXX_LIBS 
+  )
+  find_library(MONGOCXX_LIBS
       NAMES ${MONGOCXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
-)
-
+  )
+ENDIF ()
 
 message("Found libraries:")
 message("    LIBJSON_LIBS   " ${LIBJSON_LIBS} )
-message("    MONGOCXX_LIBS  " ${AMONGOCXX_LIBS} )
-message("    BSONXX_LIBS    " ${BSONXX_LIBS} )
+message("    MONGOCXX_LIBS  " ${MONGOCXX_LIBS} )
+message("    BSONCXX_LIBS   " ${BSONCXX_LIBS} )
 message("    MONGOC_LIBS    " ${MONGOC_LIBS} )
 message("    BSON_LIBS      " ${BSON_LIBS})
 
-set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
+set(LIBS ${LIBS} ${LIBJSON_LIBS} ${MONGOCXX_LIBS} ${BSONCXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
 link_libraries(${LIBS})
 
 ##################################################################

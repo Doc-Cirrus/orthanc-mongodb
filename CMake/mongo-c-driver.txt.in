@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.2)
+
+project(${MONGO_C_PROJECT})
+
+include(ExternalProject)
+
+ExternalProject_Add(${MONGO_C_PROJECT}
+    GIT_REPOSITORY  "https://github.com/mongodb/mongo-c-driver.git"
+    GIT_TAG         "${MONGO_C_VERSION}"
+    GIT_PROGRESS    1
+    GIT_SHALLOW     1
+    SOURCE_DIR      "${MONGO_C_SOURCE_DIR}"
+    BINARY_DIR      "${MONGO_C_BINARY_DIR}"
+    INSTALL_DIR     "${MONGO_C_INSTALL_DIR}"
+    CMAKE_CACHE_ARGS
+        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}
+        -DCMAKE_INSTALL_PREFIX:PATH=${MONGO_C_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DENABLE_AUTOMATIC_INIT_AND_CLEANUP:BOOL=OFF
+)
