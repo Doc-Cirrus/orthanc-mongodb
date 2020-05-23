@@ -49,7 +49,7 @@ ELSE ()
     ENDIF ()
     pkg_search_module(OPENSSL openssl)
     IF (OPENSSL_FOUND)
-     find_library(CYRUS sasl2)
+      find_library(CYRUS sasl2)
       set(LIBS ${LIBS} ${OPENSSL_LIBRARIES} "sasl2")
     ENDIF()
     IF (CYRUS_FOUND)
@@ -75,7 +75,7 @@ IF (NOT AUTO_INSTALL_DEPENDENCIES)
   set(LIBJSON_LIB_NAMES  jsoncpp   )
   set(BSON_LIB_NAMES     bson-1.0  )
   set(MONGOC_LIB_NAMES   mongoc-1.0)
-  set(BSONCXX_LIB_NAMES   bsoncxx  )
+  set(BSONCXX_LIB_NAMES  bsoncxx   )
   set(MONGOCXX_LIB_NAMES mongocxx  )
 
   IF (LINK_STATIC_LIBS)
@@ -101,11 +101,11 @@ IF (NOT AUTO_INSTALL_DEPENDENCIES)
       NAMES ${MONGOC_LIB_NAMES}
       PATHS "${MONGOC_ROOT}/lib"
   )
-  find_library(BSONCXX_LIBS
+  find_library(BSONXX_LIBS
       NAMES ${BSONCXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
   )
-  find_library(MONGOCXX_LIBS
+  find_library(AMONGOCXX_LIBS
       NAMES ${MONGOCXX_LIB_NAMES}
       PATHS "${MONGOCXX_ROOT}/lib"
   )
@@ -113,12 +113,12 @@ ENDIF ()
 
 message("Found libraries:")
 message("    LIBJSON_LIBS   " ${LIBJSON_LIBS} )
-message("    MONGOCXX_LIBS  " ${MONGOCXX_LIBS} )
-message("    BSONCXX_LIBS   " ${BSONCXX_LIBS} )
+message("    MONGOCXX_LIBS  " ${AMONGOCXX_LIBS} )
+message("    BSONCXX_LIBS   " ${BSONXX_LIBS} )
 message("    MONGOC_LIBS    " ${MONGOC_LIBS} )
 message("    BSON_LIBS      " ${BSON_LIBS})
 
-set(LIBS ${LIBS} ${LIBJSON_LIBS} ${MONGOCXX_LIBS} ${BSONCXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
+set(LIBS ${LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
 link_libraries(${LIBS})
 
 ##################################################################

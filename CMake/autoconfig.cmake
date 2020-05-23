@@ -109,6 +109,12 @@ ENDIF ()
 
 # Install mongo-c-driver
 
+STRING(REGEX MATCH "-fPIC" FPIC ${CMAKE_CXX_FLAGS})
+IF(${FPIC} MATCHES "-fPIC")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+    set(CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE} "${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}} -fPIC")
+ENDIF()
+
 configure_file(
     ${CMAKE_CURRENT_LIST_DIR}/${MONGO_C_PROJECT}.txt.in
     ${MONGO_C_CONFIG_DIR}/CMakeLists.txt)
@@ -191,32 +197,33 @@ find_package(mongocxx
             REQUIRED)
 
 IF (LINK_STATIC_LIBS)
-    get_target_property(BSONCXX_LIBS mongo::bsoncxx_static LOCATION)
+    get_target_property(BSONXX_LIBS mongo::bsoncxx_static LOCATION)
     get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_static INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(MONGOCXX_LIBS mongo::mongocxx_static LOCATION)
+    get_target_property(AMONGOCXX_LIBS mongo::mongocxx_static LOCATION)
     get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_static INTERFACE_INCLUDE_DIRECTORIES)
 ELSE ()
     IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(BSONCXX_LIBS mongo::bsoncxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+        get_target_property(BSONXX_LIBS mongo::bsoncxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
     ELSE ()
-        get_target_property(BSONCXX_LIBS mongo::bsoncxx_shared LOCATION)
+        get_target_property(BSONXX_LIBS mongo::bsoncxx_shared LOCATION)
     ENDIF ()
     get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_shared INTERFACE_INCLUDE_DIRECTORIES)
 
     IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(MONGOCXX_LIBS mongo::mongocxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+        get_target_property(AMONGOCXX_LIBS mongo::mongocxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
     ELSE ()
-        get_target_property(MONGOCXX_LIBS mongo::mongocxx_shared LOCATION)
+        get_target_property(AMONGOCXX_LIBS mongo::mongocxx_shared LOCATION)
     ENDIF ()
     get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_shared INTERFACE_INCLUDE_DIRECTORIES)
 ENDIF ()
 
 # Set runtime path for libraries
 get_filename_component(MONGO_C_RPATH "${MONGOC_LIBS}" PATH)
-get_filename_component(MONGO_CXX_RPATH "${MONGOCXX_LIBS}" PATH)
+get_filename_component(MONGO_CXX_RPATH "${AMONGOCXX_LIBS}" PATH)
+get_filename_component(JSONCPP_RPATH "${LIBJSON_LIBS}" PATH)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set(CMAKE_INSTALL_RPATH "${MONGO_C_RPATH};${MONGO_CXX_RPATH}")
+set(CMAKE_INSTALL_RPATH "${MONGO_C_RPATH};${MONGO_CXX_RPATH};${JSONCPP_RPATH}")
 
 # Inlude boost headers in case of boost used
 IF (BOOST_ROOT)
