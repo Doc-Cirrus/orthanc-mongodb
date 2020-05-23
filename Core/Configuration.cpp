@@ -28,7 +28,7 @@
 // For UUID generation
 extern "C"
 {
-#ifdef WIN32
+#if defined(WIN32) || defined(_WIN32)
 #include <rpc.h>
 #else
 #include <uuid/uuid.h>

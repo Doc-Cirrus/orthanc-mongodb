@@ -3,6 +3,14 @@ set(BUILD_DIR_POSTFIX "-build")
 set(INSTALL_DIR_POSTFIX "-install")
 set(CONFIGURATION_DIR_POSTFIX "-config")
 
+# JsonCpp variables
+set(JSONCPP_PROJECT     "jsoncpp")
+set(JSONCPP_VERSION     "1.8.0")
+set(JSONCPP_SOURCE_DIR  "${CMAKE_BINARY_DIR}/${JSONCPP_PROJECT}")
+set(JSONCPP_BINARY_DIR  "${CMAKE_BINARY_DIR}/${JSONCPP_PROJECT}${BUILD_DIR_POSTFIX}")
+set(JSONCPP_INSTALL_DIR "${CMAKE_BINARY_DIR}/${JSONCPP_PROJECT}${INSTALL_DIR_POSTFIX}")
+set(JSONCPP_CONFIG_DIR  "${CMAKE_BINARY_DIR}/${JSONCPP_PROJECT}${CONFIGURATION_DIR_POSTFIX}")
+
 # Mongo C Driver variables
 set(MONGO_C_PROJECT     "mongo-c-driver")
 set(MONGO_C_VERSION     "1.16.2")
@@ -19,30 +27,85 @@ set(MONGO_CXX_BINARY_DIR  "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${BUILD_DIR_P
 set(MONGO_CXX_INSTALL_DIR "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${INSTALL_DIR_POSTFIX}")
 set(MONGO_CXX_CONFIG_DIR  "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${CONFIGURATION_DIR_POSTFIX}")
 
+string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UPPERCASE)
+
 # Macroses
 macro(CheckError RESULT)
     if(${RESULT})
-        message(FATAL_ERROR "Failed to build project: ${result}")
+        message(FATAL_ERROR "Failed to build project: ${RESULT}")
     endif()
 endmacro()
 
 macro(InstallPackage PROJECT_WORKING_DIR)
     execute_process(
         COMMAND ${CMAKE_COMMAND} .
-        RESULT_VARIABLE result
+        RESULT_VARIABLE RESULT
         WORKING_DIRECTORY ${PROJECT_WORKING_DIR}
     )
 
-    CheckError(result)
+    CheckError(RESULT)
 
     execute_process(
-        COMMAND ${CMAKE_COMMAND} --build .
-        RESULT_VARIABLE result
+        COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE}
+        RESULT_VARIABLE RESULT
         WORKING_DIRECTORY ${PROJECT_WORKING_DIR}
     )
 
-    CheckError(result)
+    CheckError(RESULT)
 endmacro()
+
+IF (MSVC AND LINK_STATIC_LIBS)
+    set(CompilerFlags
+        CMAKE_CXX_FLAGS
+        CMAKE_CXX_FLAGS_DEBUG
+        CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_C_FLAGS
+        CMAKE_C_FLAGS_DEBUG
+        CMAKE_C_FLAGS_RELEASE
+    )
+    foreach(CompilerFlag ${CompilerFlags})
+        string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
+        string(REPLACE "/MDd" "/MTd" ${CompilerFlag} "${${CompilerFlag}}")
+    endforeach()
+ENDIF ()
+
+# Install JsonCpp
+
+IF (LINK_STATIC_LIBS)
+    set(JSONCPP_LINK_SHARED_LIBS OFF)
+ELSE ()
+    set(JSONCPP_LINK_SHARED_LIBS ON)
+ENDIF ()
+
+configure_file(
+    ${CMAKE_CURRENT_LIST_DIR}/${JSONCPP_PROJECT}.txt.in
+    ${JSONCPP_CONFIG_DIR}/CMakeLists.txt)
+
+unset(JSONCPP_LINK_SHARED_LIBS)
+
+InstallPackage(${JSONCPP_CONFIG_DIR})
+
+set(jsoncpp_DIR "${JSONCPP_INSTALL_DIR}/lib/cmake/jsoncpp/")
+
+find_package(jsoncpp
+            PATHS
+            # Alternatives
+            "${JSONCPP_INSTALL_DIR}/lib32/cmake/jsoncpp/"
+            "${JSONCPP_INSTALL_DIR}/lib64/cmake/jsoncpp/"
+            NO_DEFAULT_PATH
+            REQUIRED)
+
+IF (LINK_STATIC_LIBS)
+    get_target_property(LIBJSON_LIBS jsoncpp_lib_static LOCATION)
+    get_target_property(JSONCPP_INCLUDE_DIRS jsoncpp_lib_static INTERFACE_INCLUDE_DIRECTORIES)
+ELSE ()
+    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        get_target_property(LIBJSON_LIBS jsoncpp_lib IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+    ELSE ()
+        get_target_property(LIBJSON_LIBS jsoncpp_lib LOCATION)
+    ENDIF ()
+    get_target_property(JSONCPP_INCLUDE_DIRS jsoncpp_lib INTERFACE_INCLUDE_DIRECTORIES)
+ENDIF ()
 
 # Install mongo-c-driver
 
@@ -62,8 +125,6 @@ find_package(bson-1.0
             "${MONGO_C_INSTALL_DIR}/lib64/cmake/bson-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
-get_target_property(BSON_LIBS mongo::bson_shared LOCATION)
-get_target_property(BSON_INCLUDE_DIRS mongo::bson_shared INTERFACE_INCLUDE_DIRECTORIES)
 
 find_package(mongoc-1.0
             PATHS
@@ -72,14 +133,41 @@ find_package(mongoc-1.0
             "${MONGO_C_INSTALL_DIR}/lib64/cmake/mongoc-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
-get_target_property(MONGOC_LIBS mongo::mongoc_shared LOCATION)
-get_target_property(MONGOCLIB_INCLUDE_DIRS mongo::mongoc_shared INTERFACE_INCLUDE_DIRECTORIES)
 
-# Install mongo-cxx-driver
+IF (LINK_STATIC_LIBS)
+    get_target_property(BSON_LIBS mongo::bson_static LOCATION)
+    get_target_property(BSON_INCLUDE_DIRS mongo::bson_static INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(MONGOC_LIBS mongo::mongoc_static LOCATION)
+    get_target_property(MONGOCLIB_INCLUDE_DIRS mongo::mongoc_static INTERFACE_INCLUDE_DIRECTORIES)
+ELSE ()
+    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        get_target_property(BSON_LIBS mongo::bson_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+    ELSE ()
+        get_target_property(BSON_LIBS mongo::bson_shared LOCATION)
+    ENDIF ()
+    get_target_property(BSON_INCLUDE_DIRS mongo::bson_shared INTERFACE_INCLUDE_DIRECTORIES)
+
+    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        get_target_property(MONGOC_LIBS mongo::mongoc_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+    ELSE ()
+        get_target_property(MONGOC_LIBS mongo::mongoc_shared LOCATION)
+    ENDIF ()
+    get_target_property(MONGOCLIB_INCLUDE_DIRS mongo::mongoc_shared INTERFACE_INCLUDE_DIRECTORIES)
+ENDIF ()
+
+#Install mongo-cxx-driver
+
+IF (LINK_STATIC_LIBS)
+    set(MONGO_CXX_BUILD_SHARED_LIBS OFF)
+ELSE ()
+    set(MONGO_CXX_BUILD_SHARED_LIBS ON)
+ENDIF ()
 
 configure_file(
     ${CMAKE_CURRENT_LIST_DIR}/${MONGO_CXX_PROJECT}.txt.in
     ${MONGO_CXX_CONFIG_DIR}/CMakeLists.txt)
+
+unset(MONGO_CXX_BUILD_SHARED_LIBS)
 
 InstallPackage(${MONGO_CXX_CONFIG_DIR})
 
@@ -108,9 +196,18 @@ IF (LINK_STATIC_LIBS)
     get_target_property(MONGOCXX_LIBS mongo::mongocxx_static LOCATION)
     get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_static INTERFACE_INCLUDE_DIRECTORIES)
 ELSE ()
-    get_target_property(BSONCXX_LIBS mongo::bsoncxx_shared LOCATION)
+    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        get_target_property(BSONCXX_LIBS mongo::bsoncxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+    ELSE ()
+        get_target_property(BSONCXX_LIBS mongo::bsoncxx_shared LOCATION)
+    ENDIF ()
     get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_shared INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(MONGOCXX_LIBS mongo::mongocxx_shared LOCATION)
+
+    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        get_target_property(MONGOCXX_LIBS mongo::mongocxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
+    ELSE ()
+        get_target_property(MONGOCXX_LIBS mongo::mongocxx_shared LOCATION)
+    ENDIF ()
     get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_shared INTERFACE_INCLUDE_DIRECTORIES)
 ENDIF ()
 
@@ -120,3 +217,20 @@ get_filename_component(MONGO_CXX_RPATH "${MONGOCXX_LIBS}" PATH)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH "${MONGO_C_RPATH};${MONGO_CXX_RPATH}")
+
+# Inlude boost headers in case of boost used
+IF (BOOST_ROOT)
+    include_directories(${BOOST_ROOT})
+ENDIF ()
+
+IF (MSVC AND LINK_STATIC_LIBS)
+    # Link with some system libraries
+    set(LIBS ${LIBS} ws2_32.lib Secur32.lib Crypt32.lib BCrypt.lib Dnsapi.lib)
+    # Add preprocessor definitions which are required for correct linking
+    add_definitions(
+      -DBSON_STATIC
+      -DMONGOC_STATIC
+      -DBSONCXX_STATIC
+      -DMONGOCXX_STATIC
+    )
+ENDIF ()
