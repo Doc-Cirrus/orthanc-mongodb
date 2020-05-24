@@ -956,7 +956,7 @@ namespace OrthancPlugins
 
   }
 
- void MongoDBBackend::LookupIdentifierRange(std::list<long int>& target,
+ void MongoDBBackend::LookupIdentifierRange(std::list<int64_t>& target,
       OrthancPluginResourceType resourceType,
       uint16_t group,
       uint16_t element,

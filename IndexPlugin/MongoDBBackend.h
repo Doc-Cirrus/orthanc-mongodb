@@ -129,7 +129,7 @@ namespace OrthancPlugins
       OrthancPluginIdentifierConstraint constraint,
       const char* value);
 
-    virtual void LookupIdentifierRange(std::list<long int>& target, 
+    virtual void LookupIdentifierRange(std::list<int64_t>& target,
       OrthancPluginResourceType resourceType, 
       uint16_t group, 
       uint16_t element, 
