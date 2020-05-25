@@ -16,6 +16,9 @@ This chapter describes the process of installation with not too much details and
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
 - Download Ortanc sources or install orthanc-devel package
 
+---
+It is possible to install all dependencies manually (below you will find insturctions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to ```docs``` folder -> ```autoconfig.md``` file.
+
 ### CentOS 7 Build Instructions
 
 ## General Packages
