@@ -55,6 +55,7 @@ macro(InstallPackage PROJECT_WORKING_DIR)
 endmacro()
 
 IF (MSVC AND LINK_STATIC_LIBS)
+    # Link statically against MSVC's runtime libraries
     set(CompilerFlags
         CMAKE_CXX_FLAGS
         CMAKE_CXX_FLAGS_DEBUG
@@ -225,7 +226,7 @@ get_filename_component(JSONCPP_RPATH "${LIBJSON_LIBS}" PATH)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_INSTALL_RPATH "${MONGO_C_RPATH};${MONGO_CXX_RPATH};${JSONCPP_RPATH}")
 
-# Inlude boost headers in case of boost used
+# Inlude boost headers in case if boost used
 IF (BOOST_ROOT)
     include_directories(${BOOST_ROOT})
 ENDIF ()
