@@ -20,8 +20,8 @@
 #include <assert.h>
 #include <memory>
 
-#include <orthanc/OrthancCPlugin.h>
 #include <mongoc.h>
+#include <orthanc/OrthancCPlugin.h>
 
 #include "MongoDBBackend.h"
 #include "../Core/MongoDBException.h"

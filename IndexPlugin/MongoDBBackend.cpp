@@ -245,6 +245,20 @@ namespace OrthancPlugins
     );
 
     collection.insert_one(resource_document.view());
+
+    if (type == OrthancPluginResourceType_Patient) {
+      /**
+       * Patient must be added to PatientRecyclingOrder when it is created.
+       * Also if patient is created via API function - CreateInstance,
+       * all required logic for PatientRecyclingOrder is handled inside CreateInstance function.
+       **/
+      int64_t id = GetNextSequence(db, "PatientRecyclingOrder");
+      db["PatientRecyclingOrder"].insert_one(make_document(
+        kvp("id", id),
+        kvp("patientId", seq)
+      ));
+    }
+
     return seq;
   }
 
@@ -738,7 +752,7 @@ namespace OrthancPlugins
       make_document(kvp("patientId", internalId))
     );
 
-    return count > 0;
+    return !count;
   }
 
   void MongoDBBackend::ListAvailableMetadata(std::list<int32_t>& target /*out*/, int64_t id)
@@ -942,7 +956,7 @@ namespace OrthancPlugins
 
   }
 
- void MongoDBBackend::LookupIdentifierRange(std::list<long int>& target,
+ void MongoDBBackend::LookupIdentifierRange(std::list<int64_t>& target,
       OrthancPluginResourceType resourceType,
       uint16_t group,
       uint16_t element,
@@ -1163,22 +1177,22 @@ namespace OrthancPlugins
 
     if (isProtected)
     {
-      if (!IsProtectedPatient(internalId))
-      {
-        int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
-        collection.insert_one(make_document(
-          kvp("id", seq), 
-          kvp("patientId", internalId)
-        ));
-      }
+      collection.delete_many(make_document(
+        kvp("patientId", internalId)
+      ));
+    }
+    else if (IsProtectedPatient(internalId))
+    {
+      int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
+      collection.insert_one(make_document(
+        kvp("id", seq),
+        kvp("patientId", internalId)
+      ));
     }
     else
     {
-      collection.delete_many(make_document(
-          kvp("patientId", internalId)
-      ));
+      // Nothing to do: The patient is already unprotected
     }
-
   }
 
   void MongoDBBackend::StartTransaction() {}
@@ -1279,14 +1293,14 @@ namespace OrthancPlugins
     auto db = (*conn)[dbname_];
 
     auto collection = db["PatientRecyclingOrder"];
-    auto recyclongOrderDoc = collection.find_one(make_document(kvp("patientId", patientId)));
+    auto recyclingOrderDoc = collection.find_one(make_document(kvp("patientId", patientId)));
 
-    if (recyclongOrderDoc)
+    if (recyclingOrderDoc)
     {
-        int64_t seq = recyclongOrderDoc->view()["i"].get_int64().value;
+        int64_t seq = recyclingOrderDoc->view()["id"].get_int64().value;
         collection.delete_many(make_document(kvp("id", seq)));
 
-        // Refresh the patient id if protected
+        // Refresh the patient "id" in list of unprotected patients
         seq = GetNextSequence(db, "PatientRecyclingOrder");
         collection.insert_one(make_document(
           kvp("id", seq), 
@@ -1432,7 +1446,7 @@ namespace OrthancPlugins
             })
           );
           break;
-         
+
 
         case OrthancPluginConstraintType_Wildcard:
           current_document.append(
@@ -1928,37 +1942,18 @@ namespace OrthancPlugins
         result.isNewInstance = true;
         result.instanceId = instanceId;
 
-        // recycle check
-        auto recycleCollection = db["PatientRecyclingOrder"];
-        auto patientRecycle = recycleCollection.find_one(
-          make_document(kvp("patientId", result.patientId))
-        );
-
-        if (patientRecycle) {
-          int64_t patientSeq = patientRecycle->view()["seq"].get_int64().value;
-
-          mongocxx::options::count options{};
-          options.limit(2);
-          auto count_document = make_document(
-            kvp("seq", make_document(kvp("$gte", patientSeq)))
-          );
-
-          int64_t count = recycleCollection.count_documents(count_document.view(), options);
-
-          if (count == 2) {
-            recycleCollection.delete_many(make_document(kvp("seq", patientSeq)));
-
-            int64_t seq = GetNextSequence(db, "PatientRecyclingOrder");
-            auto recycle_document = make_document(
-              kvp("id", seq),
-              kvp("patientId", result.patientId )
-            );
-
-            recycleCollection.insert_one(recycle_document.view());
-          }
+        if (result.isNewPatient) {
+          // add patient to PatientRecyclingOrder
+          int64_t id = GetNextSequence(db, "PatientRecyclingOrder");
+          db["PatientRecyclingOrder"].insert_one(make_document(
+            kvp("id", id),
+            kvp("patientId", result.patientId)
+          ));
         }
-
+        else {
+          // update patient order in PatientRecyclingOrder
+          TagMostRecentPatient(result.patientId);
+        }
     }
-
   }
 } //namespace OrthancPlugins
