@@ -17,6 +17,8 @@
  **/
 
 
+/* Contains WIN32 define which is required for correct work of ORTHANC_PLUGINS_API with MSVC */
+#include <mongoc.h>
 #include <orthanc/OrthancCPlugin.h>
 
 #include <cassert>
@@ -192,6 +194,6 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
   {
-    return "1.0.0";
+    return "1.5.7";
   }
 }

@@ -129,7 +129,7 @@ namespace OrthancPlugins
       OrthancPluginIdentifierConstraint constraint,
       const char* value);
 
-    virtual void LookupIdentifierRange(std::list<long int>& target, 
+    virtual void LookupIdentifierRange(std::list<int64_t>& target,
       OrthancPluginResourceType resourceType, 
       uint16_t group, 
       uint16_t element, 
@@ -172,6 +172,43 @@ namespace OrthancPlugins
     virtual void UpgradeDatabase(uint32_t  targetVersion, OrthancPluginStorageArea* storageArea);
 
     virtual void ClearMainDicomTags(int64_t internalId);
+
+
+    virtual void GetChildrenMetadata(std::list<std::string>& target,
+                                     int64_t resourceId,
+                                     int32_t metadata);
+
+    virtual int64_t GetLastChangeIndex();
+    
+    virtual void TagMostRecentPatient(int64_t patientId);
+
+    virtual bool LookupResourceAndParent(int64_t& id, OrthancPluginResourceType& type, std::string& parentPublicId, const char* publicId);
+
+    virtual void GetAllMetadata(std::map<int32_t, std::string>& result, int64_t id);
+
+    virtual void LookupResources(const std::vector<OrthancPluginDatabaseConstraint>& lookup,
+                                 OrthancPluginResourceType queryLevel,
+                                 uint32_t limit,
+                                 bool requestSomeInstance);
+    virtual void SetResourcesContent(
+                                uint32_t countIdentifierTags,
+                                const OrthancPluginResourcesContentTags* identifierTags,
+                                uint32_t countMainDicomTags,
+                                const OrthancPluginResourcesContentTags* mainDicomTags,
+                                uint32_t countMetadata,
+                                const OrthancPluginResourcesContentMetadata* metadata);
+
+    virtual bool HasCreateInstance() const
+    {
+      return true;
+    }
+
+    virtual void CreateInstance(OrthancPluginCreateInstanceResult& result,
+                                const char* hashPatient,
+                                const char* hashStudy,
+                                const char* hashSeries,
+                                const char* hashInstance);
+
   };
 } //namespace OrtahncPlugins
 
