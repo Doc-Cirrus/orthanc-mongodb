@@ -192,6 +192,6 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
   {
-    return "1.7.2";
+    return "1.7.3";
   }
 }
