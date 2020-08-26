@@ -42,8 +42,6 @@ namespace OrthancPlugins
 
     void CreateIndices();
     void CheckMonoDBMaster();
-    void ExecuteSetResourcesContentTags(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentTags* tags);
-    void ExecuteSetResourcesContentMetadata(const std::string& collectionName, uint32_t count, const OrthancPluginResourcesContentMetadata* meta);
 
   public:
     MongoDBBackend(OrthancPluginContext* context,
@@ -131,7 +129,7 @@ namespace OrthancPlugins
       OrthancPluginIdentifierConstraint constraint,
       const char* value);
 
-    virtual void LookupIdentifierRange(std::list<int64_t>& target, 
+    virtual void LookupIdentifierRange(std::list<int64_t>& target,
       OrthancPluginResourceType resourceType, 
       uint16_t group, 
       uint16_t element, 
