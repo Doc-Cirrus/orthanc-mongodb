@@ -291,11 +291,11 @@ namespace OrthancPlugins
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
-    /* item for signal */
+    // item for signal 
     std::vector<bsoncxx::document::value> deleted_files_vec;
     std::vector<bsoncxx::document::view> deleted_resources_vec;
 
-    /* find all resources to delete */
+    // find all resources to delete 
     mongocxx::pipeline stages;
     auto resources_to_delete = array{};
 
@@ -318,8 +318,8 @@ namespace OrthancPlugins
     auto cursor = db["Resources"].aggregate(stages, mongocxx::options::aggregate{});
 
     for (auto&& doc : cursor) {
-      int64_t parentId = doc["internalId"].get_int64().value;
-      resources_to_delete.append(parentId);
+      int64_t internalId = doc["internalId"].get_int64().value;
+      resources_to_delete.append(internalId);
       deleted_resources_vec.push_back(doc);
     }
 
@@ -364,6 +364,7 @@ namespace OrthancPlugins
         static_cast<OrthancPluginResourceType>(doc["resourceType"].get_int32().value)
       );
     }
+
   }
 
   void MongoDBBackend::GetAllInternalIds(std::list<int64_t>& target, OrthancPluginResourceType resourceType)
@@ -1828,8 +1829,8 @@ namespace OrthancPlugins
         result.isNewInstance = true;
         result.instanceId = instanceId;
 
-        if (patient) {
-          auto find_patient_document = make_document(kvp("internalId", patient->view()["internalId"].get_int64().value));
+        if (result.patientId) {
+          auto find_patient_document = make_document(kvp("internalId", result.patientId));
           auto update_patient_document = make_document(
             kvp("$addToSet", make_document(
               kvp("0", result.patientId),
@@ -1843,8 +1844,8 @@ namespace OrthancPlugins
           bulk.append(update_patient);
         } 
 
-        if (study) {
-          auto find_study_document = make_document(kvp("internalId", study->view()["internalId"].get_int64().value));
+        if (result.studyId) {
+          auto find_study_document = make_document(kvp("internalId", result.studyId));
           auto update_study_document = make_document(
             kvp("$addToSet", make_document(
               kvp("0", result.patientId),
@@ -1858,8 +1859,8 @@ namespace OrthancPlugins
           bulk.append(update_study);
         }
 
-        if (series) {
-          auto find_series_document = make_document(kvp("internalId", series->view()["internalId"].get_int64().value));
+        if (result.seriesId) {
+          auto find_series_document = make_document(kvp("internalId", result.seriesId));
           auto update_series_document = make_document(
             kvp("$addToSet", make_document(
               kvp("0", result.patientId),

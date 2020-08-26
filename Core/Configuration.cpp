@@ -16,14 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  **/
 
-
 #include "Configuration.h"
 #include "MongoDBException.h"
 
 #include <fstream>
 #include <json/reader.h>
 #include <memory>
-
 
 // For UUID generation
 extern "C"
@@ -35,15 +33,14 @@ extern "C"
 #endif
 }
 
-
 namespace OrthancPlugins
 {
 
-bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context)
+bool ReadConfiguration(Json::Value &configuration, OrthancPluginContext *context)
 {
   std::string s;
 
-  char* tmp = OrthancPluginGetConfiguration(context);
+  char *tmp = OrthancPluginGetConfiguration(context);
   if (tmp == NULL)
   {
     OrthancPluginLogError(context, "Error while retrieving the configuration from Orthanc");
@@ -53,144 +50,138 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
   s.assign(tmp);
   OrthancPluginFreeString(context, tmp);
 
-    Json::Reader reader;
-    if (reader.parse(s, configuration))
-    {
+  Json::Reader reader;
+  if (reader.parse(s, configuration))
+  {
     return true;
-    }
-    else
-    {
+  }
+  else
+  {
     OrthancPluginLogError(context, "Unable to parse the configuration");
     return false;
-    }
+  }
 }
 
-
-    std::string GetStringValue(const Json::Value& configuration, const std::string& key, const std::string& defaultValue)
-  {
-    if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
+std::string GetStringValue(const Json::Value &configuration, const std::string &key, const std::string &defaultValue)
+{
+  if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
       configuration[key].type() != Json::stringValue)
-    {
-      return defaultValue;
-    }
-    else
-    {
-      return configuration[key].asString();
-    }
-  }
-
-
-    int GetIntegerValue(const Json::Value& configuration, const std::string& key, int defaultValue)
   {
-    if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
-      configuration[key].type() != Json::intValue)
-    {
-      return defaultValue;
-    }
-    else
-    {
-      return configuration[key].asInt();
-    }
+    return defaultValue;
   }
-
-
-  bool GetBooleanValue(const Json::Value& configuration, const std::string& key, bool defaultValue)
+  else
   {
-    if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
-        configuration[key].type() != Json::booleanValue)
-  {
-      return defaultValue;
-    }
-    else
-    {
-      return configuration[key].asBool();
-    }
+    return configuration[key].asString();
   }
-
-
-  MongoDBConnection* CreateConnection(OrthancPluginContext* context, const Json::Value& configuration)
-  {
-    std::unique_ptr<MongoDBConnection> connection = std::make_unique<MongoDBConnection>();
-
-    if (configuration.isMember("MongoDB"))
-    {
-      Json::Value c = configuration["MongoDB"];
-      if (c.isMember("ConnectionUri"))
-      {
-        connection->SetConnectionUri(c["ConnectionUri"].asString());
-      }
-      if (c.isMember("ChunkSize"))
-      {
-        connection->SetChunkSize(c["ChunkSize"].asInt());
-      }
-      if (c.isMember("host"))
-      {
-        connection->SetHost(c["host"].asString());
-      }
-      if (c.isMember("port"))
-      {
-        connection->SetTcpPort(c["port"].asInt());
-      }
-      if (c.isMember("database"))
-      {
-        connection->SetDatabase(c["database"].asString());
-      }
-      if (c.isMember("user"))
-      {
-        connection->SetUser(c["user"].asString());
-      }
-      if (c.isMember("password"))
-      {
-        connection->SetPassword(c["password"].asString());
-      }
-      if (c.isMember("authenticationDatabase"))
-      {
-        connection->SetAuthenticationDatabase(c["authenticationDatabase"].asString());
-      }
-    }
-    return connection.release();
-  }
-
-
-  std::string GenerateUuid()
-  {
-#ifdef WIN32
-    UUID uuid;
-    UuidCreate ( &uuid );
-
-    unsigned char * str;
-    UuidToStringA ( &uuid, &str );
-
-    std::string s( ( char* ) str );
-
-    RpcStringFreeA ( &str );
-#else
-    uuid_t uuid;
-    uuid_generate_random ( uuid );
-    char s[37];
-    uuid_unparse ( uuid, s );
-#endif
-    return s;
-  }
-
-
-  bool IsFlagInCommandLineArguments(OrthancPluginContext* context, const std::string& flag)
-  {
-    uint32_t count = OrthancPluginGetCommandLineArgumentsCount(context);
-
-    for (uint32_t i = 0; i < count; i++)
-    {
-      char* tmp = OrthancPluginGetCommandLineArgument(context, i);
-      std::string arg(tmp);
-      OrthancPluginFreeString(context, tmp);
-
-      if (arg == flag)
-      {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
 }
+
+int GetIntegerValue(const Json::Value &configuration, const std::string &key, int defaultValue)
+{
+  if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
+      configuration[key].type() != Json::intValue)
+  {
+    return defaultValue;
+  }
+  else
+  {
+    return configuration[key].asInt();
+  }
+}
+
+bool GetBooleanValue(const Json::Value &configuration, const std::string &key, bool defaultValue)
+{
+  if (configuration.type() != Json::objectValue || !configuration.isMember(key) ||
+      configuration[key].type() != Json::booleanValue)
+  {
+    return defaultValue;
+  }
+  else
+  {
+    return configuration[key].asBool();
+  }
+}
+
+MongoDBConnection *CreateConnection(OrthancPluginContext *context, const Json::Value &configuration)
+{
+  std::unique_ptr<MongoDBConnection> connection = std::make_unique<MongoDBConnection>();
+
+  if (configuration.isMember("MongoDB"))
+  {
+    Json::Value c = configuration["MongoDB"];
+    if (c.isMember("ConnectionUri"))
+    {
+      connection->SetConnectionUri(c["ConnectionUri"].asString());
+    }
+    if (c.isMember("ChunkSize"))
+    {
+      connection->SetChunkSize(c["ChunkSize"].asInt());
+    }
+    if (c.isMember("host"))
+    {
+      connection->SetHost(c["host"].asString());
+    }
+    if (c.isMember("port"))
+    {
+      connection->SetTcpPort(c["port"].asInt());
+    }
+    if (c.isMember("database"))
+    {
+      connection->SetDatabase(c["database"].asString());
+    }
+    if (c.isMember("user"))
+    {
+      connection->SetUser(c["user"].asString());
+    }
+    if (c.isMember("password"))
+    {
+      connection->SetPassword(c["password"].asString());
+    }
+    if (c.isMember("authenticationDatabase"))
+    {
+      connection->SetAuthenticationDatabase(c["authenticationDatabase"].asString());
+    }
+  }
+  return connection.release();
+}
+
+std::string GenerateUuid()
+{
+#ifdef WIN32
+  UUID uuid;
+  UuidCreate(&uuid);
+
+  unsigned char *str;
+  UuidToStringA(&uuid, &str);
+
+  std::string s((char *)str);
+
+  RpcStringFreeA(&str);
+#else
+  uuid_t uuid;
+  uuid_generate_random(uuid);
+  char s[37];
+  uuid_unparse(uuid, s);
+#endif
+  return s;
+}
+
+bool IsFlagInCommandLineArguments(OrthancPluginContext *context, const std::string &flag)
+{
+  uint32_t count = OrthancPluginGetCommandLineArgumentsCount(context);
+
+  for (uint32_t i = 0; i < count; i++)
+  {
+    char *tmp = OrthancPluginGetCommandLineArgument(context, i);
+    std::string arg(tmp);
+    OrthancPluginFreeString(context, tmp);
+
+    if (arg == flag)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+} // namespace OrthancPlugins
