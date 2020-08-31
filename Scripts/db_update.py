@@ -9,13 +9,6 @@ from pymongo.errors import BulkWriteError
 
 PAGE_LIMIT = 2000
 
-OR_CONDITION = [
-    {"0": {"$eq": []}},
-    {"1": {"$eq": []}},
-    {"2": {"$eq": []}},
-    {"3": {"$eq": []}}
-]
-
 
 def _setup_arguments():
     """Setup the command line arguments"""
@@ -33,17 +26,15 @@ def _setup_arguments():
 
     return parser.parse_args()
 
+
 def chunk_handler(level, page, DATABASE_URL):
+    def chunk_handler(level, page):
     db_client = MongoClient(DATABASE_URL)
     db_instance = db_client.get_default_database()
     collection_instance = db_instance.get_collection('Resources')
 
     query = [
-        {
-            "$match": {
-                "resourceType": level, "$or": OR_CONDITION
-            }
-        },
+        {"$match": {"resourceType": level, "0": {"$exists": False}}},
         {"$skip": (page - 1) * PAGE_LIMIT},
         {"$limit": PAGE_LIMIT},
         {
@@ -124,14 +115,51 @@ def chunk_handler(level, page, DATABASE_URL):
         }
     ]
 
+    if level == 1 or level == 2:
+        query.append({
+            "$lookup": {
+                "as": "sorts",
+                "from": "MainDicomTags",
+                "let": {
+                    "resource": "$internalId"
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": ["$id", "$$resource"]
+                            },
+                            "$or": [
+                                {
+                                    "tagGroup": 8,
+                                    "tagElement": 32 if level == 1 else 33
+                                },
+                                {
+                                    "tagGroup": 8,
+                                    "tagElement": 48 if level == 1 else 49
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        })
+
     requests = []
     for item in collection_instance.aggregate(pipeline=query):
-        update_dict = {
-            '0': py_(item).get('0').map('internalId').value(),
-            '1': py_(item).get('1').map('internalId').value(),
-            '2': py_(item).get('2').map('internalId').value(),
-            '3': py_(item).get('3').map('internalId').value(),
-        }
+        update_dict = assign(
+            {
+                '0': py_(item).get('0').map('internalId').value(),
+                '1': py_(item).get('1').map('internalId').value(),
+                '2': py_(item).get('2').map('internalId').value(),
+                '3': py_(item).get('3').map('internalId').value(),
+
+                'instancePublicId': py_(item).get('3').head().get('publicId').value()
+            },
+            {
+                "sorts": py_(item).get('sorts').map('value').value()
+            } if level == 1 or level == 2 else {}
+        )
 
         requests.append(
             UpdateOne(pick(item, '_id'), {'$set': update_dict})
@@ -152,10 +180,14 @@ def handle_chunk(DATABASE_URL):
     db_ = client_.get_default_database()
     collection_ = db_.get_collection('Resources')
 
-    patients_count = collection_.count_documents({"resourceType": 0, "$or": OR_CONDITION})
-    study_count = collection_.count_documents({"resourceType": 1, "$or": OR_CONDITION})
-    series_count = collection_.count_documents({"resourceType": 2, "$or": OR_CONDITION})
-    instance_count = collection_.count_documents({"resourceType": 3, "$or": OR_CONDITION})
+    patients_count = collection_.count_documents(
+        {"resourceType": 0, "0": {"$exists": False}})
+    study_count = collection_.count_documents(
+        {"resourceType": 1, "0": {"$exists": False}})
+    series_count = collection_.count_documents(
+        {"resourceType": 2, "0": {"$exists": False}})
+    instance_count = collection_.count_documents(
+        {"resourceType": 3, "0": {"$exists": False}})
 
     patients_pages = math.ceil(patients_count / PAGE_LIMIT)
     study_pages = math.ceil(study_count / PAGE_LIMIT)
@@ -163,12 +195,11 @@ def handle_chunk(DATABASE_URL):
     instance_pages = math.ceil(instance_count / PAGE_LIMIT)
 
     processes_args = py_([]).concat(
-        times(patients_pages, lambda i: (0, i + 1, DATABASE_URL)),
-        times(study_pages, lambda i: (1, i + 1, DATABASE_URL)),
-        times(series_pages, lambda i: (2, i + 1, DATABASE_URL)),
-        times(instance_pages, lambda i: (3, i + 1, DATABASE_URL)),
+        times(patients_pages, lambda i: (0, i + 1)),
+        times(study_pages, lambda i: (1, i + 1)),
+        times(series_pages, lambda i: (2, i + 1)),
+        times(instance_pages, lambda i: (3, i + 1)),
     ).chunk(4).value()
-
 
     for chunk in processes_args:
         with Pool(processes=4) as pool:
@@ -180,25 +211,17 @@ def handle_chunk(DATABASE_URL):
 
 
 if __name__ == "__main__":
-    args = _setup_arguments()
-    DATABASE_URL = args.DATABASE_URL
-
-
     print("now =", datetime.now())
 
     client = MongoClient(DATABASE_URL)
     db = client.get_default_database()
     collection = db.get_collection('Resources')
 
-    last_count = 0
-
     while True:
-        count = collection.count_documents({"$or": OR_CONDITION})
-
-        if count == last_count:
-            break
+        count = collection.count_documents({"0": {"$exists": False}})
+        if count > 0:
+            handle_chunk()
         else:
-            last_count = count
-            handle_chunk(DATABASE_URL)
+            break
 
     print("now =", datetime.now())
