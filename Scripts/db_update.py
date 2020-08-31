@@ -2,7 +2,7 @@ import math
 from datetime import datetime
 from multiprocessing.pool import Pool
 
-import ujson
+import json
 from pydash import pick, py_, times
 from pymongo import MongoClient, UpdateOne
 from pymongo.errors import BulkWriteError
@@ -168,11 +168,11 @@ def chunk_handler(level, page, DATABASE_URL):
     try:
         print(f"==============={level}-{page}-{len(requests)}===============")
         r = collection_instance.bulk_write(requests)
-        print(ujson.dumps(r.bulk_api_result, indent=4))
+        print(json.dumps(r.bulk_api_result, indent=4))
         print(f"======================================")
 
     except BulkWriteError as bwe:
-        print(ujson.dumps(bwe.details, indent=4))
+        print(json.dumps(bwe.details, indent=4))
 
 
 def handle_chunk(DATABASE_URL):
