@@ -180,14 +180,10 @@ def handle_chunk(DATABASE_URL):
     db_ = client_.get_default_database()
     collection_ = db_.get_collection('Resources')
 
-    patients_count = collection_.count_documents(
-        {"resourceType": 0, "0": {"$exists": False}})
-    study_count = collection_.count_documents(
-        {"resourceType": 1, "0": {"$exists": False}})
-    series_count = collection_.count_documents(
-        {"resourceType": 2, "0": {"$exists": False}})
-    instance_count = collection_.count_documents(
-        {"resourceType": 3, "0": {"$exists": False}})
+    patients_count = collection_.count_documents({"resourceType": 0, "0": {"$exists": False}})
+    study_count = collection_.count_documents({"resourceType": 1, "0": {"$exists": False}})
+    series_count = collection_.count_documents({"resourceType": 2, "0": {"$exists": False}})
+    instance_count = collection_.count_documents({"resourceType": 3, "0": {"$exists": False}})
 
     patients_pages = math.ceil(patients_count / PAGE_LIMIT)
     study_pages = math.ceil(study_count / PAGE_LIMIT)
@@ -195,10 +191,10 @@ def handle_chunk(DATABASE_URL):
     instance_pages = math.ceil(instance_count / PAGE_LIMIT)
 
     processes_args = py_([]).concat(
-        times(patients_pages, lambda i: (0, i + 1)),
-        times(study_pages, lambda i: (1, i + 1)),
-        times(series_pages, lambda i: (2, i + 1)),
-        times(instance_pages, lambda i: (3, i + 1)),
+        times(patients_pages, lambda i: (0, i + 1, DATABASE_URL)),
+        times(study_pages, lambda i: (1, i + 1, DATABASE_URL)),
+        times(series_pages, lambda i: (2, i + 1, DATABASE_URL)),
+        times(instance_pages, lambda i: (3, i + 1, DATABASE_URL)),
     ).chunk(4).value()
 
     for chunk in processes_args:
@@ -211,6 +207,9 @@ def handle_chunk(DATABASE_URL):
 
 
 if __name__ == "__main__":
+    args = _setup_arguments()
+    DATABASE_URL = args.DATABASE_URL
+    
     print("now =", datetime.now())
 
     client = MongoClient(DATABASE_URL)
@@ -220,7 +219,7 @@ if __name__ == "__main__":
     while True:
         count = collection.count_documents({"0": {"$exists": False}})
         if count > 0:
-            handle_chunk()
+            handle_chunk(DATABASE_URL)
         else:
             break
 
