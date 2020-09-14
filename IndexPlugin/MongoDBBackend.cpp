@@ -1601,7 +1601,9 @@ namespace OrthancPlugins
       identifiers_stages.group(group_stage.view());
 
       auto main_tags_ids = array{};
-      auto identifier_cursor = db["DicomIdentifiers"].aggregate(identifiers_stages, mongocxx::options::aggregate{});
+      mongocxx::options::aggregate identifiersAggregateOptions{};
+      identifiersAggregateOptions.allow_disk_use(true);
+      auto identifier_cursor = db["DicomIdentifiers"].aggregate(identifiers_stages, identifiersAggregateOptions);
 
       for (auto&& doc : identifier_cursor) {
         main_tags_ids.append(doc["_id"].get_int64().value);
@@ -1663,11 +1665,11 @@ namespace OrthancPlugins
       stages.sort(sort_build_stage.view());
     }
 
-    if (limit != 0) {
-      stages.limit(limit);
-    }
+    stages.limit(limit != 0 ? limit : 1000);
 
-    auto cursor = collection.aggregate(stages, mongocxx::options::aggregate{});
+    mongocxx::options::aggregate aggregateOptions{};
+    aggregateOptions.allow_disk_use(true);
+    auto cursor = collection.aggregate(stages, aggregateOptions);
 
     for (auto&& doc : cursor) {
       if (requestSomeInstance) {
