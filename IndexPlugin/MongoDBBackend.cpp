@@ -1665,7 +1665,7 @@ namespace OrthancPlugins
       stages.sort(sort_build_stage.view());
     }
 
-    stages.limit(limit != 0 ? limit : 1000);
+    stages.limit(limit != 0 ? (limit - 1) : 200);
 
     mongocxx::options::aggregate aggregateOptions{};
     aggregateOptions.allow_disk_use(true);
