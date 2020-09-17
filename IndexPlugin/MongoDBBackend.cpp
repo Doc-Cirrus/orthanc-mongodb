@@ -1427,8 +1427,7 @@ namespace OrthancPlugins
     std::vector<OrthancPluginDatabaseConstraint> lookup_sorted(lookup.size());
 
     partial_sort_copy(std::begin(lookup), std::end(lookup), std::begin(lookup_sorted), std::end(lookup_sorted), [queryLevel](OrthancPluginDatabaseConstraint left, OrthancPluginDatabaseConstraint right) {
-        if (left.level == queryLevel && right.level != queryLevel) return true;
-        else return false;
+        return left.level > right.level;
     });  
 
     for (size_t i = 0; i < lookup_sorted.size(); i++) {
@@ -1438,7 +1437,7 @@ namespace OrthancPlugins
       auto query_identifier = std::to_string(constraint.tagGroup) + 'x' + std::to_string(constraint.tagElement);
 
       if (identifierExact && constraint.type == OrthancPluginConstraintType_Equal && constraint.isIdentifierTag == 1) break;
-      if (constraint.level == queryLevel && constraint.type == OrthancPluginConstraintType_Equal && constraint.isIdentifierTag == 1) {
+      if (constraint.type == OrthancPluginConstraintType_Equal && constraint.isIdentifierTag == 1) {
         identifierExact = true;
       }
 
