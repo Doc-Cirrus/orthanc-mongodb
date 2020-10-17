@@ -7,8 +7,6 @@ include(ExternalProject)
 ExternalProject_Add(${JSONCPP_PROJECT}
     GIT_REPOSITORY  "https://github.com/open-source-parsers/jsoncpp"
     GIT_TAG         "${JSONCPP_VERSION}"
-    GIT_PROGRESS    1
-    GIT_SHALLOW     1
     SOURCE_DIR      "${JSONCPP_SOURCE_DIR}"
     BINARY_DIR      "${JSONCPP_BINARY_DIR}"
     INSTALL_DIR     "${JSONCPP_INSTALL_DIR}"
