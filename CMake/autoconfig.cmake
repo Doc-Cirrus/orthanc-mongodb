@@ -131,7 +131,8 @@ find_package(bson-1.0
             PATHS
             # Alternatives
             "${MONGO_C_INSTALL_DIR}/lib/cmake/bson-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib/cmake/bson-1.0/"
+            "${MONGO_C_INSTALL_DIR}/lib32/cmake/bson-1.0/"
+            "${MONGO_C_INSTALL_DIR}/lib64/cmake/bson-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
 
@@ -141,7 +142,8 @@ find_package(mongoc-1.0
             PATHS
             # Alternatives
             "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/"
+            "${MONGO_C_INSTALL_DIR}/lib32/cmake/mongoc-1.0/"
+            "${MONGO_C_INSTALL_DIR}/lib64/cmake/mongoc-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
 
@@ -192,7 +194,8 @@ find_package(bsoncxx
             PATHS
             # Alternatives
             "${MONGO_CXX_INSTALL_DIR}/lib/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
+            "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
+            "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
             NO_DEFAULT_PATH
             REQUIRED)
 
@@ -200,7 +203,8 @@ find_package(mongocxx
             PATHS
             # Alternatives
             "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSION}/"
+            "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/mongocxx-${MONGO_CXX_VERSION}/"
+            "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/mongocxx-${MONGO_CXX_VERSION}/"
             NO_DEFAULT_PATH
             REQUIRED)
 include_directories("${MONGO_CXX_INSTALL_DIR}/include/bsoncxx/v_noabi")
