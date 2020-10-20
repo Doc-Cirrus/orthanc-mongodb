@@ -20,8 +20,8 @@
 #include "Configuration.h"
 #include "MongoDBException.h"
 
-#include <fstream>
-#include <json/reader.h>
+#include <sstream>
+#include <json/json.h>
 #include <memory>
 
 
@@ -53,16 +53,14 @@ bool ReadConfiguration(Json::Value& configuration, OrthancPluginContext* context
   s.assign(tmp);
   OrthancPluginFreeString(context, tmp);
 
-    Json::Reader reader;
-    if (reader.parse(s, configuration))
-    {
-    return true;
-    }
-    else
-    {
+  std::stringstream ss(s);
+  if (!(ss >> configuration))
+  {
     OrthancPluginLogError(context, "Unable to parse the configuration");
     return false;
-    }
+  }
+
+  return true;
 }
 
 

@@ -1,0 +1,17 @@
+{
+	"RemoteAccessAllowed" : true,
+	
+	"Plugins" : [
+		"/usr/local/share/orthanc/plugins/",
+		"/root/orthanc-mongodb/build/libOrthancMongoDBIndex.so",
+		"/root/orthanc-mongodb/build/libOrthancMongoDBStorage.so"
+	],
+
+	"MongoDB" : {
+		"EnableIndex" : true,
+		"EnableStorage" : true,
+		//"ConnectionUri" : "mongodb://localhost:27017/orthanc_db",
+		"ConnectionUri" : "mongodb://host.docker.internal:27017/orthanc_db",
+		"ChunkSize" : 261120
+	}
+}
