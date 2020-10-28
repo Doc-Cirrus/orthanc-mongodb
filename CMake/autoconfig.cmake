@@ -96,6 +96,8 @@ find_package(jsoncpp
             NO_DEFAULT_PATH
             REQUIRED)
 
+include_directories("${JSONCPP_INSTALL_DIR}/include")
+
 IF (LINK_STATIC_LIBS)
     get_target_property(LIBJSON_LIBS jsoncpp_lib_static LOCATION)
     get_target_property(JSONCPP_INCLUDE_DIRS jsoncpp_lib_static INTERFACE_INCLUDE_DIRECTORIES)
@@ -128,18 +130,25 @@ set(mongoc-1.0_DIR "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/")
 find_package(bson-1.0
             PATHS
             # Alternatives
+            "${MONGO_C_INSTALL_DIR}/lib/cmake/bson-1.0/"
             "${MONGO_C_INSTALL_DIR}/lib32/cmake/bson-1.0/"
             "${MONGO_C_INSTALL_DIR}/lib64/cmake/bson-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
 
+include_directories("${MONGO_C_INSTALL_DIR}/include/libbson-1.0")
+include_directories("${MONGO_C_INSTALL_DIR}/include/libbson-1.0/bson")
 find_package(mongoc-1.0
             PATHS
             # Alternatives
+            "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/"
             "${MONGO_C_INSTALL_DIR}/lib32/cmake/mongoc-1.0/"
             "${MONGO_C_INSTALL_DIR}/lib64/cmake/mongoc-1.0/"
             NO_DEFAULT_PATH
             REQUIRED)
+
+include_directories("${MONGO_C_INSTALL_DIR}/include/libmongoc-1.0")
+include_directories("${MONGO_C_INSTALL_DIR}/include/libmongoc-1.0/mongoc")
 
 IF (LINK_STATIC_LIBS)
     get_target_property(BSON_LIBS mongo::bson_static LOCATION)
@@ -184,6 +193,7 @@ set(mongocxx_DIR "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSIO
 find_package(bsoncxx
             PATHS
             # Alternatives
+            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
             "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
             "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
             NO_DEFAULT_PATH
@@ -192,11 +202,13 @@ find_package(bsoncxx
 find_package(mongocxx
             PATHS
             # Alternatives
+            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSION}/"
             "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/mongocxx-${MONGO_CXX_VERSION}/"
             "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/mongocxx-${MONGO_CXX_VERSION}/"
             NO_DEFAULT_PATH
             REQUIRED)
-
+include_directories("${MONGO_CXX_INSTALL_DIR}/include/bsoncxx/v_noabi")
+include_directories("${MONGO_CXX_INSTALL_DIR}/include/mongocxx/v_noabi")
 IF (LINK_STATIC_LIBS)
     get_target_property(BSONXX_LIBS mongo::bsoncxx_static LOCATION)
     get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_static INTERFACE_INCLUDE_DIRECTORIES)
