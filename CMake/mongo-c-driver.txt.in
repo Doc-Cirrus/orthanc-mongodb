@@ -7,10 +7,9 @@ include(ExternalProject)
 ExternalProject_Add(${MONGO_C_PROJECT}
     GIT_REPOSITORY  "https://github.com/mongodb/mongo-c-driver.git"
     GIT_TAG         "${MONGO_C_VERSION}"
-    GIT_PROGRESS    1
-    GIT_SHALLOW     1
     SOURCE_DIR      "${MONGO_C_SOURCE_DIR}"
     BINARY_DIR      "${MONGO_C_BINARY_DIR}"
+    BUILD_COMMAND make -j 4
     INSTALL_DIR     "${MONGO_C_INSTALL_DIR}"
     CMAKE_CACHE_ARGS
         "-DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}"
