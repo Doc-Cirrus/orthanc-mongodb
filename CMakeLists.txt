@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.2)
 
 project(OrthancMongoDB CXX)
 
-set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.8.0" CACHE STRING "Orthanc server sources root.")
+set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.8.1" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
@@ -10,7 +10,7 @@ set(AUTO_INSTALL_DEPENDENCIES OFF CACHE BOOL "Option to install some required li
 
 set(ORTHANC_OPTIMAL_VERSION_MAJOR    1)
 set(ORTHANC_OPTIMAL_VERSION_MINOR    8)
-set(ORTHANC_OPTIMAL_VERSION_REVISION 0)
+set(ORTHANC_OPTIMAL_VERSION_REVISION 1)
 
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
