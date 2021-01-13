@@ -124,8 +124,10 @@ namespace OrthancPlugins
     db["Resources"].create_index(make_document(kvp("internalId", 1)));
     db["PatientRecyclingOrder"].create_index(make_document(kvp("patientId", 1)));
     db["MainDicomTags"].create_index(make_document(kvp("id", 1)));
+    db["MainDicomTags"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1), kvp("value", 1)));
+    db["MainDicomTags"].create_index(make_document(kvp("value", 1)));
     db["DicomIdentifiers"].create_index(make_document(kvp("id", 1)));
-    db["DicomIdentifiers"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1)));
+    db["DicomIdentifiers"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1), kvp("value", 1)));
     db["DicomIdentifiers"].create_index(make_document(kvp("value", 1)));
     db["Changes"].create_index(make_document(kvp("internalId", 1)));
     db["AttachedFiles"].create_index(make_document(kvp("id", 1)));
