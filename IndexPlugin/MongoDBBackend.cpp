@@ -126,9 +126,9 @@ namespace OrthancPlugins
     db["Resources"].create_index(make_document(kvp("internalId", 1)));
     db["PatientRecyclingOrder"].create_index(make_document(kvp("patientId", 1)));
     db["MainDicomTags"].create_index(make_document(kvp("id", 1)));
+    db["MainDicomTags"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1), kvp("value", 1)));
     db["DicomIdentifiers"].create_index(make_document(kvp("id", 1)));
-    db["DicomIdentifiers"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1)));
-    db["DicomIdentifiers"].create_index(make_document(kvp("value", 1)));
+    db["DicomIdentifiers"].create_index(make_document(kvp("tagGroup", 1), kvp("tagElement", 1), kvp("value", 1)));
     db["Changes"].create_index(make_document(kvp("internalId", 1)));
     db["AttachedFiles"].create_index(make_document(kvp("id", 1)));
     db["Metadata"].create_index(make_document(kvp("id", 1)));
@@ -1975,11 +1975,11 @@ namespace OrthancPlugins
         kvp("type", meta[i].metadata)
       );
 
-      mongocxx::model::insert_one insert_op{insertDoc.view()};
       mongocxx::model::delete_one delete_one{removeDoc.view()};
+      mongocxx::model::insert_one insert_op{insertDoc.view()};
 
-      bulk.append(insert_op);
       bulk.append(delete_one);
+      bulk.append(insert_op);
     }
 
     // just check for the $or not throw error
