@@ -17,14 +17,14 @@ This chapter describes the process of installation with not too much details and
 - Download Ortanc sources or install orthanc-devel package
 
 ---
-It is possible to install all dependencies manually (below you will find insturctions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to ```docs``` folder -> ```autoconfig.md``` file.
+It is possible to install all dependencies manually (below you will find instructions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to ```docs``` folder -> ```autoconfig.md``` file.
 
 ### CentOS 7 Build Instructions
 
 ## General Packages
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh epel-release
-yum -y install make devtoolset-7 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
+yum -y install make devtoolset-8 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
 ```
 
 ## Prerequisite: Mongo C Driver 1.15.x
@@ -34,9 +34,9 @@ curl -L --output mongo-c-driver-1.15.x.tar.gz https://github.com/mongodb/mongo-c
 tar -xzf mongo-c-driver-1.15.x.tar.gz
 mkdir -p mongo-c-driver-1.15.x/build
 cd mongo-c-driver-1.15.x/build
-scl enable devtoolset-7 "cmake3 -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
-scl enable devtoolset-7 "make"
-scl enable devtoolset-7 "sudo make install"
+scl enable devtoolset-8 "cmake3 -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
+scl enable devtoolset-8 "make"
+scl enable devtoolset-8 "sudo make install"
 ```
 
 ## Prerequisite: MongoDB C++ Driver 3.4.x
@@ -46,11 +46,11 @@ curl -L --output mongo-cxx-driver-3.4.x.tar.gz https://github.com/mongodb/mongo-
 tar -xzf mongo-cxx-driver-3.4.x.tar.gz
 mkdir -p mongo-cxx-driver-3.4.x/build
 cd mongo-cxx-driver-r3.4.x/build
-scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
+scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
 # for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
 # so use sudo for make too
-scl enable devtoolset-7 "sudo make"
-scl enable devtoolset-7 "sudo make install"
+scl enable devtoolset-8 "sudo make"
+scl enable devtoolset-8 "sudo make install"
 ```
 
 ## Prerequisite: JsonCpp (1.8.0 exact)
@@ -59,18 +59,18 @@ curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jso
 tar -xzf jsoncpp-1.8.0.tar.gz
 mkdir -p jsoncpp-1.8.0/build
 cd jsoncpp-1.8.0/build
-scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .."
-scl enable devtoolset-7 "make"
-scl enable devtoolset-7 "sudo make install"
+scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .."
+scl enable devtoolset-8 "make"
+scl enable devtoolset-8 "sudo make install"
 ```
 
 ## Build of this orthanc-mongodb plugin itself
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-scl enable devtoolset-7 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
-scl enable devtoolset-7 "make"
-scl enable devtoolset-7 "sudo make install"
+scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
+scl enable devtoolset-8 "make"
+scl enable devtoolset-8 "sudo make install"
 ```
 
 * ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
