@@ -209,6 +209,11 @@ namespace OrthancPlugins
                                 const char* hashSeries,
                                 const char* hashInstance);
 
+    virtual void GetAllLookupResources (const std::vector<OrthancPluginDatabaseConstraint>& lookup,
+                                        OrthancPluginResourceType                           queryLevel,
+                                        uint32_t                                            limit,
+                                        bool                                                requestSomeInstance);
+
   };
 } //namespace OrtahncPlugins
 

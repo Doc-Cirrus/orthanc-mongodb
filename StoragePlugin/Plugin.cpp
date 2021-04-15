@@ -26,6 +26,7 @@
 #include "MongoDBStorageArea.h"
 #include "../Core/MongoDBException.h"
 #include "../Core/Configuration.h"
+#include "../Core/Constants.h"
 
 
 static OrthancPluginContext* context_ = NULL;
@@ -194,6 +195,6 @@ extern "C"
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
   {
-    return "1.5.7";
+    return ORTHANC_CORE_VERSION;
   }
 }
