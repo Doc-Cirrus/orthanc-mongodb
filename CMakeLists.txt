@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.2)
 
-project(OrthancMongoDB)
+project(OrthancMongoDB CXX)
 
-set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.5.7" CACHE STRING "Orthanc server sources root.")
+set(ORTHANC_ROOT "${PROJECT_SOURCE_DIR}/../Orthanc-1.9.1" CACHE STRING "Orthanc server sources root.")
 set(BUILD_TESTS OFF CACHE BOOL "Option to build tests.")
 set(BUILD_WITH_GCOV OFF CACHE BOOL "Option to build with gcov for the code coverage.")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Option to link against static mongo-c-driver and mongo-cxx-driver.")
 set(AUTO_INSTALL_DEPENDENCIES OFF CACHE BOOL "Option to install some required libraries automatically. Libraries wiill be installed in project build folder.")
 
 set(ORTHANC_OPTIMAL_VERSION_MAJOR    1)
-set(ORTHANC_OPTIMAL_VERSION_MINOR    5)
-set(ORTHANC_OPTIMAL_VERSION_REVISION 7)
+set(ORTHANC_OPTIMAL_VERSION_MINOR    9)
+set(ORTHANC_OPTIMAL_VERSION_REVISION 1)
 
 message("-- Orthanc Root: ${ORTHANC_ROOT}")
 
@@ -34,11 +34,11 @@ ELSE ()
     #rely on pkg-config
     include(FindPkgConfig)
     IF (NOT AUTO_INSTALL_DEPENDENCIES)
-      pkg_search_module(MONGOCLIB REQUIRED libmongoc-1.0)
+      find_package(libmongoc-1.0 REQUIRED)
       pkg_search_module(JSONCPP REQUIRED jsoncpp)
       IF (LINK_STATIC_LIBS)
-        pkg_search_module(BSONCXX REQUIRED libbsoncxx-static)
-        pkg_search_module(MONGOCXX REQUIRED libmongocxx-static)
+	      find_package(libbsoncxx-static REQUIRED)
+	      find_package(libmongocxx-static REQUIRED)
       ELSE()
         pkg_search_module(BSONCXX REQUIRED libbsoncxx)
         pkg_search_module(MONGOCXX REQUIRED libmongocxx)
@@ -66,9 +66,9 @@ ENDIF ()
 
 # Include directories
 include_directories(${BSON_INCLUDE_DIRS})
-include_directories(${MONGOCLIB_INCLUDE_DIRS})
-include_directories(${BSONCXX_INCLUDE_DIRS})
-include_directories(${MONGOCXX_INCLUDE_DIRS})
+include_directories(${MONGOC_INCLUDE_DIRS})
+include_directories(${LIBMONGOCXX_STATIC_INCLUDE_DIRS})
+include_directories(${LIBBSONCXX_STATIC_INCLUDE_DIRS})
 include_directories(${JSONCPP_INCLUDE_DIRS})
 
 IF (NOT AUTO_INSTALL_DEPENDENCIES)
@@ -85,8 +85,8 @@ IF (NOT AUTO_INSTALL_DEPENDENCIES)
       set(LIBJSON_LIB_NAMES   jsoncpp_static                ${LIBJSON_LIB_NAMES} )
       set(BSON_LIB_NAMES      bson-static-1.0 bson-1.0      ${BSON_LIB_NAMES}    )
       set(MONGOC_LIB_NAMES    mongoc-static-1.0 mongoc-1.0  ${MONGOC_LIB_NAMES}  )
-      set(BSONCXX_LIB_NAMES   bsoncxx-static                ${BSONCXX_LIB_NAMES} )
-      set(MONGOCXX_LIB_NAMES  mongocxx-static               ${MONGOCXX_LIB_NAMES})
+      set(BSONCXX_LIB_NAMES   bsoncxx-static                ${LIBBSONCXX_STATIC_LIBRARIES} )
+      set(MONGOCXX_LIB_NAMES  mongocxx-static               ${LIBMONGOCXX_STATIC_LIBRARIES})
   ENDIF()
 
   find_library(LIBJSON_LIBS
@@ -125,7 +125,7 @@ link_libraries(${LIBS})
 include_directories ("${PROJECT_SOURCE_DIR}/Core")
 include_directories ("${PROJECT_SOURCE_DIR}/IndexPlugin")
 include_directories ("${PROJECT_SOURCE_DIR}/StoragePlugin")
-include_directories ("${ORTHANC_ROOT}/Plugins/Include")
+include_directories ("${ORTHANC_ROOT}/OrthancServer/Plugins/Include")
 ##################################################################
 add_definitions(
 	-DHAS_ORTHANC_EXCEPTION=1 
@@ -157,6 +157,10 @@ set(STORAGE_PLUGIN_SOURCES
 ##################################################################
 add_library(OrthancMongoDBIndex SHARED ${CORE_SOURCES} ${INDEX_PLUGIN_SOURCES})
 add_library(OrthancMongoDBStorage SHARED ${CORE_SOURCES} ${STORAGE_PLUGIN_SOURCES})
+
+
+target_link_libraries(OrthancMongoDBIndex ${LIBS})
+target_link_libraries(OrthancMongoDBStorage ${LIBS})
 
 IF (APPLE)
   set(APPLE_LIBS "sasl2" "-framework Security" "-framework CoreFoundation")

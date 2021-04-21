@@ -1393,6 +1393,12 @@ namespace OrthancPlugins
     using bsoncxx::builder::basic::make_array;
     using bsoncxx::builder::basic::make_document;
 
+    if ( lookup.size() > 0 && lookup[0].valuesCount && ( std::strcmp(lookup[0].values[0],"*") == 0 ) )
+    {
+        GetAllLookupResources(lookup,queryLevel, limit,requestSomeInstance);
+        return;
+    }
+
     auto conn = pool_.acquire();
     auto db = (*conn)[dbname_];
 
@@ -1714,6 +1720,7 @@ namespace OrthancPlugins
 
       stages.lookup(sort_build_lookup_stage.view());
       stages.sort(sort_build_stage.view());
+
     }
 
     if (limit != 0) {
@@ -1741,7 +1748,6 @@ namespace OrthancPlugins
         )
       );
     }
-
     auto cursor = resourcesCollection.aggregate(stages, mongocxx::options::aggregate{});
 
     for (auto&& doc : cursor) {
@@ -1749,12 +1755,17 @@ namespace OrthancPlugins
         GetOutput().AnswerMatchingResource(
           std::string(doc["_id"].get_utf8().value), 
           std::string(doc["instance_id"].get_utf8().value)
+          
         );
       }
       else {
         GetOutput().AnswerMatchingResource(std::string(doc["publicId"].get_utf8().value));
       }
+
+      
+
     }
+
   }
 
   void MongoDBBackend::SetResourcesContent(
@@ -1958,4 +1969,95 @@ namespace OrthancPlugins
         }
     }
   }
+
+  void MongoDBBackend::GetAllLookupResources(const std::vector<OrthancPluginDatabaseConstraint>& lookup,
+                                              OrthancPluginResourceType                           queryLevel,
+                                              uint32_t                                            limit,
+                                              bool                                                requestSomeInstance)
+    {
+    using bsoncxx::builder::basic::kvp;
+    using bsoncxx::builder::basic::array;
+    using bsoncxx::builder::basic::sub_array;
+    using bsoncxx::builder::basic::make_array;
+    using bsoncxx::builder::basic::make_document;
+    auto conn = pool_.acquire();
+    auto db = (*conn)[dbname_];
+    auto aggregate_collection = db["DicomIdentifiers"];
+
+    mongocxx::pipeline stages;
+    
+    auto match  = make_document(
+        kvp("id", make_document( kvp("$ne",1))), 
+        kvp("tagGroup",16), 
+        kvp("tagElement",16));
+
+    auto graphLookupInternal = make_document( kvp("from","Resources"),
+                                      kvp("startWith","$id"),
+                                      kvp("connectFromField","internalId"),
+                                      kvp("connectToField","parentId"),
+                                      kvp("as","children"));
+
+   auto grapthLookupParents = make_document( kvp("from","Resources"),
+                                      kvp("startWith","$id"),
+                                      kvp("connectFromField","parentId"),
+                                      kvp("connectToField","internalId"),
+                                      kvp("as","parents"));
+
+   auto concatArrays = array{};
+   concatArrays.append(make_document(kvp("$ifNull",make_array("$children",make_array()))));
+   concatArrays.append(make_document(kvp("$ifNull",make_array("$parents",make_array()))));
+   auto addFields = make_document(kvp("resources",make_document(kvp("$concatArrays",concatArrays.extract()))));
+
+
+  auto cond = array{};
+  cond.append("$$item.resourceType");
+  cond.append(1);
+
+  auto project = make_document(kvp("resources",make_document(kvp("$filter",make_document(kvp("input","$resources"),
+                                                             kvp("as","item"),
+                                                             kvp("cond",make_document(kvp("$eq",cond.extract()))))))));
+
+  auto replaceRoot = make_document(kvp("newRoot","$resources"));
+
+  auto graphLookupResources = make_document( kvp("from","Resources"),
+                                             kvp("startWith","$internalId"),
+                                             kvp("connectFromField","internalId"),
+                                             kvp("connectToField","parentId"),
+                                             kvp("as","children"),
+                                             kvp("as","children"),
+                                             kvp("maxDepth",1));
+
+
+  auto childrenMatch = make_document(kvp("children.resourceType",3));
+
+  auto projectPublicId = make_document(kvp("_id","$publicId"),kvp("instance_id","$children.publicId"));
+
+  stages.match(match.view());
+  stages.graph_lookup(graphLookupInternal.view());
+  stages.limit(limit);
+  stages.graph_lookup(grapthLookupParents.view());
+  stages.add_fields(addFields.view());
+  stages.project(project.view());
+  stages.unwind("$resources");
+  stages.replace_root(replaceRoot.view());
+  stages.graph_lookup(graphLookupResources.view());
+  stages.unwind("$children");
+  stages.match(childrenMatch.view());
+  stages.project(projectPublicId.view());
+
+  auto cursor = aggregate_collection.aggregate(stages,mongocxx::options::aggregate{});
+
+  for (auto&& doc : cursor) {
+    if (requestSomeInstance) {
+      GetOutput().AnswerMatchingResource(
+        std::string(doc["_id"].get_utf8().value), 
+        std::string(doc["instance_id"].get_utf8().value)
+      );
+    }
+    else 
+    {
+      GetOutput().AnswerMatchingResource(std::string(doc["publicId"].get_utf8().value));
+    }
+    }
+}
 } //namespace OrthancPlugins
