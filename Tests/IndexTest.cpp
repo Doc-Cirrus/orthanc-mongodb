@@ -33,7 +33,9 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/uri.hpp>
 
-std::string connection_str = "mongodb://localhost:27017/";
+constexpr auto DEFAULT_DB_URI = "localhost:27017";
+
+std::string connection_str = "mongodb://";
 std::string test_database = "test_db_" + OrthancPlugins::GenerateUuid();
 
 static int DatabaseAnswerCount = 0;
@@ -386,6 +388,60 @@ OrthancPluginChange change = {
     "publicId", //publicId;
     "date" //date;
 };
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+TEST_F (MongoDBBackendTest, LookupResourcesGetAllId)
+{
+    OrthancPluginCreateInstanceResult result;
+    backend_->CreateInstance(result, "279af625-745c182f-8b60f316-b1f79bb0-93047b15",
+    "cb5ec020-39a96b1b-4715d630-fe6c03d5-6aefe2b7",
+    "1297cf2a-8dd7705f-8ee491b3-2a7ee45a-1c529021",
+    "3d17a7cf-a66f71c6-43467e6e-d619d6d2-92cb7e3d");
+
+    OrthancPluginAttachment attachment{"ad937c75-2ef7-4337-b0b0-50d23df979b3",
+    1,
+    5038,
+    "587a161a8cec7bb63994d0a033e124d8",
+    1,
+    5038,
+    "587a161a8cec7bb63994d0a033e124d8"};
+    backend_->AddAttachment(10,attachment);
+
+    OrthancPluginResourcesContentTags *tag = new OrthancPluginResourcesContentTags{10,16,16,"1.2.826.0.1.3680043.10.404.7628830299413089570748268082630112313"};
+    OrthancPluginResourcesContentTags *tag1 = new OrthancPluginResourcesContentTags{10,16,16,"1.2.826.0.1.3680043.10.404.7628830299413089570748268082630112313"};
+    OrthancPluginResourcesContentMetadata * metadata =  new OrthancPluginResourcesContentMetadata {9,7,"20210508T164059"};
+
+    backend_->SetResourcesContent(1,tag,1,tag1,1,metadata);
+
+    result;
+    backend_->CreateInstance(result, "279af625-745c182f-8b60f316-b1f79bb0-93047b15",
+    "cb5ec020-39a96b1b-4715d630-fe6c03d5-6aefe2b7",
+    "1297cf2a-8dd7705f-8ee491b3-2a7ee45a-1c529021",
+    "a112ade3-d13e97b5-6ba59707-46a28dd1-91ea8aaa");
+
+    DatabaseAnswerCount = 0;
+
+    const char *pattern[] = {"*"};
+
+    std::vector<OrthancPluginDatabaseConstraint> constraints
+    {
+        {
+            .level = OrthancPluginResourceType_Study,
+            .tagGroup = 16,
+            .tagElement = 16,
+            .isIdentifierTag = 1,
+            .isCaseSensitive = 1,
+            .isMandatory = 1,
+            .type = OrthancPluginConstraintType_Wildcard,
+            .valuesCount = 1,
+            .values = pattern
+        }
+    };
+
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Study, 1, 0);
+    ASSERT_EQ(3, DatabaseAnswerCount);
+};
+#endif
 
 TEST_F (MongoDBBackendTest, Changes)
 {
@@ -991,6 +1047,17 @@ TEST_F (MongoDBBackendTest, SetResourcesContent)
 
 int main(int argc, char **argv)
 {
+  if ( argc > 1 )
+  {
+    connection_str.append(argv[1]);
+  }
+  else
+  {
+    connection_str.append(DEFAULT_DB_URI);
+  }
+
+  connection_str.append("/");
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
