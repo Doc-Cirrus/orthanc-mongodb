@@ -183,13 +183,8 @@ IF (BUILD_TESTS)
     ENDIF()
   ENDIF()
 
-  IF (UNIX)
-      pkg_search_module(GTEST REQUIRED gtest)
-      include_directories(${GTEST_INCLUDE_DIRS})
-  ENDIF()
-
   include_directories ("${PROJECT_SOURCE_DIR}/Tests")
-  set(GOOGLE_TEST_LIB gtest gmock_main)
+  set(GOOGLE_TEST_LIB ${GTEST_INSTALL_DIR}/lib/*.a  )
 
   set(TEST_SOURCES_INDEX
         "Tests/IndexTest.cpp"
