@@ -184,7 +184,7 @@ IF (BUILD_TESTS)
   ENDIF()
 
   include_directories ("${PROJECT_SOURCE_DIR}/Tests")
-  file(GOOGLE_TEST_LIB GLOB_RECURSE ${GTEST_INSTALL_DIR}/lib/*.a)
+  file(GLOB_RECURSE GOOGLE_TEST_LIB  ${GTEST_INSTALL_DIR}/lib/*.a)
 
   set(TEST_SOURCES_INDEX
         "Tests/IndexTest.cpp"
