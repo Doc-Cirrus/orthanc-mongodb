@@ -1,0 +1,7 @@
+os: linux
+dist: xenial
+compiler:
+  - gcc-9.3
+script:
+# Call your build system
+  - ./build.sh 1.9.1 Release
