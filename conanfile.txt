@@ -1,0 +1,8 @@
+ [requires]
+ jsoncpp/1.8.3
+ mongo-cxx-driver/3.6.2
+ mongo-c-driver/1.17.4
+ gtest/1.10.0
+
+ [generators]
+ cmake
