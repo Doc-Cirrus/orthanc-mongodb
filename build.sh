@@ -53,5 +53,5 @@ pushd plugin_build
 call_cmd "conan profile update settings.compiler.libcxx=libstdc++11 default"
 call_cmd "conan install ${PLUGIN_DIR} --build=mongo-cxx-driver"
 call_cmd "$CMAKE_EXE -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr  -DCMAKE_BUILD_TYPE=$2 -DORTHANC_ROOT=$ROOT_DIR/Orthanc-$1  -DBUILD_TESTS=ON $PLUGIN_DIR"
-call_cmd "nproc --all | make -j"
+call_cmd "make -j 8"
 
