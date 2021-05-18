@@ -12,6 +12,7 @@ PLUGIN_DIR=$(pwd)
 OS=$NAME
 if [[ $OS == "Ubuntu" ]] 
 then
+    apt -y update
     apt -y install unzip cmake python make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl wget 
     apt -y install python3-pip
     pip3 install conan

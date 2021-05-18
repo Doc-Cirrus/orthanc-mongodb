@@ -5,4 +5,6 @@ compiler:
 script:
 # Call your build system
   - sudo chmod +x build.sh 
+  - sudo chmod +x install_gcc_9.sh
+  - sudo ./install_gcc_9.sh
   - sudo ./build.sh 1.9.1 Release
