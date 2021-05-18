@@ -4,5 +4,5 @@ compiler:
   - gcc-9.3
 script:
 # Call your build system
-  - chmod +x build.sh 
-  - ./build.sh 1.9.1 Release
+  - sudo chmod +x build.sh 
+  - sudo ./build.sh 1.9.1 Release
