@@ -2,6 +2,11 @@ os: linux
 dist: xenial
 compiler:
   - gcc-9.3
+install:
+# Install conan
+  - pip install conan
+# Automatic detection of your arch, compiler, etc.
+  - conan user
 script:
 # Call your build system
   - chmod +x build.sh 
