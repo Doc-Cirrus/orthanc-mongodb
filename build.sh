@@ -16,7 +16,7 @@ then
     apt -y install unzip cmake python make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl wget 
     apt -y install python3-pip
     pip3 install conan
-
+    conan profile update settings.compiler.libcxx=libstdc++11 default
     CMAKE_EXE=cmake
     call_cmd()
     {

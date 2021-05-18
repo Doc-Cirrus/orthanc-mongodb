@@ -11,63 +11,43 @@ This chapter describes the process of installation with not too much details and
 
 ### Prerequisites
 - mongodb 3.6+ server 
-- Install jsoncpp
+- conan package manager
+- Install jsoncpp 1.17.4
 - Install/build mongoc library http://mongoc.org/libmongoc/current/installing.html
 - Install/build mongo-cxx lib https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
 - Download Ortanc sources or install orthanc-devel package
 
----
-It is possible to install all dependencies manually (below you will find instructions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to ```docs``` folder -> ```autoconfig.md``` file.
+## Automatic build using script
+
+On Debian/Ubuntu update compiler using install_gcc_9.sh script.
+
+After run build.sh script.
+
+build.sh arg1 arg2
+  - arg1 - version of Orthanc service( 1.9.1 or another )
+  - arg2 - build type (Release/Debug)
+
+For example
+build.sh 1.9.1 Release
+
+## Manual build
 
 ### CentOS 7 Build Instructions
 
 ## General Packages
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh epel-release
-yum -y install make devtoolset-8 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
-```
-
-## Prerequisite: Mongo C Driver 1.17.4
-https://github.com/mongodb/mongo-c-driver/releases
-```bash
-curl -L --output mongo-c-driver-1.17.4.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.17.4.tar.gz
-tar -xzf mongo-c-driver-1.17.4.tar.gz
-mkdir -p mongo-c-driver-1.17.4/build
-cd mongo-c-driver-1.17.4/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
-scl enable devtoolset-8 "make"
-scl enable devtoolset-8 "sudo make install"
-```
-
-## Prerequisite: MongoDB C++ Driver 3.6.2
-https://github.com/mongodb/mongo-cxx-driver/releases
-```bash
-curl -L --output mongo-cxx-driver-3.6.2.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/3.6.2.tar.gz
-tar -xzf mongo-cxx-driver-3.6.2.tar.gz
-mkdir -p mongo-cxx-driver-3.6.2/build
-cd mongo-cxx-driver-r3.6.2/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
-# for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
-# so use sudo for make too
-scl enable devtoolset-8 "sudo make"
-scl enable devtoolset-8 "sudo make install"
-```
-
-## Prerequisite: JsonCpp (1.8.0 exact)
-```bash
-curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jsoncpp/archive/1.8.0.tar.gz
-tar -xzf jsoncpp-1.8.0.tar.gz
-mkdir -p jsoncpp-1.8.0/build
-cd jsoncpp-1.8.0/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .."
-scl enable devtoolset-8 "make"
-scl enable devtoolset-8 "sudo make install"
+yum -y install make devtoolset-8 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel python3-pip
+pip3 install conan
+conan profile update settings.compiler.libcxx=libstdc++11 default
+conan profile update settings.compiler.libcxx=libstdc++11 default
 ```
 
 ## Build of this orthanc-mongodb plugin itself
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
+scl enable devtoolset-8 "conan install .."
 scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
 scl enable devtoolset-8 "make"
 scl enable devtoolset-8 "sudo make install"
@@ -81,49 +61,17 @@ scl enable devtoolset-8 "sudo make install"
 
 ## General Packages
 ```bash
-apt -y install build-essential unzip cmake make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl
-```
-
-## Prerequisite: Mongo C Driver 1.17.4
-https://github.com/mongodb/mongo-c-driver/releases
-```bash
-curl -L --output mongo-c-driver-1.17.4.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.17.4.tar.gz
-tar -xzf mongo-c-driver-1.17.4.tar.gz
-mkdir -p mongo-c-driver-1.17.4/build
-cd mongo-c-driver-1.17.4/build
-cmake -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=ON -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DENABLE_ICU=OFF ../mongo-c-driver-1.17.4
-make
-sudo make install
-```
-
-## Prerequisite: MongoDB C++ Driver 3.6.2
-https://github.com/mongodb/mongo-cxx-driver/releases
-```bash
-curl -L --output mongo-cxx-driver-3.6.2.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/3.6.2.tar.gz
-tar -xzf mongo-cxx-driver-3.6.2.tar.gz
-mkdir -p mongo-cxx-driver-3.6.2/build
-cd mongo-cxx-driver-r3.6.2/build
-cmake -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local ..
-sudo make
-sudo make install
-```
-
-## Prerequisite: JsonCpp (1.8.0 exact)
-```bash
-curl -L --output jsoncpp-1.8.0.tar.gz https://github.com/open-source-parsers/jsoncpp/archive/1.8.0.tar.gz
-tar -xzf jsoncpp-1.8.0.tar.gz
-mkdir -p jsoncpp-1.8.0/build
-cd jsoncpp-1.8.0/build
-cmake -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release ..
-make
-sudo make install
+apt -y install build-essential unzip cmake make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl python3
+apt -y install python3-pip
+pip3 install conan
+conan profile update settings.compiler.libcxx=libstdc++11 default
 ```
 
 ## Build of this orthanc-mongodb plugin itself
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-
+conan install ..
 cmake -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DLINK_STATIC_LIBS=TRUE -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local ..
 make
 ```
