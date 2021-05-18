@@ -1,14 +1,7 @@
 os: linux
-language: python
-python: "3.7"
-dist: xenial
+dist: focal
 compiler:
   - gcc-9.3
-install:
-# Install conan
-  - pip install conan
-# Automatic detection of your arch, compiler, etc.
-  - conan user
 script:
 # Call your build system
   - sudo chmod +x build.sh 
