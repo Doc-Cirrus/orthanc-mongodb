@@ -13,7 +13,8 @@ OS=$NAME
 if [[ $OS == "Ubuntu" ]] 
 then
     apt update -y
-    apt -y install build-essential unzip cmake python make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl wget python3-pip
+    apt -y install build-essential unzip cmake python make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl wget 
+    apt -y install python3-pip
     pip3 install conan
     conan profile update settings.compiler.libcxx=libstdc++11 default
     CMAKE_EXE=cmake
