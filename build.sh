@@ -15,6 +15,7 @@ then
     apt update -y
     apt -y install build-essential unzip cmake python make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl wget python3-pip
     pip3 install conan
+    conan profile update settings.compiler.libcxx=libstdc++11 default
     CMAKE_EXE=cmake
     call_cmd()
     {
@@ -27,6 +28,7 @@ then
     yum -y install centos-release-scl centos-release-scl-rh epel-release
     yum -y install make devtoolset-8 libuuid-devel python openssl-devel cyrus-sasl-devel cmake3 zlib-devel gcc-c++ wget python3-pip
     pip3 install conan
+    conan profile update settings.compiler.libcxx=libstdc++11 default
     CMAKE_EXE=cmake3
     call_cmd()
     {
@@ -51,9 +53,3 @@ call_cmd "conan install ${PLUGIN_DIR}"
 call_cmd "$CMAKE_EXE -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr  -DCMAKE_BUILD_TYPE=$2 -DORTHANC_ROOT=$ROOT_DIR/Orthanc-$1  -DBUILD_TESTS=ON $PLUGIN_DIR"
 call_cmd "nproc --all | make -j"
 
-#Build Orthanc Service 
-#popd
-#mkdir orthanc_service_build
-#pushd orthanc_service_build
-#$CMAKE_EXE -DSTATIC_BUILD=ON -DCMAKE_BUILD_TYPE=$2 $ROOT_DIR/Orthanc-$1/OrthancServer/
-#nproc --all | make -j
