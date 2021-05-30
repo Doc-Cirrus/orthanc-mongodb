@@ -32,7 +32,9 @@
 #include <mongocxx/client.hpp>
 #include <mongocxx/uri.hpp>
 
-std::string connection_str = "mongodb://localhost:27017/";
+constexpr auto DEFAULT_DB_URI = "localhost:27017";
+
+std::string connection_str = "mongodb://";
 std::string test_database = "test_db_" + OrthancPlugins::GenerateUuid();
 
 class MongoDBStorageTest : public ::testing::Test {
@@ -93,6 +95,17 @@ TEST_F(MongoDBStorageTest, StoreFiles)
  
 int main(int argc, char **argv) 
 {
+  if ( argc > 1)
+  {
+    connection_str.append(argv[1]);
+  }
+  else
+  {
+    connection_str.append(DEFAULT_DB_URI);
+  }
+
+  connection_str.append("/");
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
