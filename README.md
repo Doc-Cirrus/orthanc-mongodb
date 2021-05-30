@@ -37,7 +37,7 @@ build.sh 1.9.1 Release
 ## General Packages
 ```bash
 yum -y install centos-release-scl centos-release-scl-rh epel-release
-yum -y install make devtoolset-8 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel python3-pip
+yum -y install make devtoolset-9 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel python3-pip
 pip3 install conan
 conan profile update settings.compiler.libcxx=libstdc++11 default
 conan profile update settings.compiler.libcxx=libstdc++11 default
@@ -47,17 +47,16 @@ conan profile update settings.compiler.libcxx=libstdc++11 default
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build
-scl enable devtoolset-8 "conan install .."
-scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
-scl enable devtoolset-8 "make"
-scl enable devtoolset-8 "sudo make install"
+scl enable devtoolset-9 "conan install .."
+scl enable devtoolset-9 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local -DORTHANC_ROOT=/usr/include .."
+scl enable devtoolset-9 "make"
+scl enable devtoolset-9 "sudo make install"
 ```
 
-* ```ORTHANC_ROOT``` - the Orthanc server sources root to include the ```orthanc/OrthancCPlugin.h```
+* ```ORTHANC_ROOT``` - the Orthanc server sources root, which contains the extracted Orthanc package
 * ```BUILD_TESTS``` - option to build tests, default off
-* ```BUILD_WITH_GCOV``` - option to include coverage default off
 
-### Debian 9 Build Instructions (static build)
+### CentOS/RHEL 8 Build Instructions
 
 ## General Packages
 ```bash
@@ -67,7 +66,7 @@ pip3 install conan
 conan profile update settings.compiler.libcxx=libstdc++11 default
 ```
 
-## Build of this orthanc-mongodb plugin itself
+## Build of this orthanc-mongodb plugin
 ```bash
 mkdir -p orthanc-mongodb/build
 cd orthanc-mongodb/build

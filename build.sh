@@ -27,13 +27,13 @@ elif [[ $OS == "CentOS Linux" ]]
 then
    echo "Centos system"
     yum -y install centos-release-scl centos-release-scl-rh epel-release
-    yum -y install make devtoolset-8 libuuid-devel python openssl-devel cyrus-sasl-devel cmake3 zlib-devel gcc-c++ wget python3-pip
+    yum -y install make devtoolset-9 libuuid-devel python openssl-devel cyrus-sasl-devel cmake3 zlib-devel gcc-c++ wget python3-pip
     pip3 install conan
     conan profile update settings.compiler.libcxx=libstdc++11 default
     CMAKE_EXE=cmake3
     call_cmd()
     {
-        scl enable devtoolset-8 "$1"
+        scl enable devtoolset-9 "$1"
     }
 else
 echo "Not CentOS or Ubuntu"
