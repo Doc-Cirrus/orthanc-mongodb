@@ -17,7 +17,7 @@
 #
 #    Sample config files are in the config folder.
 #
-# Run Orthanc server in docer example:
+# Run Orthanc server in docker example:
 #
 #   $ docker run \
 #       --network host \
