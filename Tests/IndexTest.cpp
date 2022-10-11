@@ -374,7 +374,7 @@ TEST_F (MongoDBBackendTest, LookupResources)
         .values = pattern
      **/
     backend_->AttachChild(resources[6], backend_->CreateResource("", OrthancPluginResourceType_Instance));
-    backend_->LookupResources(constraints, OrthancPluginResourceType_Instance, resources.size(), 1);
+    backend_->LookupResources(constraints, OrthancPluginResourceType_Instance, resources.size(), 0);
     ASSERT_EQ(1, DatabaseAnswerCount);
 }
 #endif
