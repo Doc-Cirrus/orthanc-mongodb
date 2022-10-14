@@ -18,4 +18,4 @@
 
 #pragma once 
 
-constexpr auto ORTHANC_CORE_VERSION = "1.9.0";
+constexpr auto ORTHANC_CORE_VERSION = "1.9.1";

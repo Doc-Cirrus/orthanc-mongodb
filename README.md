@@ -1,9 +1,13 @@
 # MongoDB plugins for Orthanc DICOM Server
 
-See: https://github.com/Doc-Cirrus/orthanc-mongodb
-
 ## OVERVIEW
 The repository contains two plugins to store the data in MongoDB database.
+
+## Important
+
+If you used an older version of this plugin, you'll need to execute a ligration documented in [migration.md](docs/migration.md).
+
+Also not this pluging supports up to orthanc@1.9.1 version for the time been.
 
 ## Installation
 
@@ -17,7 +21,7 @@ This chapter describes the process of installation with not too much details and
 - Download Ortanc sources or install orthanc-devel package
 
 ---
-It is possible to install all dependencies manually (below you will find instructions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to ```docs``` folder -> ```autoconfig.md``` file.
+It is possible to install all dependencies manually (below you will find instructions) or you could try to use ```AUTO_INSTALL_DEPENDENCIES``` flag for cmake. In this way some dependencies will be installed automaticaly for orthanc-mongodb project. For more details refer to [autoconfig.md](docs/autoconfig.md).
 
 ### CentOS/RHEL 7 Build Instructions
 

@@ -16,10 +16,10 @@ If this option is enabled, cmake will take care about downloading, configuring a
 ## Current versions
 
 1. ```JSONCPP_VERSION``` - 1.8.0
-2. ```MONGO_C_VERSION``` - 1.16.2
-3. ```MONGO_CXX_VERSION``` - 3.5.0
+2. ```MONGO_C_VERSION``` - 1.23.0
+3. ```MONGO_CXX_VERSION``` - 3.7.0
 
-To use another versions of any of the above library - change version in respective cmake macros in [CMake/autoconfig.cmake](https://github.com/andrewDubyk/orthanc-mongodb/blob/Orthanc-1.5.7/CMake/autoconfig.cmake) file.
+To use another versions of any of the above library - change version in respective cmake macros in [CMake/autoconfig.cmake](https://github.com/andrewDubyk/orthanc-mongodb/blob/master/CMake/autoconfig.cmake) file.
 
 ## Usage exmaple
 
