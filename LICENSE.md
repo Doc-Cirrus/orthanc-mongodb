@@ -1,5 +1,5 @@
 MongoDB Plugin - A plugin for Otrhanc DICOM Server for storing DICOM data in MongoDB Database
-Copyright (C) 2017  (Doc Cirrus GmbH)   Ronald Wertlen, Ihor Mozil
+Copyright (C) 2017  (Doc Cirrus GmbH)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -13,4 +13,3 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
-

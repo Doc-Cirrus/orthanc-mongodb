@@ -4,3 +4,4 @@ build
 ._.DS_Store
 .idea
 *.iml
+*ThirdPartyDownloads*

@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.2)
+
+project(${MONGO_CXX_PROJECT})
+
+include(ExternalProject)
+
+ExternalProject_Add(${MONGO_CXX_PROJECT}
+    URL             "https://github.com/mongodb/mongo-cxx-driver/releases/download/r${MONGO_CXX_VERSION}/mongo-cxx-driver-r${MONGO_CXX_VERSION}.tar.gz"
+    SOURCE_DIR      "${MONGO_CXX_SOURCE_DIR}"
+    BINARY_DIR      "${MONGO_CXX_BINARY_DIR}"
+    INSTALL_DIR     "${MONGO_CXX_INSTALL_DIR}"
+    CMAKE_CACHE_ARGS
+        "-DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}"
+        "-DCMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}:STRING=${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
+        -DCMAKE_INSTALL_PREFIX:PATH=${MONGO_CXX_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DCMAKE_PREFIX_PATH:PATH=${MONGO_C_INSTALL_DIR}
+        -DBUILD_SHARED_LIBS:BOOL=${MONGO_CXX_BUILD_SHARED_LIBS}
+        -DBUILD_SHARED_AND_STATIC_LIBS:BOOL=OFF
+        # Required for windows build with msvc. Also could be used on other platforms
+        -DBOOST_ROOT:PATH="${BOOST_ROOT}"
+)
