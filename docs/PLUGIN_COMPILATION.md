@@ -33,3 +33,9 @@ make
 * ```ORTHANC_FRAMEWORK_SOURCE``` - (not required) Orthanc server sources with theis values ("system", "hg", "web", "archive" or "path"), check [link](../Resources/Orthanc/CMake/DownloadOrthancFramework.cmake) for more info.
 * ```BUILD_TESTS``` - option to build tests, default off
 * ```BUILD_WITH_GCOV``` - option to include coverage default off
+
+## Docker
+
+There is a docker image ready to build, with two targets
+* Build: compile the plugin `--target build`
+* Run: start orthanc with the plugin enabled (`--target runtime`), plus some other one (for testing purpuses).
