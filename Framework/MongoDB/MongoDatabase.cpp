@@ -18,16 +18,11 @@
 
 
 #include "MongoDatabase.h"
-#include "../Common/ImplicitTransaction.h"
 #include "../Common/ITransaction.h"
 
 #include <OrthancException.h>
 
 namespace OrthancDatabases {
-    IPrecompiledStatement *MongoDatabase::Compile(const Query &query) {
-        return nullptr;
-    }
-
     namespace {
         class DummyTransaction : public ITransaction {
 
@@ -44,23 +39,12 @@ namespace OrthancDatabases {
             virtual void Commit() override {
             }
 
-            virtual IResult *Execute(IPrecompiledStatement &statement,
-                                     const Dictionary &parameters) override {
-                return nullptr;
-            }
-
-            virtual void ExecuteWithoutResult(IPrecompiledStatement &statement,
-                                              const Dictionary &parameters) override {}
-
             virtual bool DoesTableExist(const std::string &name) override {
                 return true;
             }
 
             virtual bool DoesTriggerExist(const std::string &name) override {
                 return false;
-            }
-
-            virtual void ExecuteMultiLines(const std::string &query) override {
             }
         };
     }

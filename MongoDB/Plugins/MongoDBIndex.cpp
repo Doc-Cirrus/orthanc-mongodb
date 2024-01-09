@@ -256,10 +256,10 @@ namespace OrthancDatabases {
                                       DatabaseManager &manager,
                                       int64_t id) {
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
         // resources collection
-        auto collection = database.GetCollection(databaseObject, "Resources");
+        auto collection = database.GetCollection(databaseInstance, "Resources");
 
         int64_t parent = -1;
 
@@ -313,15 +313,15 @@ namespace OrthancDatabases {
             auto byInternalIdValue = make_document(kvp("internalId", inCriteria.view()));
 
             // files to delete
-            auto attachedCursor = database.GetCollection(databaseObject, "AttachedFiles").find(byIdValue.view());
+            auto attachedCursor = database.GetCollection(databaseInstance, "AttachedFiles").find(byIdValue.view());
 
             // Delete
-            database.GetCollection(databaseObject, "Metadata").delete_many(byIdValue.view());
-            database.GetCollection(databaseObject, "AttachedFiles").delete_many(byIdValue.view());
-            database.GetCollection(databaseObject, "Changes").delete_many(byInternalIdValue.view());
-            database.GetCollection(databaseObject, "PatientRecyclingOrder").delete_many(byPatientIdValue.view());
-            database.GetCollection(databaseObject, "MainDicomTags").delete_many(byIdValue.view());
-            database.GetCollection(databaseObject, "DicomIdentifiers").delete_many(byIdValue.view());
+            database.GetCollection(databaseInstance, "Metadata").delete_many(byIdValue.view());
+            database.GetCollection(databaseInstance, "AttachedFiles").delete_many(byIdValue.view());
+            database.GetCollection(databaseInstance, "Changes").delete_many(byInternalIdValue.view());
+            database.GetCollection(databaseInstance, "PatientRecyclingOrder").delete_many(byPatientIdValue.view());
+            database.GetCollection(databaseInstance, "MainDicomTags").delete_many(byIdValue.view());
+            database.GetCollection(databaseInstance, "DicomIdentifiers").delete_many(byIdValue.view());
             collection.delete_many(byInternalIdValue.view());
 
             SignalDeletedFiles(output, attachedCursor);
@@ -1070,14 +1070,14 @@ namespace OrthancDatabases {
     void MongoDBIndex::ClearMainDicomTags(DatabaseManager &manager,
                                           int64_t internalId) {
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
         auto delete_document = make_document(
                 kvp("id", internalId)
         );
 
-        database.GetCollection(databaseObject, "MainDicomTags").delete_many(delete_document.view());
-        database.GetCollection(databaseObject, "DicomIdentifiers").delete_many(delete_document.view());
+        database.GetCollection(databaseInstance, "MainDicomTags").delete_many(delete_document.view());
+        database.GetCollection(databaseInstance, "DicomIdentifiers").delete_many(delete_document.view());
     }
 
 #if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
@@ -1095,9 +1095,9 @@ namespace OrthancDatabases {
                                        bool requestSomeInstance) {
 
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
-        auto collection = database.GetCollection(databaseObject, "Resources");
+        auto collection = database.GetCollection(databaseInstance, "Resources");
 
         auto normalStream = array{};
         auto identifierStream = array{};
@@ -1218,14 +1218,14 @@ namespace OrthancDatabases {
             );
 
             stages.match(normal_match_stage.view());
-            collection = database.GetCollection(databaseObject, "MainDicomTags");
+            collection = database.GetCollection(databaseInstance, "MainDicomTags");
         } else if (normalCount == 0 && identifierCount > 0) {
             auto identifier_match_stage = make_document(
                     kvp("$or", identifierStream.extract())
             );
 
             stages.match(identifier_match_stage.view());
-            collection = database.GetCollection(databaseObject, "DicomIdentifiers");
+            collection = database.GetCollection(databaseInstance, "DicomIdentifiers");
         } else if (normalCount == 0 && identifierCount == 0) {
             auto match_resources_no_search_stage = make_document(
                     kvp("resourceType", static_cast<int>(queryLevel))
@@ -1277,7 +1277,7 @@ namespace OrthancDatabases {
             mongocxx::options::aggregate identifiersAggregateOptions{};
             identifiersAggregateOptions.allow_disk_use(true);
 
-            auto identifier_cursor = database.GetCollection(databaseObject, "DicomIdentifiers").aggregate(
+            auto identifier_cursor = database.GetCollection(databaseInstance, "DicomIdentifiers").aggregate(
                     identifiers_stages, identifiersAggregateOptions
             );
 
@@ -1296,7 +1296,7 @@ namespace OrthancDatabases {
             stages.match(normal_pre_match_stage.view());
             stages.match(normal_match_stage.view());
 
-            collection = database.GetCollection(databaseObject, "MainDicomTags");
+            collection = database.GetCollection(databaseInstance, "MainDicomTags");
         }
 
         if (normalCount > 0 || identifierCount > 0) {
@@ -1370,10 +1370,10 @@ namespace OrthancDatabases {
                                                uint32_t count,
                                                const OrthancPluginResourcesContentTags *tags) {
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
-        auto collection = database.GetCollection(databaseObject, collectionName);
-        auto resourceCollection = database.GetCollection(databaseObject, "Resources");
+        auto collection = database.GetCollection(databaseInstance, collectionName);
+        auto resourceCollection = database.GetCollection(databaseInstance, "Resources");
         auto bulk = collection.create_bulk_write();
 
         for (uint32_t i = 0; i < count; i++) {
@@ -1406,9 +1406,9 @@ namespace OrthancDatabases {
                                                    uint32_t count,
                                                    const OrthancPluginResourcesContentMetadata *meta) {
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
-        auto collection = database.GetCollection(databaseObject, collectionName);
+        auto collection = database.GetCollection(databaseInstance, collectionName);
         auto bulk = collection.create_bulk_write();
 
         auto removeArray = array{};
@@ -1460,9 +1460,9 @@ namespace OrthancDatabases {
                                            int32_t metadata) {
         //SELECT internalId FROM Resources WHERE parentId=${id}
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
-        auto databaseObject = database.GetObject();
+        auto databaseInstance = database.GetObject();
 
-        auto resCursor = database.GetCollection(databaseObject, "Resources").find(make_document(
+        auto resCursor = database.GetCollection(databaseInstance, "Resources").find(make_document(
                 kvp("parentId", resourceId)
         ));
 
@@ -1480,7 +1480,7 @@ namespace OrthancDatabases {
                 ))
         );
 
-        auto metadataCursor = database.GetCollection(databaseObject, "Metadata").find(byIdValue.view());
+        auto metadataCursor = database.GetCollection(databaseInstance, "Metadata").find(byIdValue.view());
         for (auto &&doc: metadataCursor) {
             target.emplace_back(doc["value"].get_string().value);
         }

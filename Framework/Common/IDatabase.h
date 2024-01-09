@@ -2,9 +2,10 @@
 
 #pragma once
 
-#include "IPrecompiledStatement.h"
+#include <boost/noncopyable.hpp>
+
+#include "DatabasesEnumerations.h"
 #include "ITransaction.h"
-#include "Query.h"
 
 namespace OrthancDatabases
 {
@@ -14,10 +15,6 @@ namespace OrthancDatabases
     virtual ~IDatabase()
     {
     }
-
-    virtual Dialect GetDialect() const = 0;
-
-    virtual IPrecompiledStatement* Compile(const Query& query) = 0;
 
     virtual ITransaction* CreateTransaction(TransactionType type) = 0;
   };

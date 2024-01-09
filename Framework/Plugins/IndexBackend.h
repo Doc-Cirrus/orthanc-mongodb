@@ -40,14 +40,10 @@ namespace OrthancDatabases
     void ReadChangesInternal(IDatabaseBackendOutput& output,
                              bool& done,
                              DatabaseManager& manager,
-                             DatabaseManager::CachedStatement& statement,
-                             const Dictionary& args,
                              uint32_t maxResults);
 
     void ReadExportedResourcesInternal(IDatabaseBackendOutput& output,
                                        bool& done,
-                                       DatabaseManager::CachedStatement& statement,
-                                       const Dictionary& args,
                                        uint32_t maxResults);
 
   public:

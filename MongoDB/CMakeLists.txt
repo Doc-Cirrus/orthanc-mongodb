@@ -39,19 +39,19 @@ set(ORTHANC_PLUGIN_VERSION ${ORTHANC_FRAMEWORK_VERSION})
 
 include(${CMAKE_SOURCE_DIR}/../Resources/CMake/DatabasesPluginConfiguration.cmake)
 
-add_library(FrameworkForPlugins STATIC
+add_library(OrthancMongoFramework STATIC
         ${DATABASES_SOURCES}
         ${ORTHANC_DATABASES_ROOT}/Framework/Plugins/PluginInitialization.cpp
         Plugins/MongoDBIndex.cpp
         Plugins/MongoDBStorageArea.cpp
 )
 
-set_target_properties(FrameworkForPlugins PROPERTIES
+set_target_properties(OrthancMongoFramework PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         COMPILE_FLAGS -DORTHANC_ENABLE_LOGGING_PLUGIN=1
 )
 
-target_link_libraries(FrameworkForPlugins ${MONGODB_LIBS})
+target_link_libraries(OrthancMongoFramework ${MONGODB_LIBS})
 
 add_library(OrthancMongoDBIndex SHARED
         ${INDEX_RESOURCES}
@@ -64,8 +64,8 @@ add_library(OrthancMongoDBStorage SHARED
 )
 
 
-target_link_libraries(OrthancMongoDBIndex FrameworkForPlugins)
-target_link_libraries(OrthancMongoDBStorage FrameworkForPlugins)
+target_link_libraries(OrthancMongoDBIndex OrthancMongoFramework)
+target_link_libraries(OrthancMongoDBStorage OrthancMongoFramework)
 message("Setting the version of the libraries to ${ORTHANC_PLUGIN_VERSION}")
 
 add_definitions(

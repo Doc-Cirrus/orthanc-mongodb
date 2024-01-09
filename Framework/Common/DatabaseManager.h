@@ -3,7 +3,7 @@
 #pragma once
 
 #include "IDatabaseFactory.h"
-#include "StatementLocation.h"
+#include "ITransaction.h"
 
 #include <Compatibility.h>  // For std::unique_ptr<>
 #include <Enumerations.h>
@@ -28,24 +28,13 @@ namespace OrthancDatabases
   class DatabaseManager : public boost::noncopyable
   {
   private:
-    typedef std::map<StatementLocation, IPrecompiledStatement*>  CachedStatements;
-
     std::unique_ptr<IDatabaseFactory>  factory_;
     std::unique_ptr<IDatabase>     database_;
     std::unique_ptr<ITransaction>  transaction_;
-    CachedStatements               cachedStatements_;
-    Dialect                        dialect_;
 
     void CloseIfUnavailable(Orthanc::ErrorCode e);
 
-    IPrecompiledStatement* LookupCachedStatement(const StatementLocation& location) const;
-
-    IPrecompiledStatement& CacheStatement(const StatementLocation& location,
-                                          const Query& query);
-
     ITransaction& GetTransaction();
-
-    void ReleaseImplicitTransaction();
 
   public:
     explicit DatabaseManager(IDatabaseFactory* factory);  // Takes ownership
@@ -56,8 +45,6 @@ namespace OrthancDatabases
     }
 
     IDatabase& GetDatabase();
-
-    Dialect GetDialect() const;
 
     void Close();
 
@@ -96,130 +83,6 @@ namespace OrthancDatabases
       {
         return manager_.GetTransaction();
       }
-    };
-
-
-    class StatementBase : public boost::noncopyable
-    {
-    private:
-      DatabaseManager&          manager_;
-      ITransaction&             transaction_;
-      std::unique_ptr<Query>    query_;
-      std::unique_ptr<IResult>  result_;
-
-      IResult& GetResult() const;
-
-    protected:
-      DatabaseManager& GetManager() const
-      {
-        return manager_;
-      }
-
-      ITransaction& GetTransaction() const
-      {
-        return transaction_;
-      }
-
-      void SetQuery(Query* query);
-
-      void SetResult(IResult* result);
-
-      void ClearResult()
-      {
-        result_.reset();
-      }
-
-      Query* ReleaseQuery()
-      {
-        return query_.release();
-      }
-
-    public:
-      explicit StatementBase(DatabaseManager& manager);
-
-      virtual ~StatementBase();
-
-      // Used only by SQLite
-      IDatabase& GetDatabase()
-      {
-        return manager_.GetDatabase();
-      }
-
-      void SetReadOnly(bool readOnly);
-
-      void SetParameterType(const std::string& parameter,
-                            ValueType type);
-
-      bool IsDone() const;
-
-      void Next();
-
-      size_t GetResultFieldsCount() const;
-
-      void SetResultFieldType(size_t field,
-                              ValueType type);
-
-      const IValue& GetResultField(size_t index) const;
-
-      int32_t ReadInteger32(size_t field) const;
-
-      int64_t ReadInteger64(size_t field) const;
-
-      std::string ReadString(size_t field) const;
-
-      void PrintResult(std::ostream& stream)
-      {
-        IResult::Print(stream, GetResult());
-      }
-    };
-
-
-    /**
-     * WARNING: At any given time, there must be at most 1 object of
-     * the "CachedStatement" class in the scope, otherwise error
-     * "Cannot execute more than one statement in an implicit
-     * transaction" is generated if no explicit transaction is
-     * present.
-     **/
-    class CachedStatement : public StatementBase
-    {
-    private:
-      StatementLocation       location_;
-      IPrecompiledStatement*  statement_;
-
-    public:
-      CachedStatement(const StatementLocation& location,
-                      DatabaseManager& manager,
-                      const std::string& sql);
-
-      void Execute()
-      {
-        Dictionary parameters;
-        Execute(parameters);
-      }
-
-      void Execute(const Dictionary& parameters);
-    };
-
-
-    class StandaloneStatement : public StatementBase
-    {
-    private:
-      std::unique_ptr<IPrecompiledStatement>  statement_;
-
-    public:
-      StandaloneStatement(DatabaseManager& manager,
-                          const std::string& sql);
-
-      virtual ~StandaloneStatement();
-
-      void Execute()
-      {
-        Dictionary parameters;
-        Execute(parameters);
-      }
-
-      void Execute(const Dictionary& parameters);
     };
   };
 }

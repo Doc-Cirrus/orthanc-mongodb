@@ -2,7 +2,6 @@
 
 #include "PluginInitialization.h"
 
-#include "../Common/ImplicitTransaction.h"
 #include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
 #include <Logging.h>
@@ -34,7 +33,6 @@ namespace OrthancDatabases
 
     Orthanc::Logging::EnableInfoLevel(true);
     OrthancPlugins::SetGlobalContext(context);
-    ImplicitTransaction::SetErrorOnDoubleExecution(false);
 
     assert(DisplayPerformanceWarning(dbms, isIndex));
 
@@ -50,11 +48,6 @@ namespace OrthancDatabases
       LOG(ERROR) << "Your version of Orthanc (" << context->orthancVersion
                  << ") must be above 0.9.5 to run this plugin";
       return false;
-    }
-
-    if (OrthancPluginCheckVersionAdvanced(context, 1, 4, 0) == 1)
-    {
-      ImplicitTransaction::SetErrorOnDoubleExecution(true);
     }
 
     if (OrthancPluginCheckVersionAdvanced(context,

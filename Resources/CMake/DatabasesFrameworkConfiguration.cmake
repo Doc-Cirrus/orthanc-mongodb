@@ -47,23 +47,8 @@ endif()
 set(ORTHANC_DATABASES_ROOT ${CMAKE_CURRENT_LIST_DIR}/../..)
 
 set(DATABASES_SOURCES
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/BinaryStringValue.cpp
   ${ORTHANC_DATABASES_ROOT}/Framework/Common/DatabaseManager.cpp
   ${ORTHANC_DATABASES_ROOT}/Framework/Common/DatabasesEnumerations.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/Dictionary.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/GenericFormatter.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/IResult.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/ImplicitTransaction.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/InputFileValue.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/Integer64Value.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/NullValue.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/Query.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/ResultBase.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/ResultFileValue.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/RetryDatabaseFactory.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/RetryDatabaseFactory.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/StatementLocation.cpp
-  ${ORTHANC_DATABASES_ROOT}/Framework/Common/Utf8StringValue.cpp
   ${ORTHANC_DATABASES_ROOT}/Framework/MongoDB/MongoDatabase.cpp
   )
 

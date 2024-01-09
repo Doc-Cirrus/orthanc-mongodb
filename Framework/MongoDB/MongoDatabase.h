@@ -119,8 +119,6 @@ namespace OrthancDatabases {
         }
 
         int64_t GetNextSequence(const std::string &sequence) const {
-            // std::lock_guard<std::mutex> lock(mutex_);
-
             int64_t num = 1;
             auto collection = GetCollection("Sequences");
 
@@ -145,11 +143,6 @@ namespace OrthancDatabases {
             return num;
         }
 
-        virtual Dialect GetDialect() const override {
-            return Dialect_SQLite;
-        }
-
-        virtual IPrecompiledStatement *Compile(const Query &query) override;
         virtual ITransaction *CreateTransaction(TransactionType type) override;
 
         static IDatabaseFactory* CreateDatabaseFactory(const std::string &url, const int &chunkSize);

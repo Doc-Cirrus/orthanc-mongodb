@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "../Common/ImplicitTransaction.h"
 #include "DatabaseBackendAdapterV2.h"
 #include "GlobalProperties.h"
 
@@ -20,17 +19,7 @@
 #endif
 
 
-#if ORTHANC_ENABLE_POSTGRESQL == 1
-#  define HAS_REVISIONS 1
-#elif ORTHANC_ENABLE_MYSQL == 1
-#  define HAS_REVISIONS 0
-#elif ORTHANC_ENABLE_SQLITE == 1
-#  define HAS_REVISIONS 1
-#elif ORTHANC_ENABLE_ODBC == 1
-#  define HAS_REVISIONS 1
-#else
-#  error Unknown database backend
-#endif
+# define HAS_REVISIONS 1
 
 
 namespace Orthanc
@@ -208,8 +197,6 @@ TEST(IndexBackend, Basic)
   context.orthancVersion = "mainline";
   context.Free = ::free;
   context.InvokeService = InvokeService;
-
-  ImplicitTransaction::SetErrorOnDoubleExecution(true);
 
 #if ORTHANC_ENABLE_POSTGRESQL == 1
   PostgreSQLIndex db(&context, globalParameters_);

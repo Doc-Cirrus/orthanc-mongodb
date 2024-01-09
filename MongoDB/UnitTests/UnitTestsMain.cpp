@@ -35,13 +35,17 @@ TEST(MongoDBIndex, Lock)
 }
 
 
-TEST(MongoDB, ImplicitTransaction)
-{
-
-}
-
 
 int main(int argc, char **argv)
 {
-  return 0;
+  ::testing::InitGoogleTest(&argc, argv);
+  Orthanc::Logging::Initialize();
+  Orthanc::Logging::EnableInfoLevel(true);
+  // Orthanc::Logging::EnableTraceLevel(true);
+
+  int result = RUN_ALL_TESTS();
+
+  Orthanc::Logging::Finalize();
+
+  return result;
 }

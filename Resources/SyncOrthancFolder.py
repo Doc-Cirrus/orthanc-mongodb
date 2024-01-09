@@ -38,8 +38,6 @@ FILES = [
     ('openssl-3.x', 'OrthancServer/Plugins/Samples/Common/VersionScriptPlugins.map', 'Plugins'),
     ('openssl-3.x', 'OrthancServer/Sources/Search/DatabaseConstraint.cpp', 'Databases'),
     ('openssl-3.x', 'OrthancServer/Sources/Search/DatabaseConstraint.h', 'Databases'),
-    ('openssl-3.x', 'OrthancServer/Sources/Search/ISqlLookupFormatter.cpp', 'Databases'),
-    ('openssl-3.x', 'OrthancServer/Sources/Search/ISqlLookupFormatter.h', 'Databases'),
 ]
 
 SDK = [
