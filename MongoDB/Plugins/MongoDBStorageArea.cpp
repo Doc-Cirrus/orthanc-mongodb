@@ -48,24 +48,25 @@
 namespace OrthancDatabases {
     // overrides
     mongoc_gridfs_file_t *MongoDBStorageArea::Accessor::CreateMongoDBFile(
+            mongoc_gridfs_t *gridfs,
             const std::string &uuid,
-            OrthancPluginContentType type, bool createFile = true
+            OrthancPluginContentType type, 
+            bool createFile = true
     ) {
         mongoc_gridfs_file_t *file;
 
         if (createFile) {
             auto filename = uuid + " - " + std::to_string(type);
-
             mongoc_gridfs_file_opt_t options = {nullptr};
             options.chunk_size = chunk_size_;
             options.filename = filename.c_str();
 
-            file = mongoc_gridfs_create_file(gridfs_, &options);
+            file = mongoc_gridfs_create_file(gridfs, &options);
         } else {
             bson_t *filter;
 
             filter = BCON_NEW ("filename", "{", "$regex", BCON_UTF8(uuid.c_str()), "}");
-            file = mongoc_gridfs_find_one_with_opts(gridfs_, filter, nullptr, nullptr);
+            file = mongoc_gridfs_find_one_with_opts(gridfs, filter, nullptr, nullptr);
 
             bson_destroy(filter);
         }
@@ -92,7 +93,10 @@ namespace OrthancDatabases {
                                               const void *content,
                                               size_t size,
                                               OrthancPluginContentType type) {
-        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, true);
+        mongoc_client_t *client = PopClient();
+        mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
+
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(gridfs, uuid, type, true);
         mongoc_stream_t *stream = CreateMongoDBStream(file);
 
         mongoc_iovec_t iov;
@@ -107,12 +111,20 @@ namespace OrthancDatabases {
 
         mongoc_stream_destroy(stream);
         mongoc_gridfs_file_destroy(file);
+        mongoc_gridfs_destroy(gridfs);
+
+        PushClient(client);
     }
 
     void MongoDBStorageArea::Accessor::ReadWhole(OrthancPluginMemoryBuffer64 *target,
                                                  const std::string &uuid,
                                                  OrthancPluginContentType type) {
-        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
+        LOG(ERROR) << "READ WHOLE START - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
+
+        mongoc_client_t *client = PopClient();
+        mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
+
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(gridfs, uuid, type, false);
         mongoc_stream_t *stream = CreateMongoDBStream(file);
 
         target->size = mongoc_gridfs_file_get_length(file);
@@ -122,13 +134,23 @@ namespace OrthancDatabases {
 
         mongoc_stream_destroy(stream);
         mongoc_gridfs_file_destroy(file);
+        mongoc_gridfs_destroy(gridfs);
+
+        PushClient(client);
+
+        LOG(ERROR) << "READ WHOLE END - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
     };
 
     void MongoDBStorageArea::Accessor::ReadRange(OrthancPluginMemoryBuffer64 *target,
                                                  const std::string &uuid,
                                                  OrthancPluginContentType type,
                                                  uint64_t rangeStart) {
-        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
+
+        LOG(ERROR) << "READ RANGE START - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
+        mongoc_client_t *client = PopClient();
+        mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
+
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(gridfs, uuid, type, false);
         mongoc_gridfs_file_seek(file, static_cast<int64_t>(rangeStart), SEEK_SET);
 
         mongoc_stream_t *stream = CreateMongoDBStream(file);
@@ -142,11 +164,19 @@ namespace OrthancDatabases {
 
         mongoc_stream_destroy(stream);
         mongoc_gridfs_file_destroy(file);
+        mongoc_gridfs_destroy(gridfs);
+
+        PushClient(client);
+
+        LOG(ERROR) << "READ RANGE END - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
     };
 
     void MongoDBStorageArea::Accessor::Remove(const std::string &uuid, OrthancPluginContentType type) {
         bson_error_t error;
-        mongoc_gridfs_file_t *file = CreateMongoDBFile(uuid, type, false);
+        mongoc_client_t *client = PopClient();
+        mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
+
+        mongoc_gridfs_file_t *file = CreateMongoDBFile(gridfs, uuid, type, false);
 
         bool r = mongoc_gridfs_file_remove(file, nullptr);
         if (r) mongoc_gridfs_file_destroy(file);
@@ -154,6 +184,9 @@ namespace OrthancDatabases {
             LOG(ERROR) << "MongoDBStorageArea::Accessor::Remove - Could not remove file: " << std::string(error.message);
             throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
         }
+
+        mongoc_gridfs_destroy(gridfs);
+        PushClient(client);
     };
 
     MongoDBStorageArea::MongoDBStorageArea(const std::string &url, const int &chunkSize,

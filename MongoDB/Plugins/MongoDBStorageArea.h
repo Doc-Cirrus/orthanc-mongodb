@@ -40,19 +40,20 @@ namespace OrthancDatabases {
             // does not own that
             mongoc_client_pool_t *pool_;
             mongoc_uri_t *uri_;
+            const char *database_name_;
 
             int chunk_size_;
 
             // Owning the mongo structures
-            mongoc_client_t *client_ = nullptr;
-            mongoc_gridfs_t *gridfs_ = nullptr;
+            // mongoc_client_t *client_ = nullptr;
+            // mongoc_gridfs_t *gridfs_ = nullptr;
 
             void Cleanup() {
-                if (gridfs_) mongoc_gridfs_destroy(gridfs_);
-                if (client_) mongoc_client_pool_push(pool_, client_);
+                // if (gridfs_) mongoc_gridfs_destroy(gridfs_);
+                // if (client_) mongoc_client_pool_push(pool_, client_);
             };
 
-            mongoc_gridfs_file_t *CreateMongoDBFile(const std::string &uuid,
+            mongoc_gridfs_file_t *CreateMongoDBFile(mongoc_gridfs_t *gridfs, const std::string &uuid,
                                                     OrthancPluginContentType type, bool createFile);
 
             static mongoc_stream_t *CreateMongoDBStream(mongoc_gridfs_file_t *file);
@@ -60,13 +61,14 @@ namespace OrthancDatabases {
         public:
             explicit Accessor(mongoc_client_pool_t *pool, mongoc_uri_t *uri, int chunk_size) : pool_(pool), uri_(uri),
                                                                                                chunk_size_(chunk_size) {
-                const char *database_name = mongoc_uri_get_database(uri_);
-                if (!database_name) {
+                database_name_ = mongoc_uri_get_database(uri_);
+                if (!database_name_) {
                     Cleanup();
                     LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot not parse mongodb URI.";
                     throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
                 }
-                client_ = mongoc_client_pool_pop(pool_);
+
+                /*client_ = mongoc_client_pool_pop(pool_);
                 if (!client_) {
                     Cleanup();
                     LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongodb client.";
@@ -74,18 +76,33 @@ namespace OrthancDatabases {
                 }
 
                 // create a mongoc_gridfs_t interface
-                gridfs_ = mongoc_client_get_gridfs(client_, database_name, nullptr, nullptr);
+                gridfs = mongoc_client_get_gridfs(client_, database_name, nullptr, nullptr);
 
                 if (!gridfs_) {
                     Cleanup();
                     LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongoc gridfs.";
                     throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
-                };
+                };*/
             }
 
             virtual ~Accessor() {
                 Cleanup();
             };
+
+            mongoc_client_t* PopClient() {
+                mongoc_client_t *client = mongoc_client_pool_pop (pool_);
+
+                if (!client) {
+                    LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongodb client.";
+                    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
+                }
+
+                return client;
+            }
+
+            void PushClient(mongoc_client_t * client) {
+                mongoc_client_pool_push (pool_, client);
+            }
 
             virtual void Create(const std::string &uuid,
                                 const void *content,

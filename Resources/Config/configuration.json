@@ -10,6 +10,10 @@
   "ServeFolders": {
     "/stone-webviewer-live": "/usr/share/runtime/wasm-binaries/StoneWebViewer/"
   },
+  "DicomWeb" : {
+    "Enable" : true,
+    "MetadataWorkerThreadsCount": 10
+  },
   "OrthancExplorer2" : {
     "Enable": true,
     "IsDefaultOrthancUI": true

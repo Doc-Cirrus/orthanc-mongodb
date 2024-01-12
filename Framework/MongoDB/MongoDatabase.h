@@ -39,18 +39,21 @@ namespace OrthancDatabases {
     private:
         class Factory;
 
-        // std::mutex mutex_;
         int chunkSize_;
         std::string dbname_;
-        std::unique_ptr<mongocxx::pool> pool_;
+        mongocxx::pool* pool_;
 
     public:
+        ~MongoDatabase() {
+
+        }
+
         void Open(const std::string &url) {
             auto const uri = mongocxx::uri{url};
 
             dbname_ = uri.database();
             mongocxx::pool *p = new mongocxx::pool(uri);
-
+            
             SetPool(p);
         }
 
@@ -59,7 +62,7 @@ namespace OrthancDatabases {
         }
 
         void SetPool(mongocxx::pool *pool) {
-            pool_.reset(pool);
+            pool_ = pool;
         }
 
         mongocxx::pool &GetPool() const {
