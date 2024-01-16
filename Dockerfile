@@ -20,7 +20,7 @@ ADD . /usr/share/src
 
 RUN mkdir -p build
 RUN cd build
-RUN cmake /usr/share/src/MongoDB -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DAUTO_INSTALL_DEPENDENCIES=ON
+RUN cmake /usr/share/src/MongoDB -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DAUTO_INSTALL_DEPENDENCIES=ON -DBUILD_TESTS=ON
 
 RUN make
 

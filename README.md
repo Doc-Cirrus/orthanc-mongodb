@@ -6,6 +6,8 @@
 
 The repository contains two plugins to store the data in MongoDB database.
 This was based on [orthanc-database](https://hg.orthanc-server.com/orthanc-databases/) and supporting the latest database API (orthanc@1.9.2+).
+We've comprehensively refactored the codebase, eliminating all SQL-dependent components and replacing them with their MongoDB counterparts. 
+Additionally, we've extended the existing build toolchain to seamlessly integrate with MongoDB, ensuring a smooth transition to this new data storage solution.
 
 ## Notes
 
@@ -21,5 +23,3 @@ For complete documentation check [Docs](./docs/README.md).
 
 - Add unit tests and extend them.
 - Add coverage.
-- Fix performance regression (this plugin is slower than the old version).
-- Add support for the separate config options for the database connection.
