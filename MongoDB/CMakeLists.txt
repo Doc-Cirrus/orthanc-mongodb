@@ -92,15 +92,15 @@ install(
 
 # investigate unit tests
 IF (BUILD_TESTS)
-    add_executable(UnitTests
-            Plugins/MongoDBIndex.cpp
-            UnitTests/UnitTestsMain.cpp
-            ${DATABASES_SOURCES}
-            ${GOOGLE_TEST_SOURCES}
+    add_executable(StorageTest 
+        Tests/StorageTest.cpp
+        Plugins/MongoDBStorageArea.cpp
+        ${DATABASES_SOURCES} 
+        ${GOOGLE_TEST_SOURCES}
     )
 
-     target_link_libraries(UnitTests ${GOOGLE_TEST_LIBRARIES})
-     set_target_properties(UnitTests PROPERTIES
-            COMPILE_FLAGS -DORTHANC_ENABLE_LOGGING_PLUGIN=0
+    target_link_libraries(StorageTest ${GOOGLE_TEST_LIBRARIES})
+    set_target_properties(StorageTest PROPERTIES
+        COMPILE_FLAGS -DORTHANC_ENABLE_LOGGING_PLUGIN=0
     )
 ENDIF()

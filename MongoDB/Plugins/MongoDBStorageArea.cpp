@@ -119,8 +119,6 @@ namespace OrthancDatabases {
     void MongoDBStorageArea::Accessor::ReadWhole(OrthancPluginMemoryBuffer64 *target,
                                                  const std::string &uuid,
                                                  OrthancPluginContentType type) {
-        LOG(ERROR) << "READ WHOLE START - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
-
         mongoc_client_t *client = PopClient();
         mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
 
@@ -137,16 +135,12 @@ namespace OrthancDatabases {
         mongoc_gridfs_destroy(gridfs);
 
         PushClient(client);
-
-        LOG(ERROR) << "READ WHOLE END - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
     };
 
     void MongoDBStorageArea::Accessor::ReadRange(OrthancPluginMemoryBuffer64 *target,
                                                  const std::string &uuid,
                                                  OrthancPluginContentType type,
                                                  uint64_t rangeStart) {
-
-        LOG(ERROR) << "READ RANGE START - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
         mongoc_client_t *client = PopClient();
         mongoc_gridfs_t *gridfs = mongoc_client_get_gridfs(client, database_name_, nullptr, nullptr);
 
@@ -167,8 +161,6 @@ namespace OrthancDatabases {
         mongoc_gridfs_destroy(gridfs);
 
         PushClient(client);
-
-        LOG(ERROR) << "READ RANGE END - " << to_iso_extended_string(boost::posix_time::microsec_clock::universal_time());
     };
 
     void MongoDBStorageArea::Accessor::Remove(const std::string &uuid, OrthancPluginContentType type) {

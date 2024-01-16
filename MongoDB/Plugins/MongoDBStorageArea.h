@@ -44,15 +44,6 @@ namespace OrthancDatabases {
 
             int chunk_size_;
 
-            // Owning the mongo structures
-            // mongoc_client_t *client_ = nullptr;
-            // mongoc_gridfs_t *gridfs_ = nullptr;
-
-            void Cleanup() {
-                // if (gridfs_) mongoc_gridfs_destroy(gridfs_);
-                // if (client_) mongoc_client_pool_push(pool_, client_);
-            };
-
             mongoc_gridfs_file_t *CreateMongoDBFile(mongoc_gridfs_t *gridfs, const std::string &uuid,
                                                     OrthancPluginContentType type, bool createFile);
 
@@ -63,31 +54,12 @@ namespace OrthancDatabases {
                                                                                                chunk_size_(chunk_size) {
                 database_name_ = mongoc_uri_get_database(uri_);
                 if (!database_name_) {
-                    Cleanup();
                     LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot not parse mongodb URI.";
                     throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
                 }
-
-                /*client_ = mongoc_client_pool_pop(pool_);
-                if (!client_) {
-                    Cleanup();
-                    LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongodb client.";
-                    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
-                }
-
-                // create a mongoc_gridfs_t interface
-                gridfs = mongoc_client_get_gridfs(client_, database_name, nullptr, nullptr);
-
-                if (!gridfs_) {
-                    Cleanup();
-                    LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongoc gridfs.";
-                    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
-                };*/
             }
 
-            virtual ~Accessor() {
-                Cleanup();
-            };
+            virtual ~Accessor() {};
 
             mongoc_client_t* PopClient() {
                 mongoc_client_t *client = mongoc_client_pool_pop (pool_);

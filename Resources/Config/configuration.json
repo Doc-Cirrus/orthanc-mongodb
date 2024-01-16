@@ -7,6 +7,9 @@
   "DicomAlwaysAllowMove": true,
   "DicomCheckModalityHost": true,
   "Plugins": ["/usr/share/runtime"],
+  "StoneWebViewer" : {
+    "DicomCacheSize" : 2048
+  },
   "ServeFolders": {
     "/stone-webviewer-live": "/usr/share/runtime/wasm-binaries/StoneWebViewer/"
   },
