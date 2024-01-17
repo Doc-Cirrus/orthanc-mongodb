@@ -1,0 +1,30 @@
+{
+  "RemoteAccessAllowed": true,
+  "AuthenticationEnabled": false,
+  "DicomAlwaysAllowFind": true,
+  "DicomAlwaysAllowFindWorklist": true,
+  "DicomAlwaysAllowGet": true,
+  "DicomAlwaysAllowMove": true,
+  "DicomCheckModalityHost": true,
+  "Plugins": ["/usr/share/runtime"],
+  "StoneWebViewer" : {
+    "DicomCacheSize" : 2048
+  },
+  "ServeFolders": {
+    "/stone-webviewer-live": "/usr/share/runtime/wasm-binaries/StoneWebViewer/"
+  },
+  "DicomWeb" : {
+    "Enable" : true,
+    "MetadataWorkerThreadsCount": 10
+  },
+  "OrthancExplorer2" : {
+    "Enable": true,
+    "IsDefaultOrthancUI": true
+  },
+  "MongoDB": {
+    "ConnectionUri": "CONNECTION_URI",
+    "EnableIndex": true,
+    "EnableStorage": true,
+    "ChunkSize": 261120
+  }
+}
