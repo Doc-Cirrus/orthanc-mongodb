@@ -101,9 +101,9 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg" OR
       set(ORTHANC_FRAMEWORK_MD5 "f8ec7554ef5d23ea4ce474b1e8214de9")
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.1")
       set(ORTHANC_FRAMEWORK_MD5 "db094f96399cbe8b9bbdbce34884c220")
+
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.2")
       set(ORTHANC_FRAMEWORK_MD5 "8bfa10e66c9931e74111be0bfb1f4548")
-
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.0")
       set(ORTHANC_FRAMEWORK_MD5 "cea0b02ce184671eaf1bd668beefbf28")
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.1")
@@ -131,11 +131,15 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg" OR
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.2")
       set(ORTHANC_FRAMEWORK_MD5 "ede3de356493a8868545f8cb4b8bc8b5")
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.3")
-      set(ORTHANC_FRAMEWORK_MD5 "f941c0f5771db7616e7b7961026a60e2")
+      set(ORTHANC_FRAMEWORK_MD5 "e48fc0cb09c4856803791a1be28c07dc")
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.0")
       set(ORTHANC_FRAMEWORK_MD5 "d32a0cde03b6eb603d8dd2b33d38bf1b")
     elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.1")
       set(ORTHANC_FRAMEWORK_MD5 "8a435140efc8ff4a01d8242f092f21de")
+    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.2")
+      set(ORTHANC_FRAMEWORK_MD5 "d2476b9e796e339ac320b5333489bdb3")
+    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.3")
+      set(ORTHANC_FRAMEWORK_MD5 "975f5bf2142c22cb1777b4f6a0a614c5")
 
       # Below this point are development snapshots that were used to
       # release some plugin, before an official release of the Orthanc
@@ -292,7 +296,11 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "web")
   else()
     # Default case: Download from the official Web site
     set(ORTHANC_FRAMEMORK_FILENAME Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz)
-    set(ORTHANC_FRAMEWORK_URL "http://orthanc.osimis.io/ThirdPartyDownloads/orthanc-framework/${ORTHANC_FRAMEMORK_FILENAME}")
+    if (ORTHANC_FRAMEWORK_PRE_RELEASE)
+      set(ORTHANC_FRAMEWORK_URL "https://orthanc.uclouvain.be/downloads/third-party-downloads/orthanc-framework/${ORTHANC_FRAMEMORK_FILENAME}")
+    else()
+      set(ORTHANC_FRAMEWORK_URL "https://orthanc.uclouvain.be/downloads/sources/orthanc/${ORTHANC_FRAMEMORK_FILENAME}")
+    endif()
   endif()
 
   set(ORTHANC_FRAMEWORK_ARCHIVE "${CMAKE_SOURCE_DIR}/ThirdPartyDownloads/${ORTHANC_FRAMEMORK_FILENAME}")
