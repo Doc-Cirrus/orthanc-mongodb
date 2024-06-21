@@ -6,23 +6,52 @@
   "DicomAlwaysAllowGet": true,
   "DicomAlwaysAllowMove": true,
   "DicomCheckModalityHost": true,
-  "Plugins": ["/usr/share/runtime"],
-  "StoneWebViewer" : {
-    "DicomCacheSize" : 2048
+  "Plugins": ["/usr/local/runtime"],
+  "ExtraMainDicomTags": {
+    "Instance": [
+      "Rows",
+      "Columns",
+      "ImageType",
+      "SOPClassUID",
+      "ContentDate",
+      "ContentTime",
+      "FrameOfReferenceUID",
+      "PixelSpacing",
+      "SpecificCharacterSet",
+      "BitsAllocated",
+      "BitsStored",
+      "RescaleSlope",
+      "RescaleIntercept",
+      "SliceThickness",
+      "WindowCenter",
+      "WindowWidth",
+      "PhotometricInterpretation",
+      "PixelRepresentation"
+    ],
+    "Series": [
+      "TimezoneOffsetFromUTC",
+      "PerformedProcedureStepStartDate",
+      "PerformedProcedureStepStartTime",
+      "RequestAttributesSequence"
+    ],
+    "Study": ["TimezoneOffsetFromUTC"],
+    "Patient": []
   },
-  "ServeFolders": {
-    "/stone-webviewer-live": "/usr/share/runtime/wasm-binaries/StoneWebViewer/"
+  "StoneWebViewer": {
+    "DicomCacheSize": 2048
   },
-  "DicomWeb" : {
-    "Enable" : true,
-    "MetadataWorkerThreadsCount": 10
+  "DicomWeb": {
+    "Enable": true,
+    "MetadataWorkerThreadsCount": 10,
+    "StudiesMetadata": "MainDicomTags",
+    "SeriesMetadata": "MainDicomTags"
   },
-  "OrthancExplorer2" : {
+  "OrthancExplorer2": {
     "Enable": true,
     "IsDefaultOrthancUI": true
   },
   "MongoDB": {
-    "ConnectionUri": "CONNECTION_URI",
+    "ConnectionUri": "mongodb://database:27017/inpacs?retryWrites=false",
     "EnableIndex": true,
     "EnableStorage": true,
     "ChunkSize": 261120

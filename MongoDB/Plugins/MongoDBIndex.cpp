@@ -298,8 +298,8 @@ namespace OrthancDatabases {
             auto deletedResourcesCursor = collection.aggregate(stages, mongocxx::options::aggregate{});
 
             for (auto &&doc: deletedResourcesCursor) {
-                int64_t parentId = doc["parentId"].get_int64().value;
                 int64_t internalId = doc["internalId"].get_int64().value;
+                int64_t parentId = doc["parentId"].type() == type::k_int64 ? doc["parentId"].get_int64().value : -1;
 
                 parent = (internalId == id) ? parentId : parent;
 
@@ -329,7 +329,7 @@ namespace OrthancDatabases {
         }
 
         // remain Ancestor
-        {
+        if (parent != -1) {
             auto result = database.GetCollection("Resources").find_one(
                     make_document(kvp("internalId", parent))
             );
@@ -865,7 +865,6 @@ namespace OrthancDatabases {
                                       DatabaseManager &manager,
                                       int64_t id,
                                       int32_t metadataType) {
-
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
         auto doc = database.GetCollection("Metadata").find_one(make_document(kvp("id", id), kvp("type", metadataType)));
 
@@ -895,7 +894,7 @@ namespace OrthancDatabases {
         if (doc) {
             bsoncxx::document::element parent = doc->view()["parentId"];
 
-            if (parent.type() == bsoncxx::type::k_int64) {
+            if (parent && parent.type() == type::k_int64) {
                 parentId = parent.get_int64().value;
                 res = true;
             }
@@ -1093,7 +1092,7 @@ namespace OrthancDatabases {
                                        OrthancPluginResourceType queryLevel,
                                        uint32_t limit,
                                        bool requestSomeInstance) {
-
+                                        
         auto &database = dynamic_cast<MongoDatabase &>(manager.GetDatabase());
         auto databaseInstance = database.GetObject();
 

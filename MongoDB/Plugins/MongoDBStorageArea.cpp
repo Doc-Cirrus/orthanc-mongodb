@@ -46,6 +46,9 @@
   }
 
 namespace OrthancDatabases {
+    static OrthancPluginContext *context_ = nullptr;
+    static std::unique_ptr<MongoDBStorageArea> backend_;
+
     // overrides
     mongoc_gridfs_file_t *MongoDBStorageArea::Accessor::CreateMongoDBFile(
             mongoc_gridfs_t *gridfs,
@@ -64,8 +67,9 @@ namespace OrthancDatabases {
             file = mongoc_gridfs_create_file(gridfs, &options);
         } else {
             bson_t *filter;
+            auto regex = "^" + uuid;
 
-            filter = BCON_NEW ("filename", "{", "$regex", BCON_UTF8(uuid.c_str()), "}");
+            filter = BCON_NEW ("filename", "{", "$regex", BCON_REGEX(BCON_UTF8(regex.c_str()), "x"), "}");
             file = mongoc_gridfs_find_one_with_opts(gridfs, filter, nullptr, nullptr);
 
             bson_destroy(filter);
@@ -125,10 +129,15 @@ namespace OrthancDatabases {
         mongoc_gridfs_file_t *file = CreateMongoDBFile(gridfs, uuid, type, false);
         mongoc_stream_t *stream = CreateMongoDBStream(file);
 
-        target->size = mongoc_gridfs_file_get_length(file);
-        target->data = (0 == target->size) ? nullptr : malloc(target->size);
+        if (OrthancPluginCreateMemoryBuffer64(context_, target, static_cast<uint64_t>(mongoc_gridfs_file_get_length(file))) != OrthancPluginErrorCode_Success){
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_NotEnoughMemory);
+        }
 
-        mongoc_stream_read(stream, target->data, target->size, -1, 0);
+        mongoc_iovec_t iov;
+        iov.iov_len = target->size;
+        iov.iov_base = target->data;
+
+        mongoc_stream_readv(stream, &iov, 1, -1, 0);
 
         mongoc_stream_destroy(stream);
         mongoc_gridfs_file_destroy(file);
@@ -194,9 +203,6 @@ namespace OrthancDatabases {
         mongoc_client_pool_destroy(pool_);
         mongoc_uri_destroy(uri_);
     }
-
-    static OrthancPluginContext *context_ = nullptr;
-    static std::unique_ptr<MongoDBStorageArea> backend_;
 
     static OrthancPluginErrorCode StorageCreate(const char *uuid,
                                                 const void *content,

@@ -90,8 +90,7 @@ ORTHANC_PLUGINS_API void OrthancPluginFinalize() {
     LOG(WARNING) << "MongoDB storage area is finalizing";
     OrthancDatabases::MongoDBStorageArea::Finalize();
     
-    // causing segmantation fault
-    // mongoc_cleanup();
+    mongoc_cleanup();
 }
 
 

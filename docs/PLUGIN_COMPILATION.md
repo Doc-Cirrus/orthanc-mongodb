@@ -37,11 +37,17 @@ make
 ## Docker
 
 There is a docker image ready to build, with two targets
+* Base: base image with all the deps `--target base`
 * Build: compile the plugin `--target build`
 * Run: start orthanc with the plugin enabled (`--target runtime`), plus some other one (for testing purpuses).
 ```
 $ docker build --network host --target runtime -t orthanc-mongodb-run .
 $ docker build --network host -p 127.0.0.1:8042:8042 -p 127.0.0.1:4242:4242 --target runtime -t orthanc-mongodb-run --name orthanc-mongodb .
+```
+
+After creating `orthanc-mongodb-run` image you can start compose, that has all the deps required.
+```
+$ docker compose --up
 ```
 
 Link to mongodb instance will need adjusting, for now it require a mongod docker container instance (see [more info](https://hub.docker.com/_/mongo));

@@ -1,4 +1,4 @@
-FROM oraclelinux:9 AS build
+FROM oraclelinux:9 AS base
 
 RUN dnf config-manager --enable ol9_addons
 RUN yum -y install patch \
@@ -15,6 +15,8 @@ RUN yum -y install patch \
  gdb \
  gcc-c++
 
+FROM base AS dev
+
 WORKDIR /usr/share/src
 ADD . /usr/share/src
 
@@ -26,9 +28,9 @@ RUN make
 
 FROM build AS runtime
 
-ENV MONGO_URL=mongodb://host.docker.internal:27017/inpacs?retryWrites=false
+ENV MONGO_URL=mongodb://database:27017/inpacs?retryWrites=false
 
-WORKDIR /usr/share/runtime
+WORKDIR /usr/local/runtime
 
 RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.11.3/Orthanc -o Orthanc
 RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.11.3/libServeFolders.so -o libServeFolders.so
@@ -38,16 +40,12 @@ RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-expl
 RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/stone-web-viewer/2.5/libStoneWebViewer.so -o libStoneWebViewer.so
 RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/stone-web-viewer/2.5/wasm-binaries.zip -o wasm-binaries.zip
 RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-dicomweb/1.10/libOrthancDicomWeb.so -o libOrthancDicomWeb.so
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-dicomweb/1.10/libOrthancDicomWeb.so -o libOrthancDicomWeb.so
-RUN cp /usr/share/src/build/libOrthancMongoFramework.a .
-RUN cp /usr/share/src/build/libOrthancMongoDBIndex.so.1.11.3 ./libOrthancMongoDBIndex.so
-RUN cp /usr/share/src/build/libOrthancMongoDBStorage.so.1.11.3 ./libOrthancMongoDBStorage.so
+
 
 RUN chmod +x ./Orthanc
 RUN unzip dist.zip
 RUN unzip wasm-binaries.zip
-RUN cp /usr/share/src/Resources/Config/configuration.json .
-RUN sed -i 's+CONNECTION_URI+'"$MONGO_URL"'+g' ./configuration.json
+RUN cp /usr/local/src/Resources/Config/configuration.json .
 
 EXPOSE 4242
 EXPOSE 8042

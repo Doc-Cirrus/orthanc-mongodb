@@ -1,0 +1,35 @@
+name: orthanc-mongodb
+
+networks:
+    local:
+        name: orthanc-mongodb
+
+volumes:
+    build:
+        name: insuite-npm
+    mongo:
+        name: orthanc-mongodb-data
+
+
+services:
+  orthanc:
+    image: orthanc-mongodb-run
+    stdin_open: true
+    tty: true
+    command: bash
+    volumes:
+      - ./:/usr/local/src/:rw,delegated
+      - ../../orthanc/Orthanc-1.11.3/:/usr/local/orthanc
+    ports:
+      - 8042
+      - 4242
+    networks:
+      local:
+  database:
+    image: mongo:5.0
+    volumes:
+      - mongo:/var/lib/mongo
+    ports:
+      - 27017
+    networks:
+      local:
