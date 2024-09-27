@@ -22,11 +22,11 @@ ADD . /usr/share/src
 
 RUN mkdir -p build
 RUN cd build
-RUN cmake /usr/share/src/MongoDB -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DAUTO_INSTALL_DEPENDENCIES=ON -DBUILD_TESTS=ON
+# RUN cmake ../MongoDB -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DAUTO_INSTALL_DEPENDENCIES=ON -DBUILD_TESTS=ON -DORTHANC_FRAMEWORK_SOURCE=path -DORTHANC_FRAMEWORK_ROOT=/usr/local/orthanc/OrthancFramwork/Sources
 
-RUN make
+# RUN make
 
-FROM build AS runtime
+FROM dev AS runtime
 
 ENV MONGO_URL=mongodb://database:27017/inpacs?retryWrites=false
 

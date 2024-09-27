@@ -34,6 +34,7 @@ endif ()
 include(${CMAKE_SOURCE_DIR}/../Resources/CMake/DatabasesPluginParameters.cmake)
 
 set(CMAKE_CXX_FLAGS '-fPIC')
+set(CMAKE_CXX_STANDARD 17)
 set(USE_SYSTEM_OPENSSL ON)
 set(ORTHANC_PLUGIN_VERSION ${ORTHANC_FRAMEWORK_VERSION})
 
