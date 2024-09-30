@@ -6,7 +6,7 @@ networks:
 
 volumes:
     build:
-        name: insuite-npm
+        name: orthanc-mongodb-build
     mongo:
         name: orthanc-mongodb-data
 
@@ -19,14 +19,16 @@ services:
     command: bash
     volumes:
       - ./:/usr/local/src/:rw,delegated
-      - ../../orthanc/Orthanc-1.11.3/:/usr/local/orthanc
+      - type: bind
+        source: ../orthanc/Orthanc-1.11.3
+        target: /usr/local/orthanc
     ports:
       - 8042
       - 4242
     networks:
       local:
   database:
-    image: mongo:5.0
+    image: mongo:6.0
     volumes:
       - mongo:/var/lib/mongo
     ports:

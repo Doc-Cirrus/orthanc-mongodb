@@ -17,6 +17,7 @@ ExternalProject_Add(${MONGO_CXX_PROJECT}
         -DCMAKE_PREFIX_PATH:PATH=${MONGO_C_INSTALL_DIR}
         -DBUILD_SHARED_LIBS:BOOL=${MONGO_CXX_BUILD_SHARED_LIBS}
         -DBUILD_SHARED_AND_STATIC_LIBS:BOOL=OFF
+        -DCMAKE_CXX_STANDARD:STRING=17
         # Required for windows build with msvc. Also could be used on other platforms
         -DBOOST_ROOT:PATH="${BOOST_ROOT}"
 )

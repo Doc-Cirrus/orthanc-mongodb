@@ -47,7 +47,7 @@ $ docker build --network host -p 127.0.0.1:8042:8042 -p 127.0.0.1:4242:4242 --ta
 
 After creating `orthanc-mongodb-run` image you can start compose, that has all the deps required.
 ```
-$ docker compose --up
+$ docker compose up
 ```
 
 Link to mongodb instance will need adjusting, for now it require a mongod docker container instance (see [more info](https://hub.docker.com/_/mongo));
