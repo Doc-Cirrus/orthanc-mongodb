@@ -115,6 +115,7 @@ namespace OrthancDatabases {
             );
             GetCollection(database, "Changes").create_index(make_document(kvp("internalId", 1)));
             GetCollection(database, "AttachedFiles").create_index(make_document(kvp("id", 1)));
+            GetCollection(database, "Metadata").create_index(make_document(kvp("id", 1)));
             GetCollection(database, "GlobalProperties").create_index(make_document(kvp("property", 1)));
             GetCollection(database, "ServerProperties").create_index(
                     make_document(kvp("server", 1), kvp("property", 1))
