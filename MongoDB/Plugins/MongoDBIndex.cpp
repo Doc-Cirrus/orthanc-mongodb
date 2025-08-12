@@ -1100,11 +1100,9 @@ namespace OrthancDatabases {
 
         auto normalStream = array{};
         auto identifierStream = array{};
-        std::vector<std::string> normalLevels;
 
         size_t normalCount = 0;
         size_t identifierCount = 0;
-        bool identifierExact = false;
 
         // copy the passed lookup then sort it
         std::vector<Orthanc::DatabaseConstraint> lookup_sorted = lookup;
@@ -1116,13 +1114,6 @@ namespace OrthancDatabases {
             // auto case_sensitive_option = constraint.isCaseSensitive ? "" : "i";
             auto query_identifier = std::to_string(constraint.GetTag().GetGroup()) + 'x' +
                                     std::to_string(constraint.GetTag().GetElement());
-
-            if (identifierExact && constraint.GetConstraintType() == Orthanc::ConstraintType_Equal &&
-                constraint.IsIdentifier())
-                break;
-            if (constraint.GetConstraintType() == Orthanc::ConstraintType_Equal && constraint.IsIdentifier()) {
-                identifierExact = true;
-            }
 
             if (criterias.find(query_identifier) == criterias.end()) {
                 criterias[query_identifier] = std::move(bsoncxx::builder::basic::document{});
@@ -1199,11 +1190,6 @@ namespace OrthancDatabases {
             } else {
                 normalCount++;
                 normalStream.append(criteria);
-
-                auto levelAttr = "$" + std::to_string(constraint.GetLevel());
-                if (std::find(normalLevels.begin(), normalLevels.end(), levelAttr) == normalLevels.end()) {
-                    normalLevels.push_back(levelAttr);
-                }
             }
 
             criterias.erase(current_document_query);
@@ -1219,12 +1205,72 @@ namespace OrthancDatabases {
             stages.match(normal_match_stage.view());
             collection = database.GetCollection(databaseInstance, "MainDicomTags");
         } else if (normalCount == 0 && identifierCount > 0) {
-            auto identifier_match_stage = make_document(
-                    kvp("$or", identifierStream.extract())
-            );
+            if (identifierCount == 1) {
+                auto identifier_match_stage = make_document(
+                        kvp("$or", identifierStream.extract())
+                );
 
-            stages.match(identifier_match_stage.view());
-            collection = database.GetCollection(databaseInstance, "DicomIdentifiers");
+                stages.match(identifier_match_stage.view());
+                collection = database.GetCollection(databaseInstance, "DicomIdentifiers");
+            } else {
+                mongocxx::pipeline identifiers_stages;
+
+                auto identifier_match_stage = make_document(
+                    kvp("$or", identifierStream.extract())
+                );
+
+                auto lookup_stage = make_document(
+                    kvp("from", "Resources"),
+                    kvp("localField", "id"),
+                    kvp("foreignField", "internalId"),
+                    kvp("as", "resources")
+                );
+
+                auto new_root_stage = make_document(
+                    kvp("newRoot", "$resources")
+                );
+
+                auto project_stage = make_document(
+                    kvp(std::to_string(queryLevel), static_cast<int>(1))
+                );
+
+                auto group_stage = make_document(
+                   kvp("_id", "$" + std::to_string(queryLevel)),
+                   kvp("count", make_document(kvp("$sum", static_cast<int>(1))))
+                );
+
+                auto final_match = make_document(
+                    kvp("count", make_document(kvp("$gte", static_cast<int>(identifierCount))))
+                );
+
+                identifiers_stages.match(identifier_match_stage.view());
+                identifiers_stages.lookup(lookup_stage.view());
+                identifiers_stages.unwind("$resources");
+                identifiers_stages.replace_root(new_root_stage.view());
+                identifiers_stages.project(project_stage.view());
+                identifiers_stages.unwind("$" + std::to_string(queryLevel));
+                identifiers_stages.group(group_stage.view());
+                identifiers_stages.match(final_match.view());
+
+                auto main_tags_ids = array{};
+                mongocxx::options::aggregate identifiersAggregateOptions{};
+                identifiersAggregateOptions.allow_disk_use(true);
+
+                auto identifier_cursor = database.GetCollection(databaseInstance, "DicomIdentifiers").aggregate(
+                    identifiers_stages, identifiersAggregateOptions
+                );
+
+                for (auto &&doc: identifier_cursor) {
+                    auto identifier = doc["_id"].type() == type::k_int32 ? doc["_id"].get_int32().value : doc["_id"].get_int64().value;
+                    main_tags_ids.append(identifier);
+                }
+
+                auto normal_pre_match_stage = make_document(
+                       kvp("internalId", make_document(kvp("$in", main_tags_ids.extract())))
+                );
+
+                stages.match(normal_pre_match_stage.view());
+            }
         } else if (normalCount == 0 && identifierCount == 0) {
             auto match_resources_no_search_stage = make_document(
                     kvp("resourceType", static_cast<int>(queryLevel))
@@ -1235,53 +1281,53 @@ namespace OrthancDatabases {
             mongocxx::pipeline identifiers_stages;
 
             auto identifier_match_stage = make_document(
-                    kvp("$or", identifierStream.extract())
+                kvp("$or", identifierStream.extract())
             );
 
-            auto graph_lookup_stage = make_document(
-                    kvp("as", "resources"),
-                    kvp("startWith", "$id"),
-                    kvp("from", "Resources"),
-                    kvp("connectToField", "internalId"),
-                    kvp("connectFromField", std::to_string(queryLevel))
+            auto lookup_stage = make_document(
+                kvp("from", "Resources"),
+                kvp("localField", "id"),
+                kvp("foreignField", "internalId"),
+                kvp("as", "resources")
             );
 
-            auto resource_replace_root_stage = make_document(
-                    kvp("newRoot", "$resources")
+            auto new_root_stage = make_document(
+                kvp("newRoot", "$resources")
             );
 
             auto project_stage = make_document(
-                    kvp("_id", 1), kvp("resources", make_document(
-                            kvp("$concatArrays", [normalLevels](sub_array child) {
-                                for (const auto &normalLevel: normalLevels) {
-                                    child.append(normalLevel);
-                                }
-                            }))
-                    )
+                kvp(std::to_string(queryLevel), static_cast<int>(1))
             );
 
             auto group_stage = make_document(
-                    kvp("_id", "$resources")
+               kvp("_id", "$" + std::to_string(queryLevel)),
+               kvp("count", make_document(kvp("$sum", static_cast<int>(1))))
+            );
+
+            auto final_match = make_document(
+                kvp("count", make_document(kvp("$gte", static_cast<int>(identifierCount))))
             );
 
             identifiers_stages.match(identifier_match_stage.view());
-            identifiers_stages.graph_lookup(graph_lookup_stage.view());
+            identifiers_stages.lookup(lookup_stage.view());
             identifiers_stages.unwind("$resources");
-            identifiers_stages.replace_root(resource_replace_root_stage.view());
+            identifiers_stages.replace_root(new_root_stage.view());
             identifiers_stages.project(project_stage.view());
-            identifiers_stages.unwind("$resources");
+            identifiers_stages.unwind("$" + std::to_string(queryLevel));
             identifiers_stages.group(group_stage.view());
+            identifiers_stages.match(final_match.view());
 
             auto main_tags_ids = array{};
             mongocxx::options::aggregate identifiersAggregateOptions{};
             identifiersAggregateOptions.allow_disk_use(true);
 
             auto identifier_cursor = database.GetCollection(databaseInstance, "DicomIdentifiers").aggregate(
-                    identifiers_stages, identifiersAggregateOptions
+                identifiers_stages, identifiersAggregateOptions
             );
 
             for (auto &&doc: identifier_cursor) {
-                main_tags_ids.append(doc["_id"].get_int64().value);
+                auto identifier = doc["_id"].type() == type::k_int32 ? doc["_id"].get_int32().value : doc["_id"].get_int64().value;
+                main_tags_ids.append(identifier);
             }
 
             auto normal_pre_match_stage = make_document(
@@ -1298,7 +1344,7 @@ namespace OrthancDatabases {
             collection = database.GetCollection(databaseInstance, "MainDicomTags");
         }
 
-        if (normalCount > 0 || identifierCount > 0) {
+        if (normalCount > 0 || identifierCount == 1) {
             auto graph_lookup_stage = make_document(
                     kvp("as", "resources"),
                     kvp("startWith", "$id"),
@@ -1346,6 +1392,8 @@ namespace OrthancDatabases {
 
         mongocxx::options::aggregate aggregateOptions{};
         aggregateOptions.allow_disk_use(true);
+
+        LOG(INFO) << "QUERY: " << bsoncxx::to_json(stages.view_array());
 
         auto cursor = collection.aggregate(stages, aggregateOptions);
 
