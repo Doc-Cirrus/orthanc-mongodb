@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Builds the plugins and the unit tests with the "build" stage of the Dockerfile,
+  # then runs the unit tests against a standalone MongoDB server and a replica set,
+  # as some tests only apply to one of them (see docs/TESTING.md)
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the plugins and the unit tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          load: true
+          tags: orthanc-mongodb-build:ci
+          cache-from: type=gha,scope=build
+          cache-to: type=gha,scope=build,mode=max
+
+      # The same host names as the "database" and "database-rs" services of compose.yaml
+      - name: Start the MongoDB servers
+        run: |
+          docker network create ci
+          docker run -d --name database --network ci mongo:7.0
+          docker run -d --name database-rs --network ci mongo:7.0 --replSet rs0 --bind_ip_all
+          for i in $(seq 60); do
+            docker exec database mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1 &&
+            docker exec database-rs mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec database-rs mongosh --quiet --eval "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'database-rs:27017' }] })"
+          for i in $(seq 60); do
+            [ "$(docker exec database-rs mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && exit 0
+            sleep 2
+          done
+          echo "The replica set has no primary" >&2
+          exit 1
+
+      - name: Unit tests (standalone server)
+        run: docker run --rm --network ci orthanc-mongodb-build:ci /usr/share/build/UnitTests "mongodb://database:27017/"
+
+      - name: Unit tests (replica set)
+        run: docker run --rm --network ci orthanc-mongodb-build:ci /usr/share/build/UnitTests "mongodb://database-rs:27017/?replicaSet=rs0"
+
+      - name: MongoDB logs
+        if: failure()
+        run: |
+          docker logs database 2>&1 | tail -n 200
+          docker logs database-rs 2>&1 | tail -n 200
+
+  # Checks that the runtime image, with the Orthanc downloads, still builds
+  runtime-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: orthanc-mongodb:ci
+          cache-from: type=gha,scope=build

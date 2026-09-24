@@ -1,6 +1,6 @@
 /**
  * MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
- * Copyright (C) 2017 - 2023  (Doc Cirrus GmbH)
+ * Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,93 +16,55 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  **/
 
+
 #pragma once
 
-#include <mongoc.h>
-#include <boost/noncopyable.hpp>
-#include <orthanc/OrthancCPlugin.h>
-#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
+#include "../../Framework/MongoDB/MongoDBIncludes.h"
+#include "../../Framework/MongoDB/MongoDBParameters.h"
+#include "../../Framework/Plugins/StorageBackend.h"
 
-#include <Compatibility.h>  // For std::unique_ptr<>
-#include <Logging.h>
+#include <boost/thread/mutex.hpp>
 
-namespace OrthancDatabases {
-    class MongoDBStorageArea : public boost::noncopyable {
-    private:
-        int chunkSize_;
-        mongoc_uri_t *uri_;
-        mongoc_client_pool_t *pool_;
 
-    public:
-        class Accessor : public boost::noncopyable {
+namespace OrthancDatabases
+{
+  /**
+   * Counterpart of "PostgreSQLStorageArea". Each attachment is a
+   * GridFS file of the default bucket ("fs.files" and "fs.chunks"),
+   * named "<uuid> - <content type>". All the previous versions of the
+   * plugin used the same layout, so their files are read unchanged,
+   * whatever their chunk size.
+   *
+   * Each accessor takes its own client of one "mongocxx::pool", so
+   * that the files are read and written concurrently. A range is read
+   * from the chunks that hold it only.
+   **/
+  class MongoDBStorageArea : public StorageBackend
+  {
+  private:
+    class Accessor;
 
-        private:
-            // does not own that
-            mongoc_client_pool_t *pool_;
-            mongoc_uri_t *uri_;
-            const char *database_name_;
+    std::string     databaseName_;
+    int32_t         chunkSize_;
+    mongocxx::pool  pool_;
+    boost::mutex    mutex_;
+    bool            serverChecked_;
 
-            int chunk_size_;
+    // Checks the version of the server once, when the first client connects
+    void CheckServer(mongocxx::client& client);
 
-            mongoc_gridfs_file_t *CreateMongoDBFile(mongoc_gridfs_t *gridfs, const std::string &uuid,
-                                                    OrthancPluginContentType type, bool createFile);
+  protected:
+    virtual bool HasReadRange() const ORTHANC_OVERRIDE
+    {
+      return true;
+    }
 
-            static mongoc_stream_t *CreateMongoDBStream(mongoc_gridfs_file_t *file);
+  public:
+    explicit MongoDBStorageArea(const MongoDBParameters& parameters);
 
-        public:
-            explicit Accessor(mongoc_client_pool_t *pool, mongoc_uri_t *uri, int chunk_size) : pool_(pool), uri_(uri),
-                                                                                               chunk_size_(chunk_size) {
-                database_name_ = mongoc_uri_get_database(uri_);
-                if (!database_name_) {
-                    LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot not parse mongodb URI.";
-                    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
-                }
-            }
+    virtual IAccessor* CreateAccessor() ORTHANC_OVERRIDE;
 
-            virtual ~Accessor() {};
-
-            mongoc_client_t* PopClient() {
-                mongoc_client_t *client = mongoc_client_pool_pop (pool_);
-
-                if (!client) {
-                    LOG(ERROR) << "MongoDBGridFS::MongoDBGridFS - Cannot initialize mongodb client.";
-                    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
-                }
-
-                return client;
-            }
-
-            void PushClient(mongoc_client_t * client) {
-                mongoc_client_pool_push (pool_, client);
-            }
-
-            virtual void Create(const std::string &uuid,
-                                const void *content,
-                                size_t size,
-                                OrthancPluginContentType type);
-
-            virtual void ReadWhole(OrthancPluginMemoryBuffer64 *target,
-                                   const std::string &uuid,
+    static std::string GetFileName(const std::string& uuid,
                                    OrthancPluginContentType type);
-
-            virtual void ReadRange(OrthancPluginMemoryBuffer64 *target,
-                                   const std::string &uuid,
-                                   OrthancPluginContentType type,
-                                   uint64_t rangeStart);
-
-            virtual void Remove(const std::string &uuid, OrthancPluginContentType type);
-        };
-
-        explicit MongoDBStorageArea(const std::string &url, const int &chunkSize, const int &maxConnectionRetries);
-
-        ~MongoDBStorageArea();
-
-        static void Register(OrthancPluginContext *context, MongoDBStorageArea *backend);   // Takes ownership
-
-        static void Finalize();
-
-        virtual Accessor* CreateAccessor() {
-            return new Accessor(pool_, uri_, chunkSize_);
-        }
-    };
+  };
 }

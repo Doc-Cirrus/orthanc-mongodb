@@ -1,4 +1,21 @@
-cmake_minimum_required(VERSION 3.2)
+# MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
+# Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+cmake_minimum_required(VERSION 3.15)
 
 project(${MONGO_CXX_PROJECT})
 
@@ -6,18 +23,25 @@ include(ExternalProject)
 
 ExternalProject_Add(${MONGO_CXX_PROJECT}
     URL             "https://github.com/mongodb/mongo-cxx-driver/releases/download/r${MONGO_CXX_VERSION}/mongo-cxx-driver-r${MONGO_CXX_VERSION}.tar.gz"
+    URL_HASH        "SHA256=${MONGO_CXX_SHA256}"
+    DOWNLOAD_DIR    "${MONGO_DOWNLOAD_DIR}"
     SOURCE_DIR      "${MONGO_CXX_SOURCE_DIR}"
     BINARY_DIR      "${MONGO_CXX_BINARY_DIR}"
     INSTALL_DIR     "${MONGO_CXX_INSTALL_DIR}"
     CMAKE_CACHE_ARGS
+        "-DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}"
+        "-DCMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}"
         "-DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}"
         "-DCMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}:STRING=${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
         -DCMAKE_INSTALL_PREFIX:PATH=${MONGO_CXX_INSTALL_DIR}
+        -DCMAKE_INSTALL_LIBDIR:STRING=lib
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
         -DCMAKE_PREFIX_PATH:PATH=${MONGO_C_INSTALL_DIR}
-        -DBUILD_SHARED_LIBS:BOOL=${MONGO_CXX_BUILD_SHARED_LIBS}
-        -DBUILD_SHARED_AND_STATIC_LIBS:BOOL=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DCMAKE_CXX_STANDARD:STRING=17
-        # Required for windows build with msvc. Also could be used on other platforms
-        -DBOOST_ROOT:PATH="${BOOST_ROOT}"
+        -DBUILD_SHARED_LIBS:BOOL=${MONGO_ENABLE_SHARED}
+        -DBUILD_SHARED_AND_STATIC_LIBS:BOOL=OFF
+        -DENABLE_TESTS:BOOL=OFF
+        -DBUILD_TESTING:BOOL=OFF
+        -DBUILD_VERSION:STRING=${MONGO_CXX_VERSION}
 )

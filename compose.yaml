@@ -1,5 +1,10 @@
 name: orthanc-mongodb
 
+# Paths to the Orthanc and PostgreSQL plugin sources, used by the "dev" service.
+# Override them in a ".env" file next to this one, e.g.:
+#   ORTHANC_SOURCES=../orthanc/Orthanc-1.13.0
+#   POSTGRESQL_SOURCES=../orthanc/OrthancPostgreSQL-11.0
+
 networks:
     local:
         name: orthanc-mongodb
@@ -9,29 +14,76 @@ volumes:
         name: orthanc-mongodb-build
     mongo:
         name: orthanc-mongodb-data
+    mongo-rs:
+        name: orthanc-mongodb-data-rs
 
 
 services:
-  orthanc:
-    image: orthanc-mongodb-run
+  # Development shell: sources mounted from the host, build directory in a volume
+  dev:
+    build:
+      context: .
+      target: dev
     stdin_open: true
     tty: true
     command: bash
     volumes:
       - ./:/usr/local/src/:rw,delegated
+      - build:/usr/local/build
       - type: bind
-        source: ../orthanc/Orthanc-1.11.3
+        source: ${ORTHANC_SOURCES:-../../orthanc/Orthanc-1.13.0}
         target: /usr/local/orthanc
+      - type: bind
+        source: ${POSTGRESQL_SOURCES:-../../orthanc/OrthancPostgreSQL-11.0}
+        target: /usr/local/orthanc-postgress
+    environment:
+      MONGO_URL: mongodb://database:27017/
+      MONGO_RS_URL: mongodb://database-rs:27017/?replicaSet=rs0
+    networks:
+      local:
+
+  # Orthanc with the MongoDB plugins (standalone MongoDB)
+  orthanc:
+    build:
+      context: .
+      target: runtime
+      args:
+        ORTHANC_VERSION: 1.13.0
+        ORTHANC_EXPLORER_2_VERSION: 1.15.0
+        STONE_WEB_VIEWER_VERSION: "3.0"
+        ORTHANC_DICOMWEB_VERSION: "1.24"
+    depends_on:
+      - database
     ports:
       - 8042
       - 4242
     networks:
       local:
+
+  # Standalone MongoDB server (no multi-document transactions)
   database:
-    image: mongo:6.0
+    image: mongo:7.0
     volumes:
-      - mongo:/var/lib/mongo
+      - mongo:/data/db
     ports:
       - 27017
+    networks:
+      local:
+
+  # Single-node replica set (multi-document transactions available)
+  database-rs:
+    image: mongo:7.0
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo-rs:/data/db
+    ports:
+      - 27017
+    healthcheck:
+      # Initiates the replica set on first start, then reports its health
+      test: >
+        mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'database-rs:27017'}]}).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 30
     networks:
       local:

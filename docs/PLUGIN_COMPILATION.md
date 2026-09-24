@@ -1,53 +1,48 @@
 # Plugin Compilation
 
-## Basic Build Example
-In order to compile the plugin, the prerequisites needs to be available (check [link](./PREREQUISITES.md) for mor details).
-You need either to download the master or the tagged release from GitHub and uncompressed it, here an example using curl:
+The prerequisites are listed in [Build Prerequisites](./PREREQUISITES.md).
+
+## Build
 
 ```bash
-# Replace "LATEST_TAG" with last tag in github
-curl -L --output orthanc-mongodb.tar.gz https://github.com/Doc-Cirrus/orthanc-mongodb/archive/LATEST_TAG.tar.gz
-tar -xzf orthanc-mongodb.tar.gz
+git clone https://github.com/Doc-Cirrus/orthanc-mongodb.git
+cmake -S orthanc-mongodb/MongoDB -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DSTATIC_BUILD=ON \
+      -DALLOW_DOWNLOADS=ON \
+      -DAUTO_INSTALL_DEPENDENCIES=ON
+cmake --build build -j"$(nproc)"
+sudo cmake --install build   # into /usr/local/share/orthanc/plugins/
 ```
 
-### Centos like
-```bash
-mkdir -p orthanc-mongodb/build
-cd orthanc-mongodb/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DCMAKE_BUILD_TYPE=Release -DAUTO_INSTALL_DEPENDENCIES=ON ../MongoDB/"
-scl enable devtoolset-8 "make"
-scl enable devtoolset-8 "sudo make install"
-```
+This builds `libOrthancMongoDBIndex.so`, `libOrthancMongoDBStorage.so` and the `UnitTests` program (see [Testing](./TESTING.md)).
 
-### Debian like
-```bash
-mkdir -p orthanc-mongodb/build
-cd orthanc-mongodb/build
+## CMake options
 
-cmake -DCMAKE_INSTALL_PREFIX=/usr -DSTATIC_BUILD=ON -DCMAKE_BUILD_TYPE=Release -DAUTO_INSTALL_DEPENDENCIES=ON ../MongoDB/
-make
-```
-
-## Cmake Configuration Arguments
-* ```AUTO_INSTALL_DEPENDENCIES``` - Automatically build and compile dependencies (mongoc/mongocxx).
-* ```ORTHANC_FRAMEWORK_SOURCE``` - (not required) Orthanc server sources with theis values ("system", "hg", "web", "archive" or "path"), check [link](../Resources/Orthanc/CMake/DownloadOrthancFramework.cmake) for more info.
-* ```BUILD_TESTS``` - option to build tests, default off
-* ```BUILD_WITH_GCOV``` - option to include coverage default off
+| Option | Default | Description |
+|---|---|---|
+| `STATIC_BUILD` | `OFF` | Build the third-party libraries of the Orthanc framework (Boost, JsonCpp, protobuf...) from their sources, instead of using the system ones. |
+| `ALLOW_DOWNLOADS` | `OFF` | Allow CMake to download the sources it needs. Required by `STATIC_BUILD` and `AUTO_INSTALL_DEPENDENCIES`. |
+| `AUTO_INSTALL_DEPENDENCIES` | `OFF` | Download and build the MongoDB drivers (see [AUTO_CONFIG](./DEPENDENCIES_AUTO_CONFIG.md)). |
+| `LINK_STATIC_LIBS` | `OFF` | Link against the static libraries of MongoDB drivers installed on the system. |
+| `MONGOC_ROOT`, `MONGOCXX_ROOT` | | Installation prefixes of the system drivers, if CMake does not find them. |
+| `BUILD_TESTS` | `ON` | Build the `UnitTests` program. |
+| `ORTHANC_FRAMEWORK_SOURCE` | `web` | Where to get the Orthanc framework 1.13.0: `web`, `hg`, `archive` (with `ORTHANC_FRAMEWORK_ARCHIVE`) or `path` (with `ORTHANC_FRAMEWORK_ROOT`). |
+| `USE_SYSTEM_ORTHANC_SDK` | `ON` | Use the Orthanc SDK headers of the system. With `OFF`, or with `STATIC_BUILD`, the copy of SDK 1.13.0 in `Resources/Orthanc/Sdk-1.13.0` is used. |
 
 ## Docker
 
-There is a docker image ready to build, with two targets
-* Base: base image with all the deps `--target base`
-* Build: compile the plugin `--target build`
-* Run: start orthanc with the plugin enabled (`--target runtime`), plus some other one (for testing purpuses).
-```
-$ docker build --network host --target runtime -t orthanc-mongodb-run .
-$ docker build --network host -p 127.0.0.1:8042:8042 -p 127.0.0.1:4242:4242 --target runtime -t orthanc-mongodb-run --name orthanc-mongodb .
+The `Dockerfile` has four stages:
+
+- `base`: the toolchain and the system libraries;
+- `dev`: an interactive image, used by the `dev` service of `compose.yaml` with the sources mounted from the host;
+- `build`: builds and installs the plugins from the build context (`--build-arg BUILD_TYPE=Debug` for a debug build);
+- `runtime`: Orthanc 1.13.0 (Linux Standard Base binaries) with the plugins, Orthanc Explorer 2, the Stone Web Viewer and DICOMweb.
+
+```bash
+docker build --target runtime -t orthanc-mongodb .
+docker compose up orthanc database
 ```
 
-After creating `orthanc-mongodb-run` image you can start compose, that has all the deps required.
-```
-$ docker compose up
-```
-
-Link to mongodb instance will need adjusting, for now it require a mongod docker container instance (see [more info](https://hub.docker.com/_/mongo));
+`compose.yaml` also starts two MongoDB 7.0 servers for the tests: `database` (standalone) and `database-rs` (single-node replica set `rs0`).

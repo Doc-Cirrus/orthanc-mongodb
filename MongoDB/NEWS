@@ -1,0 +1,100 @@
+Pending changes in the mainline
+===============================
+
+
+Release 1.13.0 (not released yet)
+=================================
+
+DB schema revision: 2
+Minimum plugin SDK (for build): 1.13.0
+Optimal plugin SDK (for build): 1.13.0
+Minimum Orthanc runtime: 1.13.0
+Optimal Orthanc runtime: 1.13.0
+
+Minimal MongoDB server version: 7.0
+Optimal MongoDB server version: 7.0+ (replica set)
+
+MongoDB C driver: 2.5.4
+MongoDB C++ driver: 4.6.0
+
+Changes:
+* The index plugin uses the V4 database API of Orthanc 1.13. The V2 and
+  V3 adapters are removed, so Orthanc logs no performance warning anymore.
+* The plugins refuse to run on Orthanc < 1.13.0 and on MongoDB < 7.0.
+* The repository follows the layout of the PostgreSQL plugin 11.0:
+  "MongoDBIndex.cpp" is split into one class per group of collections
+  ("MongoDB/Plugins/Index/"), and the connection pools, the storage
+  backend and the unit tests of the PostgreSQL plugin are shared.
+* New features of the V4 API:
+  - labels,
+  - extended changes ("/changes?type=...&to=..."),
+  - extended find ("ExecuteFind"/"ExecuteCount"), including the ordering
+    and the pagination of "/tools/find" used by Orthanc Explorer 2,
+  - key-value stores and queues (for other plugins),
+  - attachment custom data,
+  - audit logs, readable at "GET /plugins/mongodb/audit-logs",
+  - fast statistics, atomic global counters, DB latency measurement and
+    DB housekeeping.
+* Transactions: on a replica set or a sharded cluster, each Orthanc
+  transaction is a MongoDB transaction. On a standalone server, which has
+  no transactions, the writes are upserts protected by unique indexes, and
+  a deletion and a store that race are resolved without losing or leaking
+  a file. A replica set is still recommended with concurrent writers: see
+  "docs/PLUGIN_CONFIGURATION.md".
+* Performance:
+  - "LookupResources" and "ExecuteFind" run one aggregation pipeline,
+    started from the most selective constraint. On 1,200,000 instances,
+    "latest 100 CT studies" takes 69 ms instead of 174 s.
+  - DICOMweb retrieval of an instance by its UIDs takes 3 ms instead of
+    33 ms in a series of 500 instances.
+  - A request that waits for an index connection gets it as soon as it
+    is released, instead of polling every 100 ms. With 8 concurrent Stone
+    Web Viewers, the worst request drops from 3.6 s to 82 ms.
+  - The storage area finds a file by its exact name through the GridFS
+    index instead of a regular expression, and reads only the chunks of
+    the requested range.
+* Schema: the existing collections and document shapes are unchanged.
+  Revision 2 adds indexes (7 of them unique) and new collections: Labels,
+  KeyValueStores, Queues, AuditLogs, StatisticsChanges, and the GridFS
+  bucket LargeProperties. The upgrade runs under a lock document, so only
+  one Orthanc builds the indexes. The previous release still runs on an
+  upgraded database.
+* New mongosh scripts in "Resources/MongoDB/Upgrades/": audit and repair
+  of the duplicates that block a unique index, and offline index builds.
+* New configuration options: "IndexConnectionsCount",
+  "MaximumConnectionRetries" (the previous "MaxConnectionRetries" still
+  works), "ConnectionRetryInterval", "EnableTransactions",
+  "CreateIndexesAtStartup", "EnableExtendedFind",
+  "UseDynamicConnectionPool", "HousekeepingInterval",
+  "AuditLogsRetentionDays", and the top-level "ReadOnly".
+* Build: MongoDB C driver 2.x and C++ driver 4.x, Orthanc framework 1.13.0.
+
+Fixes:
+* Deleting a resource or an attachment never signalled the deleted files
+  to Orthanc, so they stayed in GridFS. The empty parent resources were
+  also left behind.
+* "/tools/find" and C-FIND combined several constraints with OR instead
+  of AND, ignored the case sensitivity, only escaped "." in wildcards,
+  and returned one answer less than the limit.
+* The patient to recycle was not the oldest one, and "/changes" was not
+  sorted.
+* Concurrent writes could create duplicate resources, sequence numbers
+  or global properties, or miss the "NewPatient"/"NewStudy"/"NewSeries"
+  changes.
+* Global properties of 16 MB and more, such as large serialized jobs,
+  could not be stored.
+* "/statistics" and the disk size checks of the recycling scanned every
+  attachment on each call.
+* Leaks of connection pools, clients, GridFS handles and buffers.
+* A file whose uuid was a prefix of another one could be read instead of
+  it, and a range read past the end of a file succeeded.
+* Orthanc could crash when it stopped with both plugins loaded.
+* On a standalone server, a store that raced the deletion of its patient
+  (e.g. a C-MOVE to Orthanc itself with "OverwriteInstances") could leave
+  an attachment of a deleted instance, whose file was never deleted and
+  still counted in "/statistics".
+
+Release 1.11.4 and before
+=========================
+
+See the tags of the repository.

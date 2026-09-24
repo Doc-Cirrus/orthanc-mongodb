@@ -1,7 +1,21 @@
+# Stages:
+#   base    - toolchain and system libraries needed to build the plugin
+#   dev     - interactive development image (sources are bind-mounted by compose.yaml)
+#   build   - compiles the plugins and the unit tests from the sources in the build context
+#   runtime - Orthanc (Linux Standard Base binaries) with the MongoDB plugins enabled
+
+# Versions of the Linux Standard Base downloads used by the runtime stage:
+# https://orthanc.uclouvain.be/downloads/linux-standard-base/index.html
+ARG ORTHANC_VERSION=1.13.0
+ARG ORTHANC_EXPLORER_2_VERSION=1.15.0
+ARG STONE_WEB_VIEWER_VERSION=3.0
+ARG ORTHANC_DICOMWEB_VERSION=1.24
+
+
 FROM oraclelinux:9 AS base
 
 RUN dnf config-manager --enable ol9_addons
-RUN yum -y install patch \
+RUN dnf -y install patch \
  git \
  curl \
  libuuid-devel \
@@ -13,41 +27,64 @@ RUN yum -y install patch \
  make \
  gcc \
  gdb \
- gcc-c++
+ gcc-c++ \
+ python3 \
+ && dnf clean all
+
 
 FROM base AS dev
 
+WORKDIR /usr/local/src
+
+
+FROM base AS build
+
+ARG BUILD_TYPE=Release
+
 WORKDIR /usr/share/src
-ADD . /usr/share/src
+COPY . /usr/share/src
 
-RUN mkdir -p build
-RUN cd build
-# RUN cmake ../MongoDB -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/usr/local -DSTATIC_BUILD=ON -DAUTO_INSTALL_DEPENDENCIES=ON -DBUILD_TESTS=ON -DORTHANC_FRAMEWORK_SOURCE=path -DORTHANC_FRAMEWORK_ROOT=/usr/local/orthanc/OrthancFramework/Sources
+RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build \
+      -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DSTATIC_BUILD=ON \
+      -DALLOW_DOWNLOADS=ON \
+      -DAUTO_INSTALL_DEPENDENCIES=ON \
+      -DBUILD_TESTS=ON \
+ && cmake --build /usr/share/build -j"$(nproc)" \
+ && cmake --install /usr/share/build
 
-# RUN make
 
-FROM dev AS runtime
+FROM base AS runtime
 
-ENV MONGO_URL=mongodb://database:27017/inpacs?retryWrites=false
+# Re-declared so that the global values are visible inside this stage
+ARG ORTHANC_VERSION
+ARG ORTHANC_EXPLORER_2_VERSION
+ARG STONE_WEB_VIEWER_VERSION
+ARG ORTHANC_DICOMWEB_VERSION
+ARG LSB_DOWNLOADS=https://orthanc.uclouvain.be/downloads/linux-standard-base
+
+ENV MONGO_URL=mongodb://database:27017/inpacs
 
 WORKDIR /usr/local/runtime
 
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.11.3/Orthanc -o Orthanc
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.11.3/libServeFolders.so -o libServeFolders.so
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.11.3/libModalityWorklists.so -o libModalityWorklists.so
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-explorer-2/1.2.1/libOrthancExplorer2.so -o libOrthancExplorer2.so
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-explorer-2/1.2.1/dist.zip -o dist.zip
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/stone-web-viewer/2.5/libStoneWebViewer.so -o libStoneWebViewer.so
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/stone-web-viewer/2.5/wasm-binaries.zip -o wasm-binaries.zip
-RUN curl https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc-dicomweb/1.10/libOrthancDicomWeb.so -o libOrthancDicomWeb.so
-
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc/${ORTHANC_VERSION}/Orthanc -o Orthanc
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc/${ORTHANC_VERSION}/libServeFolders.so -o libServeFolders.so
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc/${ORTHANC_VERSION}/libModalityWorklists.so -o libModalityWorklists.so
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc-explorer-2/${ORTHANC_EXPLORER_2_VERSION}/libOrthancExplorer2.so -o libOrthancExplorer2.so
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc-explorer-2/${ORTHANC_EXPLORER_2_VERSION}/dist.zip -o dist.zip
+RUN curl -fL ${LSB_DOWNLOADS}/stone-web-viewer/${STONE_WEB_VIEWER_VERSION}/libStoneWebViewer.so -o libStoneWebViewer.so
+RUN curl -fL ${LSB_DOWNLOADS}/stone-web-viewer/${STONE_WEB_VIEWER_VERSION}/wasm-binaries.zip -o wasm-binaries.zip
+RUN curl -fL ${LSB_DOWNLOADS}/orthanc-dicomweb/${ORTHANC_DICOMWEB_VERSION}/libOrthancDicomWeb.so -o libOrthancDicomWeb.so
 
 RUN chmod +x ./Orthanc
 RUN unzip dist.zip
 RUN unzip wasm-binaries.zip
-RUN cp /usr/local/src/Resources/Config/configuration.json .
+
+COPY --from=build /usr/local/share/orthanc/plugins/ /usr/local/runtime/
+COPY --from=build /usr/share/src/Resources/Config/configuration.json /usr/local/runtime/configuration.json
 
 EXPOSE 4242
 EXPOSE 8042
 
-CMD ./Orthanc ./configuration.json
+CMD ["./Orthanc", "./configuration.json"]
