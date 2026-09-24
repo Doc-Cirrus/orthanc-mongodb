@@ -51,9 +51,13 @@
     "IsDefaultOrthancUI": true
   },
   "MongoDB": {
-    "ConnectionUri": "mongodb://database:27017/inpacs?retryWrites=false",
+    "ConnectionUri": "${MONGO_URL}",
     "EnableIndex": true,
     "EnableStorage": true,
-    "ChunkSize": 261120
+    "ChunkSize": 261120,
+    "IndexConnectionsCount": 5,
+    "EnableTransactions": "Auto",
+    "CreateIndexesAtStartup": true,
+    "EnableExtendedFind": true
   }
 }

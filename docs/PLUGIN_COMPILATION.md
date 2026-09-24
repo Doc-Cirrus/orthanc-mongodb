@@ -45,4 +45,10 @@ docker build --target runtime -t orthanc-mongodb .
 docker compose up orthanc database
 ```
 
+The versions of the downloaded Orthanc binaries are build arguments: `ORTHANC_VERSION` (1.13.0), `ORTHANC_EXPLORER_2_VERSION` (1.15.0), `STONE_WEB_VIEWER_VERSION` (3.0) and `ORTHANC_DICOMWEB_VERSION` (1.24), from the [Linux Standard Base downloads](https://orthanc.uclouvain.be/downloads/linux-standard-base/index.html). The runtime configuration is `Resources/Config/configuration.json`. It reads the MongoDB connection URI from the `MONGO_URL` environment variable, `mongodb://database:27017/inpacs` by default:
+
+```bash
+docker run -e MONGO_URL="mongodb://db1:27017/orthanc?replicaSet=rs0" -p 8042:8042 -p 4242:4242 orthanc-mongodb
+```
+
 `compose.yaml` also starts two MongoDB 7.0 servers for the tests: `database` (standalone) and `database-rs` (single-node replica set `rs0`).
