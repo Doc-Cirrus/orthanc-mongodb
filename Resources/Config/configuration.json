@@ -52,12 +52,12 @@
   },
   "MongoDB": {
     "ConnectionUri": "${MONGO_URL}",
-    "EnableIndex": true,
-    "EnableStorage": true,
+    "EnableIndex": ${MONGODB_ENABLE_INDEX:-true},
+    "EnableStorage": ${MONGODB_ENABLE_STORAGE:-true},
     "ChunkSize": 261120,
-    "IndexConnectionsCount": 5,
-    "EnableTransactions": "Auto",
-    "CreateIndexesAtStartup": true,
-    "EnableExtendedFind": true
+    "IndexConnectionsCount": ${MONGODB_INDEX_CONNECTIONS_COUNT:-5},
+    "EnableTransactions": "${MONGODB_ENABLE_TRANSACTIONS:-Auto}",
+    "CreateIndexesAtStartup": ${MONGODB_CREATE_INDEXES_AT_STARTUP:-true},
+    "EnableExtendedFind": ${MONGODB_ENABLE_EXTENDED_FIND:-true}
   }
 }

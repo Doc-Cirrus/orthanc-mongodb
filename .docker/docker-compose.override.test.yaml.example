@@ -1,0 +1,34 @@
+# Test environment: the unit tests, built by the "build" stage of the
+# Dockerfile, run against the standalone server, then against the replica set
+# (some tests only apply to one of them, see docs/TESTING.md). The service
+# exits with the status of the tests.
+#
+#   docker compose run --rm unit-tests
+#
+# From the repository root, without copying this file:
+#
+#   docker compose -f .docker/docker-compose.yml -f .docker/docker-compose.override.test.yaml.example run --rm unit-tests
+
+services:
+  unit-tests:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+      target: build
+      args:
+        BUILD_TYPE: ${BUILD_TYPE:-Release}
+    command:
+      - sh
+      - -c
+      - /usr/share/build/UnitTests "$$MONGO_URL" && /usr/share/build/UnitTests "$$MONGO_RS_URL"
+    environment:
+      MONGO_URL: mongodb://database:27017/
+      MONGO_RS_URL: mongodb://database-rs:27017/?replicaSet=rs0
+    depends_on:
+      database:
+        condition: service_healthy
+      database-rs:
+        condition: service_healthy
+    networks:
+      local:
+

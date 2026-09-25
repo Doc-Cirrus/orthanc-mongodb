@@ -1,0 +1,65 @@
+# Base of every environment: the MongoDB servers. The services of an
+# environment come from one of the override files of this folder:
+#
+#   docker-compose.override.dev.yaml.example      development shell
+#   docker-compose.override.runtime.yaml.example  Orthanc with the MongoDB plugins
+#   docker-compose.override.test.yaml.example     unit tests
+#
+# Copy one of them to "docker-compose.override.yaml" and ".env.example" to
+# ".env", then run "docker compose" from this folder, which loads both files:
+#
+#   cp .env.example .env
+#   cp docker-compose.override.dev.yaml.example docker-compose.override.yaml
+#   docker compose up -d dev
+#
+# Or, without copying, from the repository root:
+#
+#   docker compose -f .docker/docker-compose.yml -f .docker/docker-compose.override.test.yaml.example run --rm unit-tests
+#
+# Relative paths in these files are relative to this folder.
+
+name: orthanc-mongodb
+
+networks:
+  local:
+    name: orthanc-mongodb
+
+volumes:
+  mongo:
+    name: orthanc-mongodb-data
+  mongo-rs:
+    name: orthanc-mongodb-data-rs
+
+services:
+  # Standalone MongoDB server (no multi-document transactions)
+  database:
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    volumes:
+      - mongo:/data/db
+    ports:
+      - 27017
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    networks:
+      local:
+
+  # Single-node replica set (multi-document transactions available)
+  database-rs:
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo-rs:/data/db
+    ports:
+      - 27017
+    healthcheck:
+      # Initiates the replica set on first start, then reports healthy once it has a primary
+      test: >
+        mongosh --quiet --eval "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'database-rs:27017' }] }) } quit(db.hello().isWritablePrimary ? 0 : 1)"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    networks:
+      local:

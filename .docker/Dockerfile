@@ -1,8 +1,28 @@
+# MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
+# Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+# Build context: the repository root, e.g. "docker build -f .docker/Dockerfile ."
+# (the compose files of this folder do the same).
+#
 # Stages:
-#   base    - toolchain and system libraries needed to build the plugin
-#   dev     - interactive development image (sources are bind-mounted by compose.yaml)
-#   build   - compiles the plugins and the unit tests from the sources in the build context
-#   runtime - Orthanc (Linux Standard Base binaries) with the MongoDB plugins enabled
+#   base          - toolchain and system libraries needed to build the plugin
+#   dev           - interactive development image (sources are bind-mounted by docker-compose.override.dev.yaml.example)
+#   build         - compiles the plugins and the unit tests from the sources in the build context
+#   runtime       - Orthanc (Linux Standard Base binaries) with the MongoDB plugins enabled
 
 # Versions of the Linux Standard Base downloads used by the runtime stage:
 # https://orthanc.uclouvain.be/downloads/linux-standard-base/index.html

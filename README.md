@@ -30,6 +30,17 @@ They follow the layout of the Orthanc [PostgreSQL plugin](https://orthanc.uclouv
 }
 ```
 
+With Docker, the `.docker` folder starts Orthanc with both plugins, Orthanc Explorer 2, the Stone Web Viewer and DICOMweb, and a MongoDB 7.0 server. Orthanc is then on http://localhost:8042:
+
+```bash
+cd .docker
+cp .env.example .env
+cp docker-compose.override.runtime.yaml.example docker-compose.override.yaml
+docker compose up -d
+```
+
+The first `docker compose up` also fills Orthanc with open-source sample studies of 11 modalities, about 650 MB ([DICOM sender](./.docker/DicomSender/README.md)); the next ones do not. To skip it, set `SEED_ENABLED=false` in `.env`, or start Orthanc alone with `docker compose up -d orthanc`. The development and test environments are described in [Plugin compilation](./docs/PLUGIN_COMPILATION.md#compose-environments).
+
 ## Upgrading
 
 Databases of the previous releases are kept as they are: the upgrade only adds indexes and collections, and the previous release still runs on an upgraded database. On a large database, build the new indexes offline first, as described in the [configuration guide](./docs/PLUGIN_CONFIGURATION.md#upgrading-from-a-previous-release). The changes are listed in [MongoDB/NEWS](./MongoDB/NEWS).

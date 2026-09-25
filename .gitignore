@@ -6,3 +6,11 @@ build
 .tmp
 *.iml
 *ThirdPartyDownloads*
+*__pycache__*
+
+# Local settings of the compose environments (see .docker/.env.example)
+.docker/.env
+.docker/docker-compose.override.yaml
+
+# Python caches (e.g. of .docker/DicomSender)
+__pycache__/

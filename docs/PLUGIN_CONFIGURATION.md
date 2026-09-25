@@ -66,7 +66,7 @@ The plugins work with both, but they do not give the same guarantees when severa
   - with `"OverwriteInstances" : true`, a lookup that runs while an instance is overwritten may not find it;
   - an Orthanc transaction that is retried after a conflict cannot undo its first writes; for example, the file of an overwritten instance can stay in GridFS.
 
-A single-node replica set is started with `mongod --replSet rs0`, then `rs.initiate()` in mongosh, and used with `?replicaSet=rs0` in the URI. `compose.yaml` has an example (`database-rs`).
+A single-node replica set is started with `mongod --replSet rs0`, then `rs.initiate()` in mongosh, and used with `?replicaSet=rs0` in the URI. `.docker/docker-compose.yml` has an example (`database-rs`).
 
 ## Upgrading from a previous release
 

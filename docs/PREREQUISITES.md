@@ -4,7 +4,7 @@ The plugins need a C++17 compiler, CMake 3.15 or later, and the MongoDB C (2.x) 
 
 ## System packages
 
-### RHEL-like (Oracle Linux 9, Rocky, Alma), as in the `Dockerfile`
+### RHEL-like (Oracle Linux 9, Rocky, Alma), as in `.docker/Dockerfile`
 
 ```bash
 dnf config-manager --enable ol9_addons   # Oracle Linux only

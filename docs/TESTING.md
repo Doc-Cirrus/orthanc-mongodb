@@ -9,7 +9,13 @@
 ./UnitTests "mongodb://database-rs:27017/?replicaSet=rs0"
 ```
 
-In the `dev` service of `compose.yaml`, both URIs are in `$MONGO_URL` and `$MONGO_RS_URL`. The tests cover:
+In the `dev` service of the development environment (`.docker/docker-compose.override.dev.yaml.example`), both URIs are in `$MONGO_URL` and `$MONGO_RS_URL`. The test environment builds the tests and runs them against both servers:
+
+```bash
+docker compose -f .docker/docker-compose.yml -f .docker/docker-compose.override.test.yaml.example run --rm unit-tests
+```
+
+The tests cover:
 
 - the shared index tests of the PostgreSQL plugin (`IndexUnitTests.h`), with the patient-protection and remaining-ancestor sections enabled;
 - the storage area (GridFS), including range reads;
@@ -27,48 +33,22 @@ The [orthanc-tests](https://orthanc.uclouvain.be/hg/orthanc-tests/) suite, at th
 
 `Run.py` also starts a second Orthanc, the peer of the tests, from the default configuration of the Orthanc binary. The defaults of 1.13.0 have no `"ExecuteLuaEnabled"` key, so that peer refuses `/tools/execute-script`: add the key where `Run.py` sets it to `true`.
 
-## Load test scripts
+## Load tests and sample data
 
-Download sample test data from [here](https://wiki.cancerimagingarchive.net/display/Public/LIDC-IDRI#b261a131fc93463d83fd3dd09fd0edf6)
-or any other source.
+[`.docker/DicomSender`](../.docker/DicomSender/README.md) downloads open-source sample studies of 11 modalities (CT, PT, MR, NM, CR, DX, MG, US, XA, RF, and compressed transfer syntaxes), and sends them to Orthanc by C-STORE as many times as needed, as new studies of new patients:
 
-* Use storescu utility to upload samples:
-
-```
-storescu -c ORTHANC@orthank-host:4242 Folder_with_samples
-```
-* Generation
-
-It's possible to generate similar set from Folder_with_samples like that:
-
-```
-find Folder_with_samples -name '*.dcm' | xargs -L 1 -I {} dcmgen 1 {} generated_folder
+```bash
+.docker/DicomSender/fetch-samples.py
+.docker/DicomSender/dicom-sender.py --host orthanc-host --port 4242 --copies 100 --processes 8 --quiet --report load-test.json
 ```
 
-* Generate bunch of patients from existing seed data. The script generate 50000 unique patients with 4 series 5 instances each.
+The report gives the instances per second and the store latencies. In the runtime environment of `.docker`, the `dicom-sender` service seeds Orthanc with the samples.
 
+After a load test, check the Orthanc and MongoDB logs for errors, and check a few studies in Orthanc Explorer 2 or the Stone Web Viewer. To delete all the patients:
+
+```bash
+curl -s http://localhost:8042/patients | python3 -c "import json,sys; print('\n'.join(json.load(sys.stdin)))" | xargs -I {} curl -s -X DELETE http://localhost:8042/patients/{}
 ```
-#!/bin/bash
-GEN_FOLDER=generated
-
-for i in {1..50000}
-do
-   echo "Generating: $i"
-   dcmgen 20:4 seed_small.dcm $GEN_FOLDER --override PatientID=`uuidgen` --override PatientName=`uuidgen` --override StudyInstanceUID=`uuidgen`
-done
-```
-seed_small.dcm - is a single file to take sample data from and generate several DICOM tags.
-
-Then upload generated sources with storescu
-
-* Delete all patients
-```
-curl http://localhost:8042/patients | grep -o "[0-9a-z\-]*" | grep -v "^$" | xargs -I {} curl -X "DELETE" http://localhost:8042/patients/{}
-```
-
-Selectively verify uploaded data in UI.
-Check Orthanc server logs for errors.
-Check MongoDB server logs for errors.
 
 ## Test results
 
