@@ -24,6 +24,19 @@
 set(MONGO_C_MINIMAL_VERSION "2.0")
 set(MONGO_CXX_MINIMAL_VERSION "4.0")
 
+if (PORTABLE_BUILD)
+  if (NOT STATIC_BUILD OR NOT AUTO_INSTALL_DEPENDENCIES)
+    message(FATAL_ERROR "PORTABLE_BUILD needs STATIC_BUILD and AUTO_INSTALL_DEPENDENCIES")
+  endif()
+
+  # Found by the CMake package of the static C driver
+  set(OPENSSL_USE_STATIC_LIBS ON)
+
+  # Only glibc remains a shared library (see Resources/CheckPortability.sh)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+endif()
+
 if (AUTO_INSTALL_DEPENDENCIES)
   include(${CMAKE_CURRENT_LIST_DIR}/../MongoDB/AutoConfig.cmake)
 endif()
@@ -70,7 +83,12 @@ message(STATUS "MongoDB libraries:  ${MONGODB_LIBS}")
 if (MSVC)
   list(APPEND MONGODB_LIBS RpcRT4.Lib)
 elseif (NOT APPLE)
-  list(APPEND MONGODB_LIBS uuid pthread rt)
+  list(APPEND MONGODB_LIBS pthread rt)
+
+  # With STATIC_BUILD, the Orthanc framework builds its own copy of libuuid
+  if (NOT STATIC_BUILD AND USE_SYSTEM_UUID)
+    list(APPEND MONGODB_LIBS uuid)
+  endif()
 endif()
 
 link_libraries(${MONGODB_LIBS})

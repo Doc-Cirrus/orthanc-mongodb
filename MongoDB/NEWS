@@ -21,6 +21,10 @@ Changes:
 * The index plugin uses the V4 database API of Orthanc 1.13. The V2 and
   V3 adapters are removed, so Orthanc logs no performance warning anymore.
 * The plugins refuse to run on Orthanc < 1.13.0 and on MongoDB < 7.0.
+* Release binaries for any x86_64 Linux with glibc >= 2.28 ("PORTABLE_BUILD"):
+  OpenSSL 3.5, the MongoDB drivers and the C++ runtime are linked
+  statically. They are built without SASL, so without Kerberos (GSSAPI)
+  authentication.
 * The repository follows the layout of the PostgreSQL plugin 11.0:
   "MongoDBIndex.cpp" is split into one class per group of collections
   ("MongoDB/Plugins/Index/"), and the connection pools, the storage

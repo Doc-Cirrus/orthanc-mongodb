@@ -107,6 +107,33 @@ IF (MSVC AND STATIC_BUILD)
 ENDIF ()
 
 
+# Options of the portable build: the drivers use the static OpenSSL
+# installed in OPENSSL_ROOT_DIR, no SASL (only needed for Kerberos), and
+# their own copy of zlib, so that the plugins only depend on glibc
+set(MONGO_C_EXTRA_CACHE_ARGS "")
+set(MONGO_CXX_EXTRA_CACHE_ARGS "")
+
+if (PORTABLE_BUILD)
+    if (NOT OPENSSL_ROOT_DIR)
+        message(FATAL_ERROR "PORTABLE_BUILD needs OPENSSL_ROOT_DIR: the prefix of a static build of OpenSSL")
+    endif()
+
+    set(MONGO_C_EXTRA_CACHE_ARGS
+        -DENABLE_SSL:STRING=OPENSSL
+        -DENABLE_SASL:STRING=OFF
+        -DENABLE_ZLIB:STRING=BUNDLED
+        -DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}
+        -DOPENSSL_USE_STATIC_LIBS:BOOL=ON
+    )
+
+    # The CMake package of the static C driver looks for OpenSSL too
+    set(MONGO_CXX_EXTRA_CACHE_ARGS
+        -DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}
+        -DOPENSSL_USE_STATIC_LIBS:BOOL=ON
+    )
+endif()
+
+
 # Install mongo-c-driver
 message(STATUS "Building mongo-c-driver ${MONGO_C_VERSION} into ${MONGO_C_INSTALL_DIR}")
 

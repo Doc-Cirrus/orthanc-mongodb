@@ -37,6 +37,8 @@ mongodb://orthanc:secret@db1:27017,db2:27017,db3:27017/orthanc?replicaSet=rs0&au
 
 The options `host`, `port`, `user`, `password`, `database` and `authenticationDatabase` of the releases before 1.13 are gone: use `ConnectionUri`.
 
+With the [release binaries](../README.md#supported-platforms), TLS uses the certificate authorities of the system (`/etc/ssl/cert.pem` or `/etc/ssl/certs`); on a system that keeps them elsewhere, add `tlsCAFile=<file>` to the URI, or set the environment variable `SSL_CERT_FILE` of Orthanc. These binaries do not support Kerberos (`authMechanism=GSSAPI`).
+
 | Option | Default | Description |
 |---|---|---|
 | `EnableIndex` | `false` | Use MongoDB for the index. |

@@ -55,6 +55,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(${CMAKE_SOURCE_DIR}/../Resources/CMake/DatabasesPluginConfiguration.cmake)
 
+# Code coverage (gcov) of the plugins and of the unit tests, see Resources/Coverage.sh.
+# Set after the MongoDB drivers are built, so that they are not instrumented.
+set(ENABLE_COVERAGE OFF CACHE BOOL "Instrument the code for coverage reports (GCC)")
+if (ENABLE_COVERAGE)
+  add_compile_options(--coverage -O0)
+  add_link_options(--coverage)
+endif()
+
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   execute_process(

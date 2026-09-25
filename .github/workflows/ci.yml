@@ -1,86 +1,252 @@
 name: CI
 
+# Unit tests (with code coverage), portable plugin builds, integration tests
+# (orthanc-tests), and the GitHub release of the plugins on tag pushes
+
 on:
-  push:
   pull_request:
+  push:
+    branches: [master, orthanc-1.13]
+    tags: ['*']
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  # Builds the plugins and the unit tests with the "build" stage of .docker/Dockerfile,
-  # then runs the unit tests against a standalone MongoDB server and a replica set,
-  # as some tests only apply to one of them (see docs/TESTING.md)
+  # The unit tests, instrumented for coverage, against a standalone MongoDB server
+  # and a replica set, as some tests only apply to one of them (see docs/TESTING.md)
   unit-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build the plugins and the unit tests
+      - name: Build the unit tests (coverage)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: .docker/Dockerfile
-          target: build
+          target: coverage
           load: true
-          tags: orthanc-mongodb-build:ci
-          cache-from: type=gha,scope=build
-          cache-to: type=gha,scope=build,mode=max
+          tags: orthanc-mongodb-coverage:ci
+          cache-from: type=gha,scope=coverage
+          cache-to: type=gha,scope=coverage,mode=max
 
-      # The same host names as the "database" and "database-rs" services of .docker/docker-compose.yml
+      # The "database" and "database-rs" services of .docker/docker-compose.yml, on the network "orthanc-mongodb"
       - name: Start the MongoDB servers
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database database-rs
+
+      - name: Unit tests
         run: |
-          docker network create ci
-          docker run -d --name database --network ci mongo:7.0
-          docker run -d --name database-rs --network ci mongo:7.0 --replSet rs0 --bind_ip_all
-          for i in $(seq 60); do
-            docker exec database mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1 &&
-            docker exec database-rs mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1 && break
-            sleep 2
-          done
-          docker exec database-rs mongosh --quiet --eval "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'database-rs:27017' }] })"
-          for i in $(seq 60); do
-            [ "$(docker exec database-rs mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ] && exit 0
-            sleep 2
-          done
-          echo "The replica set has no primary" >&2
-          exit 1
+          mkdir coverage
+          docker run --rm --network orthanc-mongodb -v "$PWD/coverage:/out" orthanc-mongodb-coverage:ci \
+            "mongodb://database:27017/" "mongodb://database-rs:27017/?replicaSet=rs0" /out
 
-      - name: Unit tests (standalone server)
-        run: docker run --rm --network ci orthanc-mongodb-build:ci /usr/share/build/UnitTests "mongodb://database:27017/"
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo '## Code coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat coverage/coverage.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Unit tests (replica set)
-        run: docker run --rm --network ci orthanc-mongodb-build:ci /usr/share/build/UnitTests "mongodb://database-rs:27017/?replicaSet=rs0"
+      - name: Upload the coverage to Codecov
+        if: always() && hashFiles('coverage/coverage.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
 
       - name: MongoDB logs
         if: failure()
-        run: |
-          docker logs database 2>&1 | tail -n 200
-          docker logs database-rs 2>&1 | tail -n 200
+        run: docker compose -f .docker/docker-compose.yml logs --tail 200 database database-rs
 
-  # Checks that the runtime image, with the Orthanc downloads, still builds
-  runtime-image:
+  # Plugins that only need glibc >= 2.28 (the "lsb" stage of the Dockerfile, checked by
+  # Resources/CheckPortability.sh), then loaded by Orthanc on several distributions
+  lsb-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    needs: unit-tests
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # For "git describe"
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build the runtime image
+      - name: Version
+        id: version
+        run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the portable plugins
         uses: docker/build-push-action@v6
         with:
           context: .
           file: .docker/Dockerfile
-          target: runtime
+          target: lsb-artifacts
+          outputs: type=local,dest=dist
+          cache-from: type=gha,scope=lsb
+          cache-to: type=gha,scope=lsb,mode=max
+
+      - name: Checksums
+        run: cat dist/SHA256SUMS
+
+      - name: Start the MongoDB server
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database
+
+      # The Orthanc LSB binary loads the plugins on the oldest and on recent distributions
+      - name: Load the plugins in Orthanc
+        run: |
+          curl -fL https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.13.0/Orthanc -o Orthanc
+          chmod +x Orthanc
+          cat > check.json <<'EOF'
+          {
+            "RemoteAccessAllowed" : true,
+            "AuthenticationEnabled" : false,
+            "StorageDirectory" : "/tmp/orthanc",
+            "Plugins" : [ "/check/dist" ],
+            "MongoDB" : { "EnableIndex" : true, "EnableStorage" : true, "ConnectionUri" : "mongodb://database:27017/load_check" }
+          }
+          EOF
+          for IMAGE in almalinux:8 debian:12-slim ubuntu:24.04 oraclelinux:9; do
+            echo "== $IMAGE"
+            # Orthanc stops without /etc/localtime, which ubuntu:24.04 does not have
+            docker run -d --name load-check --network orthanc-mongodb -p 18042:8042 -v "$PWD:/check:ro" \
+              -v /etc/localtime:/etc/localtime:ro "$IMAGE" /check/Orthanc /check/check.json
+            OK=0
+            for _ in $(seq 60); do
+              if curl -sf http://localhost:18042/system > system.json; then OK=1; break; fi
+              sleep 1
+            done
+            docker logs load-check 2>&1 | grep -i -E 'mongodb|error' | head -n 20 || true
+            docker rm -f load-check > /dev/null
+            if [ $OK -ne 1 ] || ! grep -q 'libOrthancMongoDBIndex.so' system.json || ! grep -q 'libOrthancMongoDBStorage.so' system.json; then
+              echo "The plugins do not load on $IMAGE" >&2
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orthanc-mongodb-lsb-${{ steps.version.outputs.version }}
+          path: dist/
+
+  # The orthanc-tests suite against Orthanc 1.13.0 with the plugins built above
+  integration-tests:
+    needs: lsb-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: standalone
+            uri: mongodb://database:27017/orthanc_tests
+          - mode: replica-set
+            uri: mongodb://database-rs:27017/orthanc_tests?replicaSet=rs0
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Download the portable plugins
+        uses: actions/download-artifact@v4
+        with:
+          pattern: orthanc-mongodb-lsb-*
+          path: dist
+          merge-multiple: true
+
+      # The "lsb-artifacts" stage is replaced by the plugins of the lsb-build job
+      - name: Build the integration tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: integration
+          build-contexts: lsb-artifacts=dist
           load: true
-          tags: orthanc-mongodb:ci
-          cache-from: type=gha,scope=build
+          tags: orthanc-mongodb-integration:ci
+          cache-from: type=gha,scope=integration
+          cache-to: type=gha,scope=integration,mode=max
+
+      - name: Start the MongoDB servers
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database database-rs
+
+      - name: orthanc-tests (${{ matrix.mode }})
+        run: |
+          mkdir results
+          docker run --rm --network orthanc-mongodb -v "$PWD/results:/results" \
+            -e MODE=${{ matrix.mode }} -e MONGO_URL="${{ matrix.uri }}" orthanc-mongodb-integration:ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orthanc-tests-${{ matrix.mode }}
+          path: results/
+
+  # On a tag: the GitHub release, with the portable plugins and their checksums
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [unit-tests, lsb-build, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: orthanc-mongodb-lsb-*
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # The section of MongoDB/NEWS for this version, if any
+          awk -v version="$VERSION" '
+            /^Release / { printing = (index($0, "Release " version " ") == 1 || $0 == "Release " version) }
+            printing' MongoDB/NEWS > notes.md
+          if [ ! -s notes.md ]; then
+            echo "Release $GITHUB_REF_NAME, see [MongoDB/NEWS](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/MongoDB/NEWS)." > notes.md
+          fi
+          cat >> notes.md <<'EOF'
+
+          **Supported platforms:** Linux x86_64 with glibc 2.28 or later, Orthanc 1.13.0 or later, MongoDB 7.0 or later.
+          Copy `libOrthancMongoDBIndex.so` and `libOrthancMongoDBStorage.so` into a folder listed in the `Plugins` option of Orthanc, and check them with `sha256sum -c SHA256SUMS`.
+          EOF
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=""
+          case "$GITHUB_REF_NAME" in
+            *-rc*|*-beta*|*-alpha*) PRERELEASE="--prerelease" ;;
+          esac
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md $PRERELEASE
+          fi

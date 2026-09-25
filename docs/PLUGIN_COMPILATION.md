@@ -28,8 +28,30 @@ This builds `libOrthancMongoDBIndex.so`, `libOrthancMongoDBStorage.so` and the `
 | `LINK_STATIC_LIBS` | `OFF` | Link against the static libraries of MongoDB drivers installed on the system. |
 | `MONGOC_ROOT`, `MONGOCXX_ROOT` | | Installation prefixes of the system drivers, if CMake does not find them. |
 | `BUILD_TESTS` | `ON` | Build the `UnitTests` program. |
+| `PORTABLE_BUILD` | `OFF` | Plugins that only need glibc: the MongoDB C driver uses the static OpenSSL installed in `OPENSSL_ROOT_DIR`, no SASL (so no Kerberos) and its own copy of zlib, and libstdc++ and libgcc are linked statically. Needs `STATIC_BUILD` and `AUTO_INSTALL_DEPENDENCIES`. See [Portable build](#portable-build). |
+| `ENABLE_COVERAGE` | `OFF` | Instrument the plugins and the unit tests for code coverage (GCC, `--coverage`), see [Testing](./TESTING.md#code-coverage). |
 | `ORTHANC_FRAMEWORK_SOURCE` | `web` | Where to get the Orthanc framework 1.13.0: `web`, `hg`, `archive` (with `ORTHANC_FRAMEWORK_ARCHIVE`) or `path` (with `ORTHANC_FRAMEWORK_ROOT`). |
 | `USE_SYSTEM_ORTHANC_SDK` | `ON` | Use the Orthanc SDK headers of the system. With `OFF`, or with `STATIC_BUILD`, the copy of SDK 1.13.0 in `Resources/Orthanc/Sdk-1.13.0` is used. |
+
+## Portable build
+
+The binaries of the releases are built with glibc 2.28 and a recent GCC (C++17), with every other dependency linked statically, so they load on any x86_64 Linux with glibc 2.28 or later, next to any other plugin of Orthanc. The `lsb` stage of `.docker/Dockerfile` does it in the `manylinux_2_28` image (AlmaLinux 8, GCC 14):
+
+```bash
+docker build -f .docker/Dockerfile --target lsb-artifacts --output type=local,dest=dist .
+```
+
+`dist` then holds `libOrthancMongoDBIndex.so`, `libOrthancMongoDBStorage.so` and `SHA256SUMS`. The stage builds OpenSSL (3.5 LTS) statically, then the plugins with:
+
+```bash
+cmake -S MongoDB -B build -DCMAKE_BUILD_TYPE=Release -DSTATIC_BUILD=ON -DALLOW_DOWNLOADS=ON \
+      -DAUTO_INSTALL_DEPENDENCIES=ON -DPORTABLE_BUILD=ON -DOPENSSL_ROOT_DIR=/opt/openssl \
+      -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+```
+
+`CMAKE_POLICY_VERSION_MINIMUM` is needed with CMake 4, as some bundled third-party libraries declare an older minimum version. Finally, `Resources/CheckPortability.sh 2.28 <plugins>` checks that the plugins only need the libraries of glibc, use no glibc symbol newer than 2.28, and export nothing but the entry points of an Orthanc plugin.
+
+The static OpenSSL reads the certificate authorities of the system in `/etc/ssl` (`/etc/ssl/cert.pem`, or the hashed `/etc/ssl/certs` folder), which covers the RHEL-like and Debian-like distributions. Elsewhere, give them with the `tlsCAFile` option of the connection URI, or with the `SSL_CERT_FILE` environment variable of Orthanc.
 
 ## Docker
 
@@ -38,7 +60,10 @@ The Docker files are in the `.docker` folder. The build context of `.docker/Dock
 - `base`: the toolchain and the system libraries (Oracle Linux 9);
 - `dev`: an interactive image, used by the `dev` service of the development environment, with the sources mounted from the host;
 - `build`: builds and installs the plugins from the build context (`--build-arg BUILD_TYPE=Debug` for a debug build);
-- `runtime`: Orthanc 1.13.0 (Linux Standard Base binaries) with the plugins, Orthanc Explorer 2, the Stone Web Viewer and DICOMweb.
+- `coverage`: the unit tests built with `ENABLE_COVERAGE`, which run `Resources/Coverage.sh` (see [Testing](./TESTING.md#code-coverage));
+- `lsb` and `lsb-artifacts`: the [portable build](#portable-build);
+- `runtime`: Orthanc 1.13.0 (Linux Standard Base binaries) with the plugins, Orthanc Explorer 2, the Stone Web Viewer and DICOMweb;
+- `integration`: the orthanc-tests suite, run against the portable plugins (see [Testing](./TESTING.md#integration-tests)).
 
 ```bash
 docker build -f .docker/Dockerfile --target runtime -t orthanc-mongodb .
@@ -52,7 +77,7 @@ docker build -f .docker/Dockerfile --target runtime -t orthanc-mongodb .
 |---------------|----------|
 | `docker-compose.override.dev.yaml.example` | `dev`: development shell, with the sources and the build directory (volume) mounted |
 | `docker-compose.override.runtime.yaml.example` | `orthanc`: the `runtime` image, on the standalone server by default; `dicom-sender`: seeds Orthanc with [sample studies](../.docker/DicomSender/README.md) on the first `docker compose up` |
-| `docker-compose.override.test.yaml.example` | `unit-tests`: the unit tests against both servers |
+| `docker-compose.override.test.yaml.example` | `unit-tests`: the unit tests against both servers; `integration-tests`: the orthanc-tests suite |
 
 Copy one of them to `docker-compose.override.yaml`, and `.env.example` to `.env`, then run `docker compose` from the `.docker` folder, which loads both files:
 

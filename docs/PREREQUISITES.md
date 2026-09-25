@@ -4,6 +4,8 @@ The plugins need a C++17 compiler, CMake 3.15 or later, and the MongoDB C (2.x) 
 
 ## System packages
 
+The [release binaries](../README.md#supported-platforms) need none of this: they only need glibc 2.28 or later.
+
 ### RHEL-like (Oracle Linux 9, Rocky, Alma), as in `.docker/Dockerfile`
 
 ```bash

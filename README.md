@@ -2,6 +2,10 @@
 
 # MongoDB database plugins for Orthanc DICOM Server
 
+[![Version](https://img.shields.io/github/v/release/Doc-Cirrus/orthanc-mongodb?sort=semver&label=version)](https://github.com/Doc-Cirrus/orthanc-mongodb/releases)
+[![Coverage](https://codecov.io/gh/Doc-Cirrus/orthanc-mongodb/branch/master/graph/badge.svg)](https://codecov.io/gh/Doc-Cirrus/orthanc-mongodb)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE.md)
+
 ## Overview
 
 The repository contains two plugins that store the data of [Orthanc](https://www.orthanc-server.com/) in MongoDB:
@@ -10,6 +14,16 @@ The repository contains two plugins that store the data of [Orthanc](https://www
 - the **storage** plugin (`libOrthancMongoDBStorage.so`) stores the DICOM files and the other attachments in GridFS.
 
 They follow the layout of the Orthanc [PostgreSQL plugin](https://orthanc.uclouvain.be/hg/orthanc-databases/) 11.0, with MongoDB in place of SQL.
+
+## Supported platforms
+
+The binaries of the [releases](https://github.com/Doc-Cirrus/orthanc-mongodb/releases) run on:
+
+- **Linux x86_64 with glibc 2.28 or later**: RHEL, Oracle Linux, Rocky Linux and AlmaLinux 8 or later, Debian 10 or later, Ubuntu 20.04 or later, and the other distributions of the same age. `ldd --version` prints the version of glibc.
+- **Orthanc 1.13.0 or later**, including the [Linux Standard Base binaries](https://orthanc.uclouvain.be/downloads/linux-standard-base/index.html) of Orthanc.
+- **MongoDB 7.0 or later**.
+
+They only need glibc: OpenSSL, the MongoDB drivers and the C++ runtime are built in. As they are built without SASL, they do not support Kerberos (GSSAPI) authentication; SCRAM, X.509 and TLS work. On an older system or another architecture, build the plugins from the sources ([Plugin compilation](./docs/PLUGIN_COMPILATION.md)).
 
 ## Requirements
 
