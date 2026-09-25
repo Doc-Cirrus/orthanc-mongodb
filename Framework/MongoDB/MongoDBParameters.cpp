@@ -24,10 +24,65 @@
 #include <OrthancException.h>
 #include <Toolbox.h>
 
+#include <boost/lexical_cast.hpp>
+#include <algorithm>
+
 
 namespace OrthancDatabases
 {
   static const unsigned int DEFAULT_CHUNK_SIZE = 261120;  // 255 KiB, the default chunk size of GridFS
+
+  // The separate connection options of the releases <= 1.9.1, which "ConnectionUri" overrides
+  static const char* const CONNECTION_OPTIONS[] = {
+    "host", "port", "database", "user", "password", "authenticationDatabase"
+  };
+
+
+  static std::string EncodeUriComponent(const std::string& s)
+  {
+    // Percent-encoding of everything but the unreserved characters of RFC 3986
+    static const char* const HEX = "0123456789ABCDEF";
+
+    std::string result;
+    result.reserve(s.size());
+
+    for (size_t i = 0; i < s.size(); i++)
+    {
+      const unsigned char c = static_cast<unsigned char>(s[i]);
+
+      if ((c >= 'A' && c <= 'Z') ||
+          (c >= 'a' && c <= 'z') ||
+          (c >= '0' && c <= '9') ||
+          c == '-' || c == '.' || c == '_' || c == '~')
+      {
+        result.push_back(static_cast<char>(c));
+      }
+      else
+      {
+        result.push_back('%');
+        result.push_back(HEX[c >> 4]);
+        result.push_back(HEX[c & 0x0f]);
+      }
+    }
+
+    return result;
+  }
+
+
+  static std::string LookupNonEmptyString(const OrthancPlugins::OrthancConfiguration& configuration,
+                                          const std::string& key)
+  {
+    // An empty value counts as absent, e.g. "user" : "${MONGODB_USER}" with no such variable
+    std::string value;
+    if (configuration.LookupStringValue(value, key))
+    {
+      return value;
+    }
+    else
+    {
+      return "";
+    }
+  }
 
 
   void MongoDBParameters::Reset()
@@ -54,14 +109,57 @@ namespace OrthancDatabases
     Reset();
 
     std::string uri;
-    if (!configuration.LookupStringValue(uri, "ConnectionUri") ||
-        uri.empty())
+    if (configuration.LookupStringValue(uri, "ConnectionUri") &&
+        !uri.empty())
+    {
+      std::string ignored;
+      for (size_t i = 0; i < sizeof(CONNECTION_OPTIONS) / sizeof(CONNECTION_OPTIONS[0]); i++)
+      {
+        if (configuration.GetJson().isMember(CONNECTION_OPTIONS[i]))
+        {
+          ignored += std::string(ignored.empty() ? "" : ", ") + "\"" + CONNECTION_OPTIONS[i] + "\"";
+        }
+      }
+
+      if (!ignored.empty())
+      {
+        LOG(WARNING) << "MongoDB: \"ConnectionUri\" is set, so these options are ignored: " << ignored;
+      }
+
+      SetConnectionUri(uri);
+    }
+    else if (HasConnectionOptions(configuration))
+    {
+      const std::string built = BuildConnectionUri(configuration);
+
+      // Checked here rather than by "SetConnectionUri()", whose exception would log the
+      // message of the driver, which can contain the URI, hence the password
+      bool valid;
+      try
+      {
+        mongocxx::uri parsed(built);
+        valid = true;
+      }
+      catch (mongocxx::exception&)
+      {
+        valid = false;
+      }
+
+      if (!valid)
+      {
+        throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                        "Invalid MongoDB connection options: check \"host\", \"port\", "
+                                        "\"database\", \"user\", \"password\" and \"authenticationDatabase\"");
+      }
+
+      SetConnectionUri(built);
+    }
+    else
     {
       throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
-                                      "No connection string (\"ConnectionUri\") provided for MongoDB");
+                                      "No MongoDB connection provided: set \"ConnectionUri\", or \"database\" "
+                                      "(with \"host\", \"port\"... if needed)");
     }
-
-    SetConnectionUri(uri);
     SetChunkSize(configuration.GetUnsignedIntegerValue("ChunkSize", DEFAULT_CHUNK_SIZE));
 
     // "MaxConnectionRetries" is the name used by releases <= 1.11 of this plugin
@@ -134,6 +232,108 @@ namespace OrthancDatabases
     }
 
     connectionRetryInterval_ = seconds;
+  }
+
+
+  bool MongoDBParameters::HasConnectionOptions(const OrthancPlugins::OrthancConfiguration& configuration)
+  {
+    for (size_t i = 0; i < sizeof(CONNECTION_OPTIONS) / sizeof(CONNECTION_OPTIONS[0]); i++)
+    {
+      if (configuration.GetJson().isMember(CONNECTION_OPTIONS[i]))
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+
+  std::string MongoDBParameters::BuildConnectionUri(const OrthancPlugins::OrthancConfiguration& configuration)
+  {
+    std::string host = "localhost";
+    if (configuration.GetJson().isMember("host"))
+    {
+      host = configuration.GetStringValue("host", "");
+    }
+
+    if (host.empty() ||
+        host.find_first_of("/?#@,[] \t") != std::string::npos)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "The MongoDB option \"host\" must be one host name or address; "
+                                      "use \"ConnectionUri\" for several hosts");
+    }
+
+    const size_t colons = std::count(host.begin(), host.end(), ':');
+    if (colons == 1)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "The MongoDB option \"host\" cannot contain the port, "
+                                      "use the option \"port\"");
+    }
+    else if (colons > 1)
+    {
+      host = "[" + host + "]";  // IPv6 address
+    }
+
+    unsigned int port = 27017;
+    if (configuration.LookupUnsignedIntegerValue(port, "port") &&
+        (port == 0 || port > 65535))
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "The MongoDB option \"port\" must be between 1 and 65535");
+    }
+
+    const std::string database = LookupNonEmptyString(configuration, "database");
+    if (database.empty())
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "The MongoDB option \"database\" is required, unless \"ConnectionUri\" is set");
+    }
+
+    // Characters that MongoDB forbids in the name of a database (on Linux), and its maximum length
+    if (database.find_first_of("/\\. \"$") != std::string::npos ||
+        database.find('\0') != std::string::npos ||
+        database.size() >= 64)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "Invalid name of MongoDB database in the option \"database\": " + database);
+    }
+
+    const std::string user = LookupNonEmptyString(configuration, "user");
+    const std::string password = LookupNonEmptyString(configuration, "password");
+    const std::string authenticationDatabase = LookupNonEmptyString(configuration, "authenticationDatabase");
+
+    if (user.empty() &&
+        !password.empty())
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
+                                      "The MongoDB option \"password\" is set without the option \"user\"");
+    }
+
+    std::string uri = "mongodb://";
+
+    if (!user.empty())
+    {
+      uri += EncodeUriComponent(user);
+
+      if (!password.empty())
+      {
+        uri += ":" + EncodeUriComponent(password);
+      }
+
+      uri += "@";
+    }
+
+    uri += host + ":" + boost::lexical_cast<std::string>(port) + "/" + database;
+
+    if (!authenticationDatabase.empty())
+    {
+      uri += "?authSource=" + EncodeUriComponent(authenticationDatabase);
+    }
+
+    return uri;
   }
 
 

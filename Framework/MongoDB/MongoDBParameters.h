@@ -137,5 +137,19 @@ namespace OrthancDatabases
     }
 
     static MongoDBTransactionsMode ParseTransactionsMode(const Json::Value& value);
+
+    /**
+     * Connection URI built from the separate options "host", "port",
+     * "database", "user", "password" and "authenticationDatabase"
+     * (the options of the releases <= 1.9.1), e.g.
+     * "mongodb://user:password@host:27017/database?authSource=admin".
+     * The user, the password and the authentication database are
+     * percent-encoded. Throws "ParameterOutOfRange" if an option is
+     * invalid; the messages never contain the password.
+     **/
+    static std::string BuildConnectionUri(const OrthancPlugins::OrthancConfiguration& configuration);
+
+    // Whether any of the separate options above is set
+    static bool HasConnectionOptions(const OrthancPlugins::OrthancConfiguration& configuration);
   };
 }

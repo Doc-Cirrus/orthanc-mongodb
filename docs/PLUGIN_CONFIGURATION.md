@@ -35,15 +35,47 @@ The connection URI must contain the name of the database (`/orthanc` above). The
 mongodb://orthanc:secret@db1:27017,db2:27017,db3:27017/orthanc?replicaSet=rs0&authSource=admin
 ```
 
-The options `host`, `port`, `user`, `password`, `database` and `authenticationDatabase` of the releases before 1.13 are gone: use `ConnectionUri`.
-
 With the [release binaries](../README.md#supported-platforms), TLS uses the certificate authorities of the system (`/etc/ssl/cert.pem` or `/etc/ssl/certs`); on a system that keeps them elsewhere, add `tlsCAFile=<file>` to the URI, or set the environment variable `SSL_CERT_FILE` of Orthanc. These binaries do not support Kerberos (`authMechanism=GSSAPI`).
+
+### Connection as separate options
+
+Instead of `ConnectionUri`, the connection can be given as separate options, as in the releases up to 1.9.1:
+
+```json
+"MongoDB" : {
+  "EnableIndex" : true,
+  "EnableStorage" : true,
+  "host" : "customhost",
+  "port" : 27001,
+  "user" : "user",
+  "database" : "database",
+  "password" : "password",
+  "authenticationDatabase" : "admin",
+  "ChunkSize" : 261120
+}
+```
+
+The plugins build the connection URI from them: `mongodb://user:password@customhost:27001/database?authSource=admin` above.
+
+| Option | Default | In the URI |
+|---|---|---|
+| `host` | `localhost` | One host name or address. An IPv6 address, e.g. `::1`, is put in brackets. |
+| `port` | `27017` | The port, from 1 to 65535. |
+| `database` | (required) | The name of the database. |
+| `user` | none | The user. Without it, the plugins connect without credentials. |
+| `password` | none | The password of `user`. |
+| `authenticationDatabase` | none | `authSource`: the database where the user is defined, e.g. `admin`. |
+
+- `ConnectionUri` takes precedence: if it is set (and not empty), these options are ignored, and the plugins log a warning that names them.
+- The user, the password and the authentication database are percent-encoded, so they can contain any character. (The releases up to 1.9.1 did not encode them.) The password never appears in the logs, nor in the error messages.
+- An empty value counts as absent. This allows environment variables that may not be set, which Orthanc replaces when it reads the file, e.g. `"password" : "${MONGODB_PASSWORD}"`. This also keeps the password out of the configuration file.
+- These options describe one host. For several hosts, a replica set name, TLS or any other option of the URI, use `ConnectionUri`. A single-node replica set given by its host is still detected, and its transactions are used.
 
 | Option | Default | Description |
 |---|---|---|
 | `EnableIndex` | `false` | Use MongoDB for the index. |
 | `EnableStorage` | `false` | Use GridFS for the attachments. |
-| `ConnectionUri` | (required) | MongoDB connection string, with the name of the database. |
+| `ConnectionUri` | (required, unless `database` is set) | MongoDB connection string, with the name of the database. Or use the [separate options](#connection-as-separate-options). |
 | `ChunkSize` | `261120` | Size, in bytes, of the GridFS chunks of new files. |
 | `IndexConnectionsCount` | `5` | Number of connections of the index to MongoDB. Each connection runs one Orthanc transaction at a time. |
 | `UseDynamicConnectionPool` | `false` | Open the index connections on demand, up to `IndexConnectionsCount`, instead of all of them at startup. |

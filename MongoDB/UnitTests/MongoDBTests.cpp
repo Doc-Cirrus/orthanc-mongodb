@@ -40,6 +40,7 @@
 
 #include <Compatibility.h>  // For std::unique_ptr<>
 #include <OrthancException.h>
+#include <Toolbox.h>
 
 #include <gtest/gtest.h>
 
@@ -589,6 +590,112 @@ TEST(MongoDBParameters, Basic)
 }
 
 
+namespace
+{
+  // Parameters of the plugin, read from the JSON of a "MongoDB" section
+  MongoDBParameters ParseParameters(const std::string& json)
+  {
+    Json::Value section;
+    if (!Orthanc::Toolbox::ReadJson(section, json))
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_BadFileFormat, json);
+    }
+
+    return MongoDBParameters(OrthancPlugins::OrthancConfiguration(section, "MongoDB"));
+  }
+
+
+  // Message of the exception thrown by reading the given "MongoDB" section, empty if none
+  std::string GetParametersError(const std::string& json)
+  {
+    try
+    {
+      ParseParameters(json);
+      return "";
+    }
+    catch (Orthanc::OrthancException& e)
+    {
+      EXPECT_EQ(Orthanc::ErrorCode_ParameterOutOfRange, e.GetErrorCode());
+      return e.GetDetails() == NULL ? "(no details)" : e.GetDetails();
+    }
+  }
+}
+
+
+TEST(MongoDBParameters, ConnectionOptions)
+{
+  // The options of the releases <= 1.9.1, with their defaults "localhost" and 27017
+  ASSERT_EQ("mongodb://localhost:27017/orthanc", ParseParameters("{ \"database\" : \"orthanc\" }").GetConnectionUri());
+  ASSERT_EQ("orthanc", ParseParameters("{ \"database\" : \"orthanc\" }").GetDatabaseName());
+
+  ASSERT_EQ("mongodb://user:password@customhost:27001/database?authSource=admin",
+            ParseParameters("{ \"host\" : \"customhost\", \"port\" : 27001, \"user\" : \"user\", "
+                            "\"database\" : \"database\", \"password\" : \"password\", "
+                            "\"authenticationDatabase\" : \"admin\", \"ChunkSize\" : 261120 }").GetConnectionUri());
+
+  // The user, the password and the authentication database are percent-encoded
+  ASSERT_EQ("mongodb://a%40b:p%40ss%3Aw%2Frd%25@db1:27017/orthanc?authSource=my%20admin",
+            ParseParameters("{ \"host\" : \"db1\", \"user\" : \"a@b\", \"password\" : \"p@ss:w/rd%\", "
+                            "\"database\" : \"orthanc\", \"authenticationDatabase\" : \"my admin\" }").GetConnectionUri());
+
+  // A user without password (e.g. X.509), an authentication database without user
+  ASSERT_EQ("mongodb://user@localhost:27017/orthanc",
+            ParseParameters("{ \"user\" : \"user\", \"database\" : \"orthanc\" }").GetConnectionUri());
+  ASSERT_EQ("mongodb://localhost:27017/orthanc?authSource=admin",
+            ParseParameters("{ \"authenticationDatabase\" : \"admin\", \"database\" : \"orthanc\" }").GetConnectionUri());
+
+  // Empty values count as absent, e.g. "${MONGODB_USER}" with no such environment variable
+  ASSERT_EQ("mongodb://localhost:27017/orthanc",
+            ParseParameters("{ \"user\" : \"\", \"password\" : \"\", \"authenticationDatabase\" : \"\", "
+                            "\"database\" : \"orthanc\" }").GetConnectionUri());
+
+  // IPv6 addresses are put in brackets
+  ASSERT_EQ("mongodb://[::1]:27017/orthanc",
+            ParseParameters("{ \"host\" : \"::1\", \"database\" : \"orthanc\" }").GetConnectionUri());
+
+  // "ConnectionUri" overrides the separate options (as in the releases <= 1.9.1)
+  ASSERT_EQ("mongodb://other:1234/uri",
+            ParseParameters("{ \"ConnectionUri\" : \"mongodb://other:1234/uri\", \"host\" : \"customhost\", "
+                            "\"database\" : \"database\" }").GetConnectionUri());
+  ASSERT_EQ("mongodb://localhost:27017/orthanc",
+            ParseParameters("{ \"ConnectionUri\" : \"\", \"database\" : \"orthanc\" }").GetConnectionUri());
+
+  // The other options are read in both cases
+  ASSERT_EQ(1024u, ParseParameters("{ \"database\" : \"orthanc\", \"ChunkSize\" : 1024 }").GetChunkSize());
+
+  // Invalid options: the error names the option, and never contains the password
+  const std::string password = "\"password\" : \"s3cr3t-p@ss\"";
+  ASSERT_NE(std::string::npos, GetParametersError("{}").find("ConnectionUri"));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"host\" : \"db1\" }").find("\"database\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"database\" : \"\" }").find("\"database\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"host\" : \"\", \"database\" : \"orthanc\" }").find("\"host\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"host\" : \"h1,h2\", \"database\" : \"orthanc\" }").find("\"host\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"host\" : \"h1:27001\", \"database\" : \"orthanc\" }").find("\"port\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"port\" : 0, \"database\" : \"orthanc\" }").find("\"port\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"port\" : 65536, \"database\" : \"orthanc\" }").find("\"port\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"database\" : \"a.b\" }").find("\"database\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"database\" : \"a/b\" }").find("\"database\""));
+  ASSERT_NE(std::string::npos, GetParametersError("{ \"database\" : \"" + std::string(64, 'a') + "\" }").find("\"database\""));
+
+  const std::string noUser = GetParametersError("{ \"database\" : \"orthanc\", " + password + " }");
+  ASSERT_NE(std::string::npos, noUser.find("\"user\""));
+  ASSERT_EQ(std::string::npos, noUser.find("s3cr3t"));
+
+  const std::string badHost = GetParametersError("{ \"host\" : \"h1 h2\", \"user\" : \"u\", \"database\" : \"orthanc\", " + password + " }");
+  ASSERT_NE(std::string::npos, badHost.find("\"host\""));
+  ASSERT_EQ(std::string::npos, badHost.find("s3cr3t"));
+
+  // A host that the driver rejects: the error is ours, not the one of the driver, which shows the URI
+  const std::string rejected = GetParametersError("{ \"host\" : \"bad%host\", \"user\" : \"u\", \"database\" : \"orthanc\", " + password + " }");
+  ASSERT_NE(std::string::npos, rejected.find("\"host\""));
+  ASSERT_EQ(std::string::npos, rejected.find("s3cr3t"));
+
+  // A wrong type is a "BadFileFormat" error of the configuration
+  ASSERT_THROW(ParseParameters("{ \"port\" : \"27017\", \"database\" : \"orthanc\" }"), Orthanc::OrthancException);
+  ASSERT_THROW(ParseParameters("{ \"database\" : 42 }"), Orthanc::OrthancException);
+}
+
+
 TEST(MongoDBTestsToolbox, SetDatabaseInUri)
 {
   ASSERT_EQ("mongodb://localhost:27017/db", SetDatabaseInUri("mongodb://localhost:27017", "db"));
@@ -718,6 +825,89 @@ TEST(MongoDBDatabase, Unavailable)
   catch (Orthanc::OrthancException& e)
   {
     ASSERT_EQ(Orthanc::ErrorCode_DatabaseUnavailable, e.GetErrorCode());
+  }
+}
+
+
+TEST(MongoDBDatabase, ConnectionOptions)
+{
+  TestDatabase database;
+
+  const mongocxx::uri testUri{GetTestConnectionUri()};
+  ASSERT_FALSE(testUri.hosts().empty());
+
+  // A user of the test database, whose password needs percent-encoding. The
+  // server checks the credentials even if it does not enforce authentication.
+  const std::string user = "user_" + database.GetName();
+  const std::string password = "p@ss:w/rd%";
+
+  mongocxx::client client{mongocxx::uri{database.GetUri()}};
+  mongocxx::database admin = client[database.GetName()];
+  admin.run_command(make_document(
+                      kvp("createUser", user),
+                      kvp("pwd", password),
+                      kvp("roles", bsoncxx::builder::basic::make_array(
+                            make_document(kvp("role", "readWrite"), kvp("db", database.GetName()))))));
+
+  struct DropUsers
+  {
+    mongocxx::database& database_;
+
+    ~DropUsers()
+    {
+      database_.run_command(make_document(kvp("dropAllUsersFromDatabase", 1)));
+    }
+  } dropUsers = { admin };
+
+  // The host of the test server, without the options of its URI (e.g. "replicaSet")
+  Json::Value section;
+  section["host"] = std::string(testUri.hosts()[0].name);
+  section["port"] = testUri.hosts()[0].port;
+  section["database"] = database.GetName();
+
+  {
+    // No credentials
+    MongoDBParameters parameters{OrthancPlugins::OrthancConfiguration(section, "MongoDB")};
+    parameters.SetMaxConnectionRetries(0);
+
+    std::unique_ptr<MongoDBDatabase> db(MongoDBDatabase::CreateDatabaseConnection(parameters));
+
+    // The replica set is detected by "hello", even without "replicaSet" in the URI
+    ASSERT_EQ(IsTestServerReplicaSet(), db->HasTransactions());
+    db->GetCollection("Options").InsertOne(make_document(kvp("credentials", false)));
+  }
+
+  section["user"] = user;
+  section["password"] = password;
+  section["authenticationDatabase"] = database.GetName();
+
+  {
+    MongoDBParameters parameters{OrthancPlugins::OrthancConfiguration(section, "MongoDB")};
+    parameters.SetMaxConnectionRetries(0);
+
+    std::unique_ptr<MongoDBDatabase> db(MongoDBDatabase::CreateDatabaseConnection(parameters));
+    db->GetCollection("Options").InsertOne(make_document(kvp("credentials", true)));
+  }
+
+  ASSERT_EQ(2, client[database.GetName()]["Options"].count_documents(make_document()));
+
+  {
+    // A wrong password fails, without showing the password
+    section["password"] = "wrong-s3cr3t";
+    MongoDBParameters parameters{OrthancPlugins::OrthancConfiguration(section, "MongoDB")};
+    parameters.SetMaxConnectionRetries(0);
+
+    try
+    {
+      std::unique_ptr<MongoDBDatabase> db(MongoDBDatabase::CreateDatabaseConnection(parameters));
+      db->GetCollection("Options").InsertOne(make_document(kvp("credentials", true)));
+      FAIL();
+    }
+    catch (Orthanc::OrthancException& e)
+    {
+      const std::string message = std::string(e.What()) + " " + (e.GetDetails() == NULL ? "" : e.GetDetails());
+      ASSERT_EQ(std::string::npos, message.find("s3cr3t"));
+    }
   }
 }
 

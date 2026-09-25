@@ -25,6 +25,10 @@ Changes:
   OpenSSL 3.5, the MongoDB drivers and the C++ runtime are linked
   statically. They are built without SASL, so without Kerberos (GSSAPI)
   authentication.
+* The options "host", "port", "user", "password", "database" and
+  "authenticationDatabase" of the releases <= 1.9.1 are supported again,
+  as an alternative to "ConnectionUri", which takes precedence. The user
+  and the password are now percent-encoded.
 * The repository follows the layout of the PostgreSQL plugin 11.0:
   "MongoDBIndex.cpp" is split into one class per group of collections
   ("MongoDB/Plugins/Index/"), and the connection pools, the storage

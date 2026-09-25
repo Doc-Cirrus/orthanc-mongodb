@@ -44,6 +44,8 @@ They only need glibc: OpenSSL, the MongoDB drivers and the C++ runtime are built
 }
 ```
 
+The connection can also be given as separate options (`host`, `port`, `database`, `user`, `password`, `authenticationDatabase`), as described in the [configuration guide](./docs/PLUGIN_CONFIGURATION.md#connection-as-separate-options).
+
 With Docker, the `.docker` folder starts Orthanc with both plugins, Orthanc Explorer 2, the Stone Web Viewer and DICOMweb, and a MongoDB 7.0 server. Orthanc is then on http://localhost:8042:
 
 ```bash
