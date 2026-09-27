@@ -2222,6 +2222,36 @@ TEST_F(MongoDBIndexTest, AttachmentOfDeletedResource)
 }
 
 
+// A store that fails on a resource left from a deleted parent still
+// counts the ancestors that it has created before
+TEST_F(MongoDBIndexTest, CountsOfAFailedStore)
+{
+  OrthancPluginCreateInstanceResult r;
+  index_->CreateInstance(r, *manager_, "patient", "study", "series", "instance");
+
+  {
+    // The deletion of the patient, as it races a store without transactions
+    mongocxx::client client{mongocxx::uri{database_->GetUri()}};
+    GetCollection(client, "Resources").delete_one(make_document(kvp("publicId", "patient")));
+  }
+
+  const uint64_t patients = index_->GetResourcesCount(*manager_, OrthancPluginResourceType_Patient);
+
+  try
+  {
+    index_->CreateInstance(r, *manager_, "patient", "study", "series2", "instance2");
+    FAIL();
+  }
+  catch (Orthanc::OrthancException& e)
+  {
+    ASSERT_EQ(Orthanc::ErrorCode_DatabaseCannotSerialize, e.GetErrorCode());
+  }
+
+  ASSERT_EQ(1, CountDocuments("Resources", make_document(kvp("publicId", "patient"))));
+  ASSERT_EQ(patients + 1, index_->GetResourcesCount(*manager_, OrthancPluginResourceType_Patient));
+}
+
+
 /**
  * Phase 9: stores race the deletion of their patient, as a C-MOVE to
  * Orthanc itself races "DELETE /patients" in orthanc-tests. Each file

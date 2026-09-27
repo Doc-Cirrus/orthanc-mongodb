@@ -261,7 +261,15 @@ namespace OrthancDatabases
     }
 
     const int64_t id = MongoDBToolbox::GetInteger(resource->view(), "internalId");
-    if (id != created.back())
+    if (id == created.back())
+    {
+      // Counted at once: without transactions, a lower level can fail
+      // the store, and leave this resource for a deletion to count
+      MongoDBStatisticsValues change;
+      change.counts_[level] = 1;
+      MongoDBStatistics(manager_).RecordChange(change);
+    }
+    else
     {
       CheckParent(resource->view(), levels);
     }
@@ -311,13 +319,6 @@ namespace OrthancDatabases
 
     result.isNewInstance = FindOrCreate(levels, hashInstance, hashInstance);
     result.instanceId = levels[3];
-
-    MongoDBStatisticsValues change;
-    change.counts_[OrthancPluginResourceType_Patient] = (result.isNewPatient ? 1 : 0);
-    change.counts_[OrthancPluginResourceType_Study] = (result.isNewStudy ? 1 : 0);
-    change.counts_[OrthancPluginResourceType_Series] = (result.isNewSeries ? 1 : 0);
-    change.counts_[OrthancPluginResourceType_Instance] = (result.isNewInstance ? 1 : 0);
-    MongoDBStatistics(manager_).RecordChange(change);
 
     if (!result.isNewInstance)
     {
