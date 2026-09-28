@@ -29,6 +29,16 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # The CMake downloads of the previous builds, as orthanc.uclouvain.be is sometimes unreachable
+      # from GitHub (see the stage "third-party-downloads" of .docker/Dockerfile)
+      - name: Restore the third-party downloads
+        id: downloads
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: third-party-downloads-coverage-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
+          restore-keys: third-party-downloads-coverage-
+
       - name: Build the unit tests (coverage)
         uses: docker/build-push-action@v6
         with:
@@ -38,7 +48,26 @@ jobs:
           load: true
           tags: orthanc-mongodb-coverage:ci
           cache-from: type=gha,scope=coverage
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
           cache-to: type=gha,scope=coverage,mode=max
+
+      - name: Export the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: coverage-third-party-downloads
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          outputs: type=local,dest=${{ runner.temp }}/third-party-downloads
+          cache-from: type=gha,scope=coverage
+
+      - name: Save the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: ${{ steps.downloads.outputs.cache-primary-key }}
 
       # The "database" and "database-rs" services of .docker/docker-compose.yml, on the network "orthanc-mongodb"
       - name: Start the MongoDB servers
@@ -93,6 +122,16 @@ jobs:
         id: version
         run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
 
+      # The CMake downloads of the previous builds, as orthanc.uclouvain.be is sometimes unreachable
+      # from GitHub (see the stage "third-party-downloads" of .docker/Dockerfile)
+      - name: Restore the third-party downloads
+        id: downloads
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: third-party-downloads-lsb-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
+          restore-keys: third-party-downloads-lsb-
+
       - name: Build the portable plugins
         uses: docker/build-push-action@v6
         with:
@@ -101,7 +140,26 @@ jobs:
           target: lsb-artifacts
           outputs: type=local,dest=dist
           cache-from: type=gha,scope=lsb
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
           cache-to: type=gha,scope=lsb,mode=max
+
+      - name: Export the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: lsb-third-party-downloads
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          outputs: type=local,dest=${{ runner.temp }}/third-party-downloads
+          cache-from: type=gha,scope=lsb
+
+      - name: Save the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: ${{ steps.downloads.outputs.cache-primary-key }}
 
       - name: Checksums
         run: cat dist/SHA256SUMS
@@ -112,7 +170,7 @@ jobs:
       # The Orthanc LSB binary loads the plugins on the oldest and on recent distributions
       - name: Load the plugins in Orthanc
         run: |
-          curl -fL https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.13.0/Orthanc -o Orthanc
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 30 https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.13.0/Orthanc -o Orthanc
           chmod +x Orthanc
           cat > check.json <<'EOF'
           {

@@ -20,11 +20,13 @@
 #
 # Stages:
 #   base          - toolchain and system libraries needed to build the plugin
+#   third-party-downloads - files that CMake uses instead of downloading them (see below)
 #   dev           - interactive development image (sources are bind-mounted by docker-compose.override.dev.yaml.example)
 #   build         - compiles the plugins and the unit tests from the sources in the build context
 #   coverage      - the unit tests, instrumented for code coverage (Resources/Coverage.sh)
 #   lsb           - portable plugins, which only need glibc >= 2.28 (PORTABLE_BUILD), checked by Resources/CheckPortability.sh
 #   lsb-artifacts - the files of the "lsb" stage only, for "docker build --target lsb-artifacts --output type=local,dest=<dir>"
+#   coverage-third-party-downloads, lsb-third-party-downloads - the downloads of these stages, cached by the pipeline
 #   runtime       - Orthanc (Linux Standard Base binaries) with the MongoDB plugins enabled
 #   integration   - the orthanc-tests suite, run against the portable plugins (.docker/integration/run-orthanc-tests.sh)
 
@@ -59,16 +61,23 @@ RUN dnf -y install patch \
  && dnf clean all
 
 
-# Source archive of the Orthanc framework (ORTHANC_FRAMEWORK_VERSION of MongoDB/CMakeLists.txt), downloaded
-# with retries: CMake downloads it only once, and the server of orthanc.uclouvain.be is sometimes slow.
-# The build stages put it in ThirdPartyDownloads, where CMake uses it (after checking its MD5).
+# Source archive of the Orthanc framework (ORTHANC_FRAMEWORK_VERSION of MongoDB/CMakeLists.txt),
+# downloaded with retries (CMake tries only once)
 FROM base AS orthanc-framework
 
 ARG ORTHANC_FRAMEWORK_VERSION=1.13.0
 
-RUN curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
+RUN mkdir /downloads \
+ && curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
       https://orthanc.uclouvain.be/downloads/sources/orthanc/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz \
-      -o /Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz
+      -o /downloads/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz
+
+# Files of MongoDB/ThirdPartyDownloads, where CMake uses them (after checking their MD5) instead of
+# downloading them: by default, the archive above. The pipeline replaces this stage by the downloads
+# of its previous builds ("--build-context third-party-downloads=<dir>", saved from the stages
+# "*-third-party-downloads"), as orthanc.uclouvain.be is sometimes unreachable from GitHub.
+FROM scratch AS third-party-downloads
+COPY --from=orthanc-framework /downloads/ /
 
 
 FROM base AS dev
@@ -82,7 +91,7 @@ ARG BUILD_TYPE=Release
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
-COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
+COPY --from=third-party-downloads / /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build \
       -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
@@ -102,7 +111,7 @@ RUN dnf -y install python3-pip && dnf clean all \
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
-COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
+COPY --from=third-party-downloads / /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build-coverage \
       -DCMAKE_BUILD_TYPE=Debug \
@@ -144,7 +153,7 @@ RUN curl -fL https://github.com/openssl/openssl/releases/download/openssl-${OPEN
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
-COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
+COPY --from=third-party-downloads / /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 # CMAKE_POLICY_VERSION_MINIMUM: the image has CMake 4, and some bundled
 # third-party libraries declare an older minimum version
@@ -168,6 +177,14 @@ RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build-lsb \
 FROM scratch AS lsb-artifacts
 
 COPY --from=lsb /out/ /
+
+
+# The downloads of the "coverage" and "lsb" stages, saved by the pipeline for its next builds
+FROM scratch AS coverage-third-party-downloads
+COPY --from=coverage /usr/share/src/MongoDB/ThirdPartyDownloads/ /
+
+FROM scratch AS lsb-third-party-downloads
+COPY --from=lsb /usr/share/src/MongoDB/ThirdPartyDownloads/ /
 
 
 FROM base AS runtime

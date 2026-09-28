@@ -61,6 +61,8 @@ The patch adds the `"ExecuteLuaEnabled"` key to the configuration of the peer th
 | `integration-tests` | Runs orthanc-tests against these same plugins, on a standalone server and on a replica set. |
 | `release` | On a tag, once the three other jobs pass: creates the GitHub release (a pre-release for `*-rc*`, `*-beta*` and `*-alpha*` tags), with the plugins, `SHA256SUMS`, and the section of `MongoDB/NEWS` for the version as notes. |
 
+orthanc.uclouvain.be, where CMake downloads the Orthanc framework and the third-party libraries, is sometimes unreachable from GitHub. So `unit-tests` and `lsb-build` keep these downloads in the Actions cache (`third-party-downloads-coverage-*` and `third-party-downloads-lsb-*`, keyed on the CMake files), and give them to the next builds as the `third-party-downloads` stage of the Dockerfile. CMake checks their MD5, and downloads only what is missing.
+
 ## Load tests and sample data
 
 [`.docker/DicomSender`](../.docker/DicomSender/README.md) downloads open-source sample studies of 11 modalities (CT, PT, MR, NM, CR, DX, MG, US, XA, RF, and compressed transfer syntaxes), and sends them to Orthanc by C-STORE as many times as needed, as new studies of new patients:
