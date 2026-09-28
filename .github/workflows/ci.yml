@@ -37,7 +37,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/third-party-downloads
           key: third-party-downloads-coverage-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
-          restore-keys: third-party-downloads-coverage-
+          # Else those of the other job (mostly the same files), so that a job which failed to download them can reuse them
+          restore-keys: |
+            third-party-downloads-coverage-
+            third-party-downloads-lsb-
 
       - name: Build the unit tests (coverage)
         uses: docker/build-push-action@v6
@@ -130,7 +133,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/third-party-downloads
           key: third-party-downloads-lsb-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
-          restore-keys: third-party-downloads-lsb-
+          # Else those of the other job (mostly the same files), so that a job which failed to download them can reuse them
+          restore-keys: |
+            third-party-downloads-lsb-
+            third-party-downloads-coverage-
 
       - name: Build the portable plugins
         uses: docker/build-push-action@v6
