@@ -1,3 +1,24 @@
+diff -r f3f666d432bf GenerateConfigurationForTests.py
+--- a/GenerateConfigurationForTests.py
++++ b/GenerateConfigurationForTests.py
+@@ -90,14 +90,10 @@
+ ip = socket.gethostbyname(socket.gethostname())
+ 
+ 
+-# Download the content of the default configuration file
++# Local change: the default configuration file is downloaded when the image is built
+ with open(args.target, 'wb') as f:
+-    url = 'https://orthanc.uclouvain.be/hg/orthanc/raw-file/default/OrthancServer/Resources/Configuration.json'
+-    http = urlopen(url)
+-    if http.getcode() != 200:
+-        raise Exception('Cannot download: %s' % url)
+-    
+-    f.write(http.read())
++    with open('/opt/integration/Configuration.json', 'rb') as source:
++        f.write(source.read())
+     
+ 
+ with open(args.target, 'r') as f:
 diff -r f3f666d432bf Tests/Run.py
 --- a/Tests/Run.py	Sat Aug 15 23:30:37 2026 +0200
 +++ b/Tests/Run.py	Fri Sep 25 08:17:30 2026 +0000

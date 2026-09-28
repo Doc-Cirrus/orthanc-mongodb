@@ -59,6 +59,18 @@ RUN dnf -y install patch \
  && dnf clean all
 
 
+# Source archive of the Orthanc framework (ORTHANC_FRAMEWORK_VERSION of MongoDB/CMakeLists.txt), downloaded
+# with retries: CMake downloads it only once, and the server of orthanc.uclouvain.be is sometimes slow.
+# The build stages put it in ThirdPartyDownloads, where CMake uses it (after checking its MD5).
+FROM base AS orthanc-framework
+
+ARG ORTHANC_FRAMEWORK_VERSION=1.13.0
+
+RUN curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
+      https://orthanc.uclouvain.be/downloads/sources/orthanc/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz \
+      -o /Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz
+
+
 FROM base AS dev
 
 WORKDIR /usr/local/src
@@ -70,6 +82,7 @@ ARG BUILD_TYPE=Release
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
+COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build \
       -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
@@ -89,6 +102,7 @@ RUN dnf -y install python3-pip && dnf clean all \
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
+COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 RUN cmake -S /usr/share/src/MongoDB -B /usr/share/build-coverage \
       -DCMAKE_BUILD_TYPE=Debug \
@@ -130,6 +144,7 @@ RUN curl -fL https://github.com/openssl/openssl/releases/download/openssl-${OPEN
 
 WORKDIR /usr/share/src
 COPY . /usr/share/src
+COPY --from=orthanc-framework /Orthanc-*.tar.gz /usr/share/src/MongoDB/ThirdPartyDownloads/
 
 # CMAKE_POLICY_VERSION_MINIMUM: the image has CMake 4, and some bundled
 # third-party libraries declare an older minimum version
@@ -216,8 +231,14 @@ RUN curl -fL https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C 
 
 WORKDIR /opt/integration
 
-RUN curl -fL ${LSB_DOWNLOADS}/orthanc/${ORTHANC_VERSION}/Orthanc -o /opt/integration/Orthanc \
+RUN curl -fL --retry 5 --retry-all-errors --connect-timeout 30 ${LSB_DOWNLOADS}/orthanc/${ORTHANC_VERSION}/Orthanc -o /opt/integration/Orthanc \
  && chmod +x /opt/integration/Orthanc
+
+# Default configuration of this Orthanc, read by GenerateConfigurationForTests.py (see orthanc-tests.patch):
+# the test container does not download it
+RUN curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
+      https://orthanc.uclouvain.be/hg/orthanc/raw-file/Orthanc-${ORTHANC_VERSION}/OrthancServer/Resources/Configuration.json \
+      -o /opt/integration/Configuration.json
 
 RUN hg clone -u ${ORTHANC_TESTS_VERSION} https://orthanc.uclouvain.be/hg/orthanc-tests/ /opt/integration/orthanc-tests
 
