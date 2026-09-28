@@ -1,6 +1,6 @@
 #
 # MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
-# Copyright (C) 2017 - 2023  (Doc Cirrus GmbH)
+# Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -16,110 +16,79 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# MongoDB configuration cmake deps
+# Locates the MongoDB C driver (>= 2.0) and C++ driver (>= 4.0), either
+# system-wide, below MONGOC_ROOT/MONGOCXX_ROOT, or built by AutoConfig.cmake
+# if AUTO_INSTALL_DEPENDENCIES is set. The result is the MONGODB_LIBS
+# variable, which contains the imported CMake targets of the drivers.
 
-IF ( MSVC )
-    IF (NOT AUTO_INSTALL_DEPENDENCIES)
-      set(MONGOC_ROOT "/mongo-c-driver" CACHE STRING "Mongo C driver root.")
-      set(MONGOCXX_ROOT "/mongo-cxx-driver" CACHE STRING "Mongo CXX driver root.")
-      # Set reqired include pathes for MSVC
-      set(BSON_INCLUDE_DIRS      "${MONGOC_ROOT}/include/libbson-1.0")
-      set(MONGOCLIB_INCLUDE_DIRS "${MONGOC_ROOT}/include/libmongoc-1.0")
-      set(BSONCXX_INCLUDE_DIRS   "${MONGOCXX_ROOT}/include/bsoncxx/v_noabi")
-      set(MONGOCXX_INCLUDE_DIRS  "${MONGOCXX_ROOT}/include/mongocxx/v_noabi")
-      set(JSONCPP_INCLUDE_DIRS   "${LIBJSON_ROOT}/include")
-    ELSE ()
-      # Install, build and configure next components: jsoncpp, libbson, libmongoc, libbsoncxx, libmongocxx
-      include(${CMAKE_CURRENT_LIST_DIR}/../MongoDB/AutoConfig.cmake)
-    ENDIF ()
-    set(MONGODB_LIBS ${MONGODB_LIBS} RpcRT4.Lib)
-ELSE ()
-    #rely on pkg-config
-    include(FindPkgConfig)
-    IF (NOT AUTO_INSTALL_DEPENDENCIES)
-      find_package(libmongoc-1.0 REQUIRED)
-      pkg_search_module(JSONCPP REQUIRED jsoncpp)
-      IF (LINK_STATIC_LIBS)
-	      find_package(libbsoncxx-static REQUIRED)
-	      find_package(libmongocxx-static REQUIRED)
-      ELSE()
-        pkg_search_module(BSONCXX REQUIRED libbsoncxx)
-        pkg_search_module(MONGOCXX REQUIRED libmongocxx)
-      ENDIF()
-    ELSE ()
-      # Install, build and configure next components: jsoncpp, libbson, libmongoc, libbsoncxx, libmongocxx
-      include(${CMAKE_CURRENT_LIST_DIR}/../MongoDB/AutoConfig.cmake)
-    ENDIF ()
-    pkg_search_module(OPENSSL openssl)
-    IF (OPENSSL_FOUND)
-      find_library(CYRUS sasl2)
-      set(MONGODB_LIBS ${MONGODB_LIBS} ${OPENSSL_LIBRARIES} "sasl2")
-    ENDIF()
-    IF (CYRUS_FOUND)
-      set(MONGODB_LIBS ${MONGODB_LIBS} ${CYRUS_LIBRARIES})
-    ENDIF()
-    set(CMAKE_CXX_FLAGS "-std=c++14")
-    #Linux specific switches
-    IF (NOT APPLE)
-      set (CMAKE_SHARED_LINKER_FLAGS "-Wl,-z,defs")
-      set(MONGODB_LIBS ${MONGODB_LIBS} "uuid" "pthread" "rt")
-    ENDIF()
-    set(MONGODB_LIBS ${MONGODB_LIBS} "z" "resolv")
-ENDIF ()
+set(MONGO_C_MINIMAL_VERSION "2.0")
+set(MONGO_CXX_MINIMAL_VERSION "4.0")
 
-# Include directories
-include_directories(${BSON_INCLUDE_DIRS})
-include_directories(${MONGOC_INCLUDE_DIRS})
-include_directories(${LIBMONGOCXX_STATIC_INCLUDE_DIRS})
-include_directories(${LIBBSONCXX_STATIC_INCLUDE_DIRS})
-include_directories(${JSONCPP_INCLUDE_DIRS})
+if (PORTABLE_BUILD)
+  if (NOT STATIC_BUILD OR NOT AUTO_INSTALL_DEPENDENCIES)
+    message(FATAL_ERROR "PORTABLE_BUILD needs STATIC_BUILD and AUTO_INSTALL_DEPENDENCIES")
+  endif()
 
-IF (NOT AUTO_INSTALL_DEPENDENCIES)
-  set(LIBJSON_LIB_NAMES  jsoncpp   )
-  set(BSON_LIB_NAMES     bson-1.0  )
-  set(MONGOC_LIB_NAMES   mongoc-1.0)
-  set(BSONCXX_LIB_NAMES  bsoncxx   )
-  set(MONGOCXX_LIB_NAMES mongocxx  )
+  # Found by the CMake package of the static C driver
+  set(OPENSSL_USE_STATIC_LIBS ON)
 
-  IF (LINK_STATIC_LIBS)
-      ##################################################################
-      #link against static libraries
-      set(CMAKE_FIND_LIBRARY_SUFFIXES .a .lib ${CMAKE_FIND_LIBRARY_SUFFIXES})
-      set(LIBJSON_LIB_NAMES   jsoncpp_static                ${LIBJSON_LIB_NAMES} )
-      set(BSON_LIB_NAMES      bson-static-1.0 bson-1.0      ${BSON_LIB_NAMES}    )
-      set(MONGOC_LIB_NAMES    mongoc-static-1.0 mongoc-1.0  ${MONGOC_LIB_NAMES}  )
-      set(BSONCXX_LIB_NAMES   bsoncxx-static                ${LIBBSONCXX_STATIC_LIBRARIES} )
-      set(MONGOCXX_LIB_NAMES  mongocxx-static               ${LIBMONGOCXX_STATIC_LIBRARIES})
-  ENDIF()
+  # Only glibc remains a shared library (see Resources/CheckPortability.sh)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
+endif()
 
-  find_library(LIBJSON_LIBS
-      NAMES ${LIBJSON_LIB_NAMES}
-      PATHS "${LIBJSON_ROOT}/lib"
-  )
-  find_library(BSON_LIBS
-      NAMES ${BSON_LIB_NAMES}
-      PATHS "${MONGOC_ROOT}/lib"
-  )
-  find_library(MONGOC_LIBS
-      NAMES ${MONGOC_LIB_NAMES}
-      PATHS "${MONGOC_ROOT}/lib"
-  )
-  find_library(BSONXX_LIBS
-      NAMES ${BSONCXX_LIB_NAMES}
-      PATHS "${MONGOCXX_ROOT}/lib"
-  )
-  find_library(AMONGOCXX_LIBS
-      NAMES ${MONGOCXX_LIB_NAMES}
-      PATHS "${MONGOCXX_ROOT}/lib"
-  )
-ENDIF ()
+if (AUTO_INSTALL_DEPENDENCIES)
+  include(${CMAKE_CURRENT_LIST_DIR}/../MongoDB/AutoConfig.cmake)
+endif()
 
-message("Found libraries:")
-message("    LIBJSON_LIBS   " ${LIBJSON_LIBS} )
-message("    MONGOCXX_LIBS  " ${AMONGOCXX_LIBS} )
-message("    BSONCXX_LIBS   " ${BSONXX_LIBS} )
-message("    MONGOC_LIBS    " ${MONGOC_LIBS} )
-message("    BSON_LIBS      " ${BSON_LIBS})
+if (MONGOC_ROOT)
+  list(APPEND CMAKE_PREFIX_PATH "${MONGOC_ROOT}")
+endif()
 
-set(MONGODB_LIBS ${MONGODB_LIBS} ${LIBJSON_LIBS} ${AMONGOCXX_LIBS} ${BSONXX_LIBS} ${MONGOC_LIBS} ${BSON_LIBS})
+if (MONGOCXX_ROOT)
+  list(APPEND CMAKE_PREFIX_PATH "${MONGOCXX_ROOT}")
+endif()
+
+find_package(mongoc ${MONGO_C_MINIMAL_VERSION} CONFIG REQUIRED)
+find_package(mongocxx ${MONGO_CXX_MINIMAL_VERSION} CONFIG REQUIRED)
+
+if (STATIC_BUILD OR LINK_STATIC_LIBS)
+  set(MONGO_PREFER_STATIC ON)
+else()
+  set(MONGO_PREFER_STATIC OFF)
+endif()
+
+if ((MONGO_PREFER_STATIC OR NOT TARGET mongo::mongocxx_shared) AND TARGET mongo::mongocxx_static)
+  set(MONGODB_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+  add_definitions(-DBSONCXX_STATIC -DMONGOCXX_STATIC)
+elseif (TARGET mongo::mongocxx_shared)
+  set(MONGODB_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
+else()
+  message(FATAL_ERROR "The mongocxx package does not provide any usable library target")
+endif()
+
+if ((MONGO_PREFER_STATIC OR NOT TARGET mongoc::shared) AND TARGET mongoc::static)
+  list(APPEND MONGODB_LIBS mongoc::static)
+  add_definitions(-DBSON_STATIC -DMONGOC_STATIC)
+elseif (TARGET mongoc::shared)
+  list(APPEND MONGODB_LIBS mongoc::shared)
+else()
+  message(FATAL_ERROR "The mongoc package does not provide any usable library target")
+endif()
+
+message(STATUS "MongoDB C driver:   ${mongoc_VERSION}")
+message(STATUS "MongoDB C++ driver: ${mongocxx_VERSION}")
+message(STATUS "MongoDB libraries:  ${MONGODB_LIBS}")
+
+if (MSVC)
+  list(APPEND MONGODB_LIBS RpcRT4.Lib)
+elseif (NOT APPLE)
+  list(APPEND MONGODB_LIBS pthread rt)
+
+  # With STATIC_BUILD, the Orthanc framework builds its own copy of libuuid
+  if (NOT STATIC_BUILD AND USE_SYSTEM_UUID)
+    list(APPEND MONGODB_LIBS uuid)
+  endif()
+endif()
+
 link_libraries(${MONGODB_LIBS})

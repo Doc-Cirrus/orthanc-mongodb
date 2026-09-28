@@ -3,5 +3,15 @@ build
 .DS_Store
 ._.DS_Store
 .idea
+.tmp
 *.iml
 *ThirdPartyDownloads*
+*__pycache__*
+
+# Local settings of the compose environments (see .docker/.env.example)
+.docker/.env
+.docker/docker-compose.override.yaml
+.docker/integration-results/
+
+# Python caches (e.g. of .docker/DicomSender)
+__pycache__/

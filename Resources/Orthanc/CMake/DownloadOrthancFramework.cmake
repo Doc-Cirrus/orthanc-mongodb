@@ -1,4 +1,25 @@
-# Taken from https://hg.orthanc-server.com/orthanc-databases/
+# Orthanc - A Lightweight, RESTful DICOM Store
+# Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+# Department, University Hospital of Liege, Belgium
+# Copyright (C) 2017-2023 Osimis S.A., Belgium
+# Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+# Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+#
+# This program is free software: you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public License
+# as published by the Free Software Foundation, either version 3 of
+# the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+
 
 ##
 ## Check whether the parent script sets the mandatory variables
@@ -52,94 +73,114 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg" OR
       if (NOT ORTHANC_FRAMEWORK_MAJOR MATCHES "^[0-9]+$" OR
           NOT ORTHANC_FRAMEWORK_MINOR MATCHES "^[0-9]+$" OR
           NOT ORTHANC_FRAMEWORK_REVISION MATCHES "^[0-9]+$")
-        message("Bad version of the Orthanc framework: ${ORTHANC_FRAMEWORK_VERSION}")
+        message("Bad version of the Orthanc framework, assuming a pre-release: ${ORTHANC_FRAMEWORK_VERSION}")
+        set(ORTHANC_FRAMEWORK_MAJOR 999)
+        set(ORTHANC_FRAMEWORK_MINOR 999)
+        set(ORTHANC_FRAMEWORK_REVISION 999)
       endif()
 
-    if (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.3.1")
-      set(ORTHANC_FRAMEWORK_MD5 "dac95bd6cf86fb19deaf4e612961f378")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.3.2")
-      set(ORTHANC_FRAMEWORK_MD5 "d0ccdf68e855d8224331f13774992750")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.0")
-      set(ORTHANC_FRAMEWORK_MD5 "81e15f34d97ac32bbd7d26e85698835a")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.1")
-      set(ORTHANC_FRAMEWORK_MD5 "9b6f6114264b17ed421b574cd6476127")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.2")
-      set(ORTHANC_FRAMEWORK_MD5 "d1ee84927dcf668e60eb5868d24b9394")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.0")
-      set(ORTHANC_FRAMEWORK_MD5 "4429d8d9dea4ff6648df80ec3c64d79e")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.1")
-      set(ORTHANC_FRAMEWORK_MD5 "099671538865e5da96208b37494d6718")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.2")
-      set(ORTHANC_FRAMEWORK_MD5 "8867050f3e9a1ce6157c1ea7a9433b1b")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.3")
-      set(ORTHANC_FRAMEWORK_MD5 "bf2f5ed1adb8b0fc5f10d278e68e1dfe")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.4")
-      set(ORTHANC_FRAMEWORK_MD5 "404baef5d4c43e7c5d9410edda8ef5a5")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.5")
-      set(ORTHANC_FRAMEWORK_MD5 "cfc437e0687ae4bd725fd93dc1f08bc4")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.6")
-      set(ORTHANC_FRAMEWORK_MD5 "3c29de1e289b5472342947168f0105c0")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.7")
-      set(ORTHANC_FRAMEWORK_MD5 "e1b76f01116d9b5d4ac8cc39980560e3")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.8")
-      set(ORTHANC_FRAMEWORK_MD5 "82323e8c49a667f658a3639ea4dbc336")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.6.0")
-      set(ORTHANC_FRAMEWORK_MD5 "eab428d6e53f61e847fa360bb17ebe25")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.6.1")
-      set(ORTHANC_FRAMEWORK_MD5 "3971f5de96ba71dc9d3f3690afeaa7c0")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.0")
-      set(ORTHANC_FRAMEWORK_MD5 "ce5f689e852b01d3672bd3d2f952a5ef")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.1")
-      set(ORTHANC_FRAMEWORK_MD5 "3c171217f930abe80246997bdbcaf7cc")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.2")
-      set(ORTHANC_FRAMEWORK_MD5 "328f94dcbd78c169655a13f7ad58a2c2")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.3")
-      set(ORTHANC_FRAMEWORK_MD5 "3f1ba9502ec7c5449971d3b56087bcde")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.4")
-      set(ORTHANC_FRAMEWORK_MD5 "19fcb7c21876af86546baa048a22c6c0")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.0")
-      set(ORTHANC_FRAMEWORK_MD5 "f8ec7554ef5d23ea4ce474b1e8214de9")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.1")
-      set(ORTHANC_FRAMEWORK_MD5 "db094f96399cbe8b9bbdbce34884c220")
-
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.2")
-      set(ORTHANC_FRAMEWORK_MD5 "8bfa10e66c9931e74111be0bfb1f4548")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.0")
-      set(ORTHANC_FRAMEWORK_MD5 "cea0b02ce184671eaf1bd668beefbf28")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.1")
-      set(ORTHANC_FRAMEWORK_MD5 "08eebc66ef93c3b40115c38501db5fbd")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.2")
-      set(ORTHANC_FRAMEWORK_MD5 "3ea66c09f64aca990016683b6375734e")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.3")
-      set(ORTHANC_FRAMEWORK_MD5 "9b86e6f00e03278293cd15643cc0233f")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.4")
-      set(ORTHANC_FRAMEWORK_MD5 "6d5ca4a73ac7d42445041ca79de1624d")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.5")
-      set(ORTHANC_FRAMEWORK_MD5 "10fc64de1254a095e5d3ed3931f0cfbb")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.6")
-      set(ORTHANC_FRAMEWORK_MD5 "4b5d05683d747c29b2860ad79d11e62e")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.7")
-      set(ORTHANC_FRAMEWORK_MD5 "c912bbb860d640d3ae3003b5c9698205")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.10.0")
-      set(ORTHANC_FRAMEWORK_MD5 "8610c82d9153f22e929f2110f8f60279")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.10.1")
-      set(ORTHANC_FRAMEWORK_MD5 "caf667fc5ea452b3d0c2f70bfd02599c")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.0")
-      set(ORTHANC_FRAMEWORK_MD5 "962c4a4a706a2ef28b390d8515dd7091")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.1")
-      set(ORTHANC_FRAMEWORK_MD5 "a39661c406adf22cf574fde290cf4bbf")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.2")
-      set(ORTHANC_FRAMEWORK_MD5 "ede3de356493a8868545f8cb4b8bc8b5")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.3")
-      set(ORTHANC_FRAMEWORK_MD5 "e48fc0cb09c4856803791a1be28c07dc")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.0")
-      set(ORTHANC_FRAMEWORK_MD5 "d32a0cde03b6eb603d8dd2b33d38bf1b")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.1")
-      set(ORTHANC_FRAMEWORK_MD5 "8a435140efc8ff4a01d8242f092f21de")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.2")
-      set(ORTHANC_FRAMEWORK_MD5 "d2476b9e796e339ac320b5333489bdb3")
-    elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.3")
-      set(ORTHANC_FRAMEWORK_MD5 "975f5bf2142c22cb1777b4f6a0a614c5")
+      if (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.3.1")
+        set(ORTHANC_FRAMEWORK_MD5 "dac95bd6cf86fb19deaf4e612961f378")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.3.2")
+        set(ORTHANC_FRAMEWORK_MD5 "d0ccdf68e855d8224331f13774992750")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.0")
+        set(ORTHANC_FRAMEWORK_MD5 "81e15f34d97ac32bbd7d26e85698835a")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.1")
+        set(ORTHANC_FRAMEWORK_MD5 "9b6f6114264b17ed421b574cd6476127")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.4.2")
+        set(ORTHANC_FRAMEWORK_MD5 "d1ee84927dcf668e60eb5868d24b9394")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.0")
+        set(ORTHANC_FRAMEWORK_MD5 "4429d8d9dea4ff6648df80ec3c64d79e")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.1")
+        set(ORTHANC_FRAMEWORK_MD5 "099671538865e5da96208b37494d6718")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.2")
+        set(ORTHANC_FRAMEWORK_MD5 "8867050f3e9a1ce6157c1ea7a9433b1b")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.3")
+        set(ORTHANC_FRAMEWORK_MD5 "bf2f5ed1adb8b0fc5f10d278e68e1dfe")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.4")
+        set(ORTHANC_FRAMEWORK_MD5 "404baef5d4c43e7c5d9410edda8ef5a5")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.5")
+        set(ORTHANC_FRAMEWORK_MD5 "cfc437e0687ae4bd725fd93dc1f08bc4")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.6")
+        set(ORTHANC_FRAMEWORK_MD5 "3c29de1e289b5472342947168f0105c0")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.7")
+        set(ORTHANC_FRAMEWORK_MD5 "e1b76f01116d9b5d4ac8cc39980560e3")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.5.8")
+        set(ORTHANC_FRAMEWORK_MD5 "82323e8c49a667f658a3639ea4dbc336")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.6.0")
+        set(ORTHANC_FRAMEWORK_MD5 "eab428d6e53f61e847fa360bb17ebe25")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.6.1")
+        set(ORTHANC_FRAMEWORK_MD5 "3971f5de96ba71dc9d3f3690afeaa7c0")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.0")
+        set(ORTHANC_FRAMEWORK_MD5 "ce5f689e852b01d3672bd3d2f952a5ef")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.1")
+        set(ORTHANC_FRAMEWORK_MD5 "3c171217f930abe80246997bdbcaf7cc")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.2")
+        set(ORTHANC_FRAMEWORK_MD5 "328f94dcbd78c169655a13f7ad58a2c2")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.3")
+        set(ORTHANC_FRAMEWORK_MD5 "3f1ba9502ec7c5449971d3b56087bcde")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.7.4")
+        set(ORTHANC_FRAMEWORK_MD5 "19fcb7c21876af86546baa048a22c6c0")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.0")
+        set(ORTHANC_FRAMEWORK_MD5 "f8ec7554ef5d23ea4ce474b1e8214de9")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.1")
+        set(ORTHANC_FRAMEWORK_MD5 "db094f96399cbe8b9bbdbce34884c220")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.8.2")
+        set(ORTHANC_FRAMEWORK_MD5 "8bfa10e66c9931e74111be0bfb1f4548")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.0")
+        set(ORTHANC_FRAMEWORK_MD5 "cea0b02ce184671eaf1bd668beefbf28")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.1")
+        set(ORTHANC_FRAMEWORK_MD5 "08eebc66ef93c3b40115c38501db5fbd")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.2")
+        set(ORTHANC_FRAMEWORK_MD5 "3ea66c09f64aca990016683b6375734e")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.3")
+        set(ORTHANC_FRAMEWORK_MD5 "9b86e6f00e03278293cd15643cc0233f")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.4")
+        set(ORTHANC_FRAMEWORK_MD5 "6d5ca4a73ac7d42445041ca79de1624d")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.5")
+        set(ORTHANC_FRAMEWORK_MD5 "10fc64de1254a095e5d3ed3931f0cfbb")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.6")
+        set(ORTHANC_FRAMEWORK_MD5 "4b5d05683d747c29b2860ad79d11e62e")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.9.7")
+        set(ORTHANC_FRAMEWORK_MD5 "c912bbb860d640d3ae3003b5c9698205")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.10.0")
+        set(ORTHANC_FRAMEWORK_MD5 "8610c82d9153f22e929f2110f8f60279")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.10.1")
+        set(ORTHANC_FRAMEWORK_MD5 "caf667fc5ea452b3d0c2f70bfd02599c")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.0")
+        set(ORTHANC_FRAMEWORK_MD5 "962c4a4a706a2ef28b390d8515dd7091")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.1")
+        set(ORTHANC_FRAMEWORK_MD5 "a39661c406adf22cf574fde290cf4bbf")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.2")
+        set(ORTHANC_FRAMEWORK_MD5 "ede3de356493a8868545f8cb4b8bc8b5")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.11.3")
+        set(ORTHANC_FRAMEWORK_MD5 "e48fc0cb09c4856803791a1be28c07dc")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.0")
+        set(ORTHANC_FRAMEWORK_MD5 "d32a0cde03b6eb603d8dd2b33d38bf1b")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.1")
+        set(ORTHANC_FRAMEWORK_MD5 "8a435140efc8ff4a01d8242f092f21de")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.2")
+        set(ORTHANC_FRAMEWORK_MD5 "d2476b9e796e339ac320b5333489bdb3")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.3")
+        set(ORTHANC_FRAMEWORK_MD5 "975f5bf2142c22cb1777b4f6a0a614c5")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.4")
+        set(ORTHANC_FRAMEWORK_MD5 "1e61779ea4a7cd705720bdcfed8a6a73")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.5")
+        set(ORTHANC_FRAMEWORK_MD5 "5bb69f092981fdcfc11dec0a0f9a7db3")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.6")
+        set(ORTHANC_FRAMEWORK_MD5 "0e971f32f4f3e4951e0f3b5de49a3da6")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.7")
+        set(ORTHANC_FRAMEWORK_MD5 "f27c27d7a7a694dab1fd7f0a99d9715a")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.8")
+        set(ORTHANC_FRAMEWORK_MD5 "eb1c719234338e8277b80d3453563e9f")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.9")
+        set(ORTHANC_FRAMEWORK_MD5 "66b5a2ee60706c4a502896083b9e1a01")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.10")
+        set(ORTHANC_FRAMEWORK_MD5 "d5e1ba442104c89a24013cb859a9d6bf")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.12.11")
+        set(ORTHANC_FRAMEWORK_MD5 "389b273b64b513ba8fc3233f34201cc1")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "1.13.0")
+        set(ORTHANC_FRAMEWORK_MD5 "cc95d3e509612b541e10e91c831fbfe3")
 
       # Below this point are development snapshots that were used to
       # release some plugin, before an official release of the Orthanc
@@ -150,16 +191,60 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg" OR
       #
       elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "ae0e3fd609df")
         # DICOMweb 1.1 (framework pre-1.6.0)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
         set(ORTHANC_FRAMEWORK_MD5 "7e09e9b530a2f527854f0b782d7e0645")
       elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "82652c5fc04f")
         # Stone Web viewer 1.0 (framework pre-1.8.1)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
         set(ORTHANC_FRAMEWORK_MD5 "d77331d68917e66a3f4f9b807bbdab7f")
       elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "4a3ba4bf4ba7")
         # PostgreSQL 3.3 (framework pre-1.8.2)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
         set(ORTHANC_FRAMEWORK_MD5 "2d82bddf06f9cfe82095495cb3b8abde")
       elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "23ad1b9c7800")
         # For "Toolbox::ReadJson()" and "Toolbox::Write{...}Json()" (pre-1.9.0)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
         set(ORTHANC_FRAMEWORK_MD5 "9af92080e57c60dd288eba46ce606c00")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "b2e08d83e21d")
+        # WSI 1.1 (framework pre-1.10.0), to remove "-std=c++11"
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "2eaa073cbb4b44ffba199ad93393b2b1")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "daf4807631c5")
+        # DICOMweb 1.15 (framework pre-1.12.2)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "ebe8bdf388319f1c9536b2b680451848")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "36cd91a53403")
+        # Advanced storage 0.2.0 (framework pre-1.12.10)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "911105f18a154b5e106985d8fcfcb620")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "9eb77f159b9d")
+        # Advanced storage 0.2.2 (framework pre-1.12.10)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "bd5ba2cec329010b912209345acbdeaf")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "0ebe8cfd9bf7")
+        # Worklists plugin 0.9.0 (framework pre-1.12.10)
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "17a5ca9254e881ab89c93d052d4655cb")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "e0979326ac53")
+        # DICOMweb 1.22 + PG 10.0 (framework post-1.12.10)
+        # for BlockingSharedMessageQueue + fix SetCurrentThreadName from plugins
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "e66a7e996d56063b3abb790bb8f12e8d")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "94c7f3784456")
+        # PixelsMasker 0.1.0 (framework post-1.12.10)
+        # for BlockingSharedMessageQueue.WaitEmpty()
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "c037cd2ddbe1b65b431692855483161b")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "56eb61c86f93")
+        # OE2 1.11.0 (framework post-1.12.10)
+        # for HttpClient that returns the answer body in case of HTTP error
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "665f8aa70d7c5091bc20da37cf664910")
+      elseif (ORTHANC_FRAMEWORK_VERSION STREQUAL "004b351797fe")
+        # PixelsMasker 0.1.2 (framework post-1.12.11)
+        # for ScopedThreadNameSetter
+        set(ORTHANC_FRAMEWORK_PRE_RELEASE ON)
+        set(ORTHANC_FRAMEWORK_MD5 "f078ca997217b831ab3f6741f08a8c07")
       endif()
     endif()
   endif()
@@ -179,7 +264,7 @@ endif()
 
 if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg")
   find_program(ORTHANC_FRAMEWORK_HG hg)
-
+  
   if (${ORTHANC_FRAMEWORK_HG} MATCHES "ORTHANC_FRAMEWORK_HG-NOTFOUND")
     message(FATAL_ERROR "Please install Mercurial")
   endif()
@@ -189,8 +274,8 @@ endif()
 if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "archive" OR
     ORTHANC_FRAMEWORK_SOURCE STREQUAL "web")
   if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
-    find_program(ORTHANC_FRAMEWORK_7ZIP 7z
-      PATHS
+    find_program(ORTHANC_FRAMEWORK_7ZIP 7z 
+      PATHS 
       "$ENV{ProgramFiles}/7-Zip"
       "$ENV{ProgramW6432}/7-Zip"
       )
@@ -218,7 +303,7 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "path")
       ORTHANC_FRAMEWORK_ROOT STREQUAL "")
     message(FATAL_ERROR "The variable ORTHANC_FRAMEWORK_ROOT must provide the path to the sources of Orthanc")
   endif()
-
+  
   if (NOT EXISTS ${ORTHANC_FRAMEWORK_ROOT})
     message(FATAL_ERROR "Non-existing directory: ${ORTHANC_FRAMEWORK_ROOT}")
   endif()
@@ -243,14 +328,14 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "hg")
       COMMAND ${ORTHANC_FRAMEWORK_HG} pull
       WORKING_DIRECTORY ${ORTHANC_ROOT}
       RESULT_VARIABLE Failure
-      )
+      )    
   else()
     message("Forking the Orthanc source repository using Mercurial")
     execute_process(
-      COMMAND ${ORTHANC_FRAMEWORK_HG} clone "https://hg.orthanc-server.com/orthanc/"
+      COMMAND ${ORTHANC_FRAMEWORK_HG} clone "https://orthanc.uclouvain.be/hg/orthanc/"
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
       RESULT_VARIABLE Failure
-      )
+      )    
   endif()
 
   if (Failure OR NOT EXISTS ${ORTHANC_ROOT})
@@ -313,14 +398,14 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "web")
     message("Downloading: ${ORTHANC_FRAMEWORK_URL}")
 
     file(DOWNLOAD
-      "${ORTHANC_FRAMEWORK_URL}" "${ORTHANC_FRAMEWORK_ARCHIVE}"
+      "${ORTHANC_FRAMEWORK_URL}" "${ORTHANC_FRAMEWORK_ARCHIVE}" 
       SHOW_PROGRESS EXPECTED_MD5 "${ORTHANC_FRAMEWORK_MD5}"
       TIMEOUT 60
       INACTIVITY_TIMEOUT 60
       )
   else()
     message("Using local copy of: ${ORTHANC_FRAMEWORK_URL}")
-  endif()
+  endif()  
 endif()
 
 
@@ -356,7 +441,7 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "archive" OR
     if (NOT ORTHANC_FRAMEWORK_ARCHIVE MATCHES ".tar.gz$")
       message(FATAL_ERROR "Archive should have the \".tar.gz\" extension: ${ORTHANC_FRAMEWORK_ARCHIVE}")
     endif()
-
+    
     message("Uncompressing: ${ORTHANC_FRAMEWORK_ARCHIVE}")
 
     if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
@@ -369,7 +454,7 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "archive" OR
         RESULT_VARIABLE Failure
         OUTPUT_QUIET
         )
-
+      
       if (Failure)
         message(FATAL_ERROR "Error while running the uncompression tool")
       endif()
@@ -391,7 +476,7 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "archive" OR
         RESULT_VARIABLE Failure
         )
     endif()
-
+   
     if (Failure)
       message(FATAL_ERROR "Error while running the uncompression tool")
     endif()
@@ -457,14 +542,21 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "system")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libstdc++")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
   endif()
-
+  
   include(CheckIncludeFile)
   include(CheckIncludeFileCXX)
-  include(FindPythonInterp)
+  
+  if(CMAKE_VERSION VERSION_GREATER "3.11")
+    find_package(Python REQUIRED COMPONENTS Interpreter)
+    set(PYTHON_EXECUTABLE ${Python_EXECUTABLE})
+  else()
+    include(FindPythonInterp)
+    find_package(PythonInterp REQUIRED)
+  endif()
+  
   include(${CMAKE_CURRENT_LIST_DIR}/Compiler.cmake)
   include(${CMAKE_CURRENT_LIST_DIR}/DownloadPackage.cmake)
   include(${CMAKE_CURRENT_LIST_DIR}/AutoGeneratedCode.cmake)
-  set(EMBED_RESOURCES_PYTHON ${CMAKE_CURRENT_LIST_DIR}/EmbedResources.py)
 
   if (ORTHANC_FRAMEWORK_USE_SHARED)
     list(GET CMAKE_FIND_LIBRARY_PREFIXES 0 Prefix)
@@ -506,35 +598,6 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "system")
     message(FATAL_ERROR "Please install the libjsoncpp-dev package")
   endif()
 
-  # Switch to the C++11 standard if the version of JsonCpp is 1.y.z
-  # (same as variable JSONCPP_CXX11 in the source code of Orthanc)
-  if (EXISTS ${JSONCPP_INCLUDE_DIR}/json/version.h)
-    file(STRINGS
-      "${JSONCPP_INCLUDE_DIR}/json/version.h"
-      JSONCPP_VERSION_MAJOR1 REGEX
-      ".*define JSONCPP_VERSION_MAJOR.*")
-
-    if (NOT JSONCPP_VERSION_MAJOR1)
-      message(FATAL_ERROR "Unable to extract the major version of JsonCpp")
-    endif()
-
-    string(REGEX REPLACE
-      ".*JSONCPP_VERSION_MAJOR.*([0-9]+)$" "\\1"
-      JSONCPP_VERSION_MAJOR ${JSONCPP_VERSION_MAJOR1})
-    message("JsonCpp major version: ${JSONCPP_VERSION_MAJOR}")
-
-    if (JSONCPP_VERSION_MAJOR GREATER 0)
-      message("Switching to C++11 standard, as version of JsonCpp is >= 1.0.0")
-      if (CMAKE_COMPILER_IS_GNUCXX)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
-      elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-      endif()
-    endif()
-  else()
-    message("Unable to detect the major version of JsonCpp, assuming < 1.0.0")
-  endif()
-
   # Look for Orthanc framework shared library
   include(CheckCXXSymbolExists)
 
@@ -551,19 +614,19 @@ if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "system")
   if (${ORTHANC_FRAMEWORK_INCLUDE_DIR} STREQUAL "ORTHANC_FRAMEWORK_INCLUDE_DIR-NOTFOUND")
     message(FATAL_ERROR "Cannot locate the OrthancFramework.h header")
   endif()
-
+  
   message("Orthanc framework include dir: ${ORTHANC_FRAMEWORK_INCLUDE_DIR}")
   include_directories(${ORTHANC_FRAMEWORK_INCLUDE_DIR})
 
   if (ORTHANC_FRAMEWORK_USE_SHARED)
     set(CMAKE_REQUIRED_INCLUDES "${ORTHANC_FRAMEWORK_INCLUDE_DIR}")
     set(CMAKE_REQUIRED_LIBRARIES "${ORTHANC_FRAMEWORK_LIBRARIES}")
-
+    
     check_cxx_symbol_exists("Orthanc::InitializeFramework" "OrthancFramework.h" HAVE_ORTHANC_FRAMEWORK)
     if (NOT HAVE_ORTHANC_FRAMEWORK)
       message(FATAL_ERROR "Cannot find the Orthanc framework")
     endif()
-
+    
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
   endif()

@@ -1,0 +1,316 @@
+name: CI
+
+# Unit tests (with code coverage), portable plugin builds, integration tests
+# (orthanc-tests), and the GitHub release of the plugins on tag pushes
+
+on:
+  pull_request:
+  push:
+    branches: [master, orthanc-1.13]
+    tags: ['*']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The unit tests, instrumented for coverage, against a standalone MongoDB server
+  # and a replica set, as some tests only apply to one of them (see docs/TESTING.md)
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The CMake downloads of the previous builds, as orthanc.uclouvain.be is sometimes unreachable
+      # from GitHub (see the stage "third-party-downloads" of .docker/Dockerfile)
+      - name: Restore the third-party downloads
+        id: downloads
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: third-party-downloads-coverage-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
+          # Else those of the other job (mostly the same files), so that a job which failed to download them can reuse them
+          restore-keys: |
+            third-party-downloads-coverage-
+            third-party-downloads-lsb-
+
+      - name: Build the unit tests (coverage)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: coverage
+          load: true
+          tags: orthanc-mongodb-coverage:ci
+          cache-from: type=gha,scope=coverage
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          cache-to: type=gha,scope=coverage,mode=max
+
+      - name: Export the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: coverage-third-party-downloads
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          outputs: type=local,dest=${{ runner.temp }}/third-party-downloads
+          cache-from: type=gha,scope=coverage
+
+      - name: Save the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: ${{ steps.downloads.outputs.cache-primary-key }}
+
+      # The "database" and "database-rs" services of .docker/docker-compose.yml, on the network "orthanc-mongodb"
+      - name: Start the MongoDB servers
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database database-rs
+
+      - name: Unit tests
+        run: |
+          mkdir coverage
+          docker run --rm --network orthanc-mongodb -v "$PWD/coverage:/out" orthanc-mongodb-coverage:ci \
+            "mongodb://database:27017/" "mongodb://database-rs:27017/?replicaSet=rs0" /out
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo '## Code coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat coverage/coverage.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the coverage to Codecov
+        if: always() && hashFiles('coverage/coverage.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+
+      - name: MongoDB logs
+        if: failure()
+        run: docker compose -f .docker/docker-compose.yml logs --tail 200 database database-rs
+
+  # Plugins that only need glibc >= 2.28 (the "lsb" stage of the Dockerfile, checked by
+  # Resources/CheckPortability.sh), then loaded by Orthanc on several distributions
+  lsb-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # For "git describe"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Version
+        id: version
+        run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+      # The CMake downloads of the previous builds, as orthanc.uclouvain.be is sometimes unreachable
+      # from GitHub (see the stage "third-party-downloads" of .docker/Dockerfile)
+      - name: Restore the third-party downloads
+        id: downloads
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: third-party-downloads-lsb-${{ hashFiles('MongoDB/CMakeLists.txt', 'Resources/**/*.cmake') }}
+          # Else those of the other job (mostly the same files), so that a job which failed to download them can reuse them
+          restore-keys: |
+            third-party-downloads-lsb-
+            third-party-downloads-coverage-
+
+      - name: Build the portable plugins
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: lsb-artifacts
+          outputs: type=local,dest=dist
+          cache-from: type=gha,scope=lsb
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          cache-to: type=gha,scope=lsb,mode=max
+
+      - name: Export the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: lsb-third-party-downloads
+          build-contexts: ${{ steps.downloads.outputs.cache-matched-key && format('third-party-downloads={0}/third-party-downloads', runner.temp) || '' }}
+          outputs: type=local,dest=${{ runner.temp }}/third-party-downloads
+          cache-from: type=gha,scope=lsb
+
+      - name: Save the third-party downloads
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/third-party-downloads
+          key: ${{ steps.downloads.outputs.cache-primary-key }}
+
+      - name: Checksums
+        run: cat dist/SHA256SUMS
+
+      - name: Start the MongoDB server
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database
+
+      # The Orthanc LSB binary loads the plugins on the oldest and on recent distributions
+      - name: Load the plugins in Orthanc
+        run: |
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 30 https://orthanc.uclouvain.be/downloads/linux-standard-base/orthanc/1.13.0/Orthanc -o Orthanc
+          chmod +x Orthanc
+          cat > check.json <<'EOF'
+          {
+            "RemoteAccessAllowed" : true,
+            "AuthenticationEnabled" : false,
+            "StorageDirectory" : "/tmp/orthanc",
+            "Plugins" : [ "/check/dist" ],
+            "MongoDB" : { "EnableIndex" : true, "EnableStorage" : true, "ConnectionUri" : "mongodb://database:27017/load_check" }
+          }
+          EOF
+          for IMAGE in almalinux:8 debian:12-slim ubuntu:24.04 oraclelinux:9; do
+            echo "== $IMAGE"
+            # Orthanc stops without /etc/localtime, which ubuntu:24.04 does not have
+            docker run -d --name load-check --network orthanc-mongodb -p 18042:8042 -v "$PWD:/check:ro" \
+              -v /etc/localtime:/etc/localtime:ro "$IMAGE" /check/Orthanc /check/check.json
+            OK=0
+            for _ in $(seq 60); do
+              if curl -sf http://localhost:18042/system > system.json; then OK=1; break; fi
+              sleep 1
+            done
+            docker logs load-check 2>&1 | grep -i -E 'mongodb|error' | head -n 20 || true
+            docker rm -f load-check > /dev/null
+            if [ $OK -ne 1 ] || ! grep -q 'libOrthancMongoDBIndex.so' system.json || ! grep -q 'libOrthancMongoDBStorage.so' system.json; then
+              echo "The plugins do not load on $IMAGE" >&2
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orthanc-mongodb-lsb-${{ steps.version.outputs.version }}
+          path: dist/
+
+  # The orthanc-tests suite against Orthanc 1.13.0 with the plugins built above
+  integration-tests:
+    needs: lsb-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: standalone
+            uri: mongodb://database:27017/orthanc_tests
+          - mode: replica-set
+            uri: mongodb://database-rs:27017/orthanc_tests?replicaSet=rs0
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Download the portable plugins
+        uses: actions/download-artifact@v4
+        with:
+          pattern: orthanc-mongodb-lsb-*
+          path: dist
+          merge-multiple: true
+
+      # The "lsb-artifacts" stage is replaced by the plugins of the lsb-build job
+      - name: Build the integration tests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile
+          target: integration
+          build-contexts: lsb-artifacts=dist
+          load: true
+          tags: orthanc-mongodb-integration:ci
+          cache-from: type=gha,scope=integration
+          cache-to: type=gha,scope=integration,mode=max
+
+      - name: Start the MongoDB servers
+        run: docker compose -f .docker/docker-compose.yml up -d --wait database database-rs
+
+      - name: orthanc-tests (${{ matrix.mode }})
+        run: |
+          mkdir results
+          docker run --rm --network orthanc-mongodb -v "$PWD/results:/results" \
+            -e MODE=${{ matrix.mode }} -e MONGO_URL="${{ matrix.uri }}" orthanc-mongodb-integration:ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orthanc-tests-${{ matrix.mode }}
+          path: results/
+
+  # On a tag: the GitHub release, with the portable plugins and their checksums
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [unit-tests, lsb-build, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: orthanc-mongodb-lsb-*
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # The section of MongoDB/NEWS for this version, if any
+          awk -v version="$VERSION" '
+            /^Release / { printing = (index($0, "Release " version " ") == 1 || $0 == "Release " version) }
+            printing' MongoDB/NEWS > notes.md
+          if [ ! -s notes.md ]; then
+            echo "Release $GITHUB_REF_NAME, see [MongoDB/NEWS](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/MongoDB/NEWS)." > notes.md
+          fi
+          cat >> notes.md <<'EOF'
+
+          **Supported platforms:** Linux x86_64 with glibc 2.28 or later, Orthanc 1.13.0 or later, MongoDB 7.0 or later.
+          Copy `libOrthancMongoDBIndex.so` and `libOrthancMongoDBStorage.so` into a folder listed in the `Plugins` option of Orthanc, and check them with `sha256sum -c SHA256SUMS`.
+          EOF
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=""
+          case "$GITHUB_REF_NAME" in
+            *-rc*|*-beta*|*-alpha*) PRERELEASE="--prerelease" ;;
+          esac
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md $PRERELEASE
+          fi

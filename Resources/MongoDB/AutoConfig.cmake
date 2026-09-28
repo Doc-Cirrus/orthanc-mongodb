@@ -1,6 +1,6 @@
 #
 # MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
-# Copyright (C) 2017 - 2023  (Doc Cirrus GmbH)
+# Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -16,15 +16,21 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# Downloads, builds and installs the MongoDB C and C++ drivers inside
+# the build directory, at configuration time. Afterwards, the drivers
+# are found through "find_package()" like system-wide installations
+# (see "MongoDBConfiguration.cmake").
+
 # Common variables
 set(BUILD_DIR_POSTFIX "-build")
 set(INSTALL_DIR_POSTFIX "-install")
 set(CONFIGURATION_DIR_POSTFIX "-config")
-
+set(MONGO_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/mongo-downloads")
 
 # Mongo C Driver variables
 set(MONGO_C_PROJECT     "mongo-c-driver")
-set(MONGO_C_VERSION     "1.30.5")
+set(MONGO_C_VERSION     "2.5.4")
+set(MONGO_C_SHA256      "9ddca33cfad97af34f264895f0e9c687d851f5e12f951ecb5794f95e9f5c5fb3")
 set(MONGO_C_SOURCE_DIR  "${CMAKE_BINARY_DIR}/${MONGO_C_PROJECT}")
 set(MONGO_C_BINARY_DIR  "${CMAKE_BINARY_DIR}/${MONGO_C_PROJECT}${BUILD_DIR_POSTFIX}")
 set(MONGO_C_INSTALL_DIR "${CMAKE_BINARY_DIR}/${MONGO_C_PROJECT}${INSTALL_DIR_POSTFIX}")
@@ -32,15 +38,34 @@ set(MONGO_C_CONFIG_DIR  "${CMAKE_BINARY_DIR}/${MONGO_C_PROJECT}${CONFIGURATION_D
 
 # Mongo CXX Driver variables
 set(MONGO_CXX_PROJECT     "mongo-cxx-driver")
-set(MONGO_CXX_VERSION     "3.11.0")
+set(MONGO_CXX_VERSION     "4.6.0")
+set(MONGO_CXX_SHA256      "eac122db0789fc82b0ba93f92a1503d74c502bfe4728345eaa8650e50a79da11")
 set(MONGO_CXX_SOURCE_DIR  "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}")
 set(MONGO_CXX_BINARY_DIR  "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${BUILD_DIR_POSTFIX}")
 set(MONGO_CXX_INSTALL_DIR "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${INSTALL_DIR_POSTFIX}")
 set(MONGO_CXX_CONFIG_DIR  "${CMAKE_BINARY_DIR}/${MONGO_CXX_PROJECT}${CONFIGURATION_DIR_POSTFIX}")
 
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UPPERCASE)
 
-# Macroses
+if (STATIC_BUILD OR LINK_STATIC_LIBS)
+    set(MONGO_ENABLE_STATIC ON)
+    set(MONGO_ENABLE_SHARED OFF)
+else ()
+    set(MONGO_ENABLE_STATIC OFF)
+    set(MONGO_ENABLE_SHARED ON)
+endif ()
+
+include(ProcessorCount)
+ProcessorCount(MONGO_BUILD_JOBS)
+if (MONGO_BUILD_JOBS EQUAL 0)
+    set(MONGO_BUILD_JOBS 1)
+endif()
+
+# Macros
 macro(CheckError RESULT)
     if(${RESULT})
         message(FATAL_ERROR "Failed to build project: ${RESULT}")
@@ -49,7 +74,7 @@ endmacro()
 
 macro(InstallPackage PROJECT_WORKING_DIR)
     execute_process(
-        COMMAND ${CMAKE_COMMAND} .
+        COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
         RESULT_VARIABLE RESULT
         WORKING_DIRECTORY ${PROJECT_WORKING_DIR}
     )
@@ -57,7 +82,7 @@ macro(InstallPackage PROJECT_WORKING_DIR)
     CheckError(RESULT)
 
     execute_process(
-        COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE}
+        COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE} --parallel ${MONGO_BUILD_JOBS}
         RESULT_VARIABLE RESULT
         WORKING_DIRECTORY ${PROJECT_WORKING_DIR}
     )
@@ -82,13 +107,35 @@ IF (MSVC AND STATIC_BUILD)
 ENDIF ()
 
 
-# Install mongo-c-driver
+# Options of the portable build: the drivers use the static OpenSSL
+# installed in OPENSSL_ROOT_DIR, no SASL (only needed for Kerberos), and
+# their own copy of zlib, so that the plugins only depend on glibc
+set(MONGO_C_EXTRA_CACHE_ARGS "")
+set(MONGO_CXX_EXTRA_CACHE_ARGS "")
 
-STRING(REGEX MATCH "-fPIC" FPIC ${CMAKE_CXX_FLAGS})
-IF(${FPIC} MATCHES "-fPIC")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
-    set(CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE} "${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}} -fPIC")
-ENDIF()
+if (PORTABLE_BUILD)
+    if (NOT OPENSSL_ROOT_DIR)
+        message(FATAL_ERROR "PORTABLE_BUILD needs OPENSSL_ROOT_DIR: the prefix of a static build of OpenSSL")
+    endif()
+
+    set(MONGO_C_EXTRA_CACHE_ARGS
+        -DENABLE_SSL:STRING=OPENSSL
+        -DENABLE_SASL:STRING=OFF
+        -DENABLE_ZLIB:STRING=BUNDLED
+        -DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}
+        -DOPENSSL_USE_STATIC_LIBS:BOOL=ON
+    )
+
+    # The CMake package of the static C driver looks for OpenSSL too
+    set(MONGO_CXX_EXTRA_CACHE_ARGS
+        -DOPENSSL_ROOT_DIR:PATH=${OPENSSL_ROOT_DIR}
+        -DOPENSSL_USE_STATIC_LIBS:BOOL=ON
+    )
+endif()
+
+
+# Install mongo-c-driver
+message(STATUS "Building mongo-c-driver ${MONGO_C_VERSION} into ${MONGO_C_INSTALL_DIR}")
 
 configure_file(
     ${CMAKE_CURRENT_LIST_DIR}/${MONGO_C_PROJECT}.txt.in
@@ -96,132 +143,27 @@ configure_file(
 
 InstallPackage(${MONGO_C_CONFIG_DIR})
 
-set(bson-1.0_DIR "${MONGO_C_INSTALL_DIR}/lib/cmake/bson-1.0/")
-set(mongoc-1.0_DIR "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/")
 
-find_package(bson-1.0
-            PATHS
-            # Alternatives
-            "${MONGO_C_INSTALL_DIR}/lib/cmake/bson-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib32/cmake/bson-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib64/cmake/bson-1.0/"
-            NO_DEFAULT_PATH
-            REQUIRED)
-
-include_directories("${MONGO_C_INSTALL_DIR}/include/libbson-1.0")
-include_directories("${MONGO_C_INSTALL_DIR}/include/libbson-1.0/bson")
-find_package(mongoc-1.0
-            PATHS
-            # Alternatives
-            "${MONGO_C_INSTALL_DIR}/lib/cmake/mongoc-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib32/cmake/mongoc-1.0/"
-            "${MONGO_C_INSTALL_DIR}/lib64/cmake/mongoc-1.0/"
-            NO_DEFAULT_PATH
-            REQUIRED)
-
-include_directories("${MONGO_C_INSTALL_DIR}/include/libmongoc-1.0")
-include_directories("${MONGO_C_INSTALL_DIR}/include/libmongoc-1.0/mongoc")
-
-IF (STATIC_BUILD)
-    get_target_property(BSON_LIBS mongo::bson_static LOCATION)
-    get_target_property(BSON_INCLUDE_DIRS mongo::bson_static INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(MONGOC_LIBS mongo::mongoc_static LOCATION)
-    get_target_property(MONGOCLIB_INCLUDE_DIRS mongo::mongoc_static INTERFACE_INCLUDE_DIRECTORIES)
-ELSE ()
-    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(BSON_LIBS mongo::bson_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
-    ELSE ()
-        get_target_property(BSON_LIBS mongo::bson_shared LOCATION)
-    ENDIF ()
-    get_target_property(BSON_INCLUDE_DIRS mongo::bson_shared INTERFACE_INCLUDE_DIRECTORIES)
-
-    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(MONGOC_LIBS mongo::mongoc_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
-    ELSE ()
-        get_target_property(MONGOC_LIBS mongo::mongoc_shared LOCATION)
-    ENDIF ()
-    get_target_property(MONGOCLIB_INCLUDE_DIRS mongo::mongoc_shared INTERFACE_INCLUDE_DIRECTORIES)
-ENDIF ()
-
-#Install mongo-cxx-driver
-
-IF (STATIC_BUILD)
-    set(MONGO_CXX_BUILD_SHARED_LIBS OFF)
-ELSE ()
-    set(MONGO_CXX_BUILD_SHARED_LIBS ON)
-ENDIF ()
+# Install mongo-cxx-driver
+message(STATUS "Building mongo-cxx-driver ${MONGO_CXX_VERSION} into ${MONGO_CXX_INSTALL_DIR}")
 
 configure_file(
     ${CMAKE_CURRENT_LIST_DIR}/${MONGO_CXX_PROJECT}.txt.in
     ${MONGO_CXX_CONFIG_DIR}/CMakeLists.txt)
 
-unset(MONGO_CXX_BUILD_SHARED_LIBS)
-
 InstallPackage(${MONGO_CXX_CONFIG_DIR})
 
-set(bsoncxx_DIR "${MONGO_CXX_INSTALL_DIR}/lib/cmake/bsoncxx-${MONGO_CXX_VERSION}/")
-set(mongocxx_DIR "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSION}/")
 
-find_package(bsoncxx
-            PATHS
-            # Alternatives
-            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/bsoncxx-${MONGO_CXX_VERSION}/"
-            NO_DEFAULT_PATH
-            REQUIRED)
+# Make the freshly installed drivers visible to "find_package()"
+list(INSERT CMAKE_PREFIX_PATH 0 "${MONGO_CXX_INSTALL_DIR}" "${MONGO_C_INSTALL_DIR}")
 
-find_package(mongocxx
-            PATHS
-            # Alternatives
-            "${MONGO_CXX_INSTALL_DIR}/lib/cmake/mongocxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib32/cmake/mongocxx-${MONGO_CXX_VERSION}/"
-            "${MONGO_CXX_INSTALL_DIR}/lib64/cmake/mongocxx-${MONGO_CXX_VERSION}/"
-            NO_DEFAULT_PATH
-            REQUIRED)
-include_directories("${MONGO_CXX_INSTALL_DIR}/include/bsoncxx/v_noabi")
-include_directories("${MONGO_CXX_INSTALL_DIR}/include/mongocxx/v_noabi")
-IF (STATIC_BUILD)
-    get_target_property(BSONXX_LIBS mongo::bsoncxx_static LOCATION)
-    get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_static INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(AMONGOCXX_LIBS mongo::mongocxx_static LOCATION)
-    get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_static INTERFACE_INCLUDE_DIRECTORIES)
-ELSE ()
-    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(BSONXX_LIBS mongo::bsoncxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
-    ELSE ()
-        get_target_property(BSONXX_LIBS mongo::bsoncxx_shared LOCATION)
-    ENDIF ()
-    get_target_property(BSONCXX_INCLUDE_DIRS mongo::bsoncxx_shared INTERFACE_INCLUDE_DIRECTORIES)
+if (MONGO_ENABLE_SHARED)
+    # Set runtime path for the shared libraries
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    set(CMAKE_INSTALL_RPATH "${MONGO_C_INSTALL_DIR}/lib;${MONGO_CXX_INSTALL_DIR}/lib")
+endif()
 
-    IF (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        get_target_property(AMONGOCXX_LIBS mongo::mongocxx_shared IMPORTED_IMPLIB_${CMAKE_BUILD_TYPE_UPPERCASE})
-    ELSE ()
-        get_target_property(AMONGOCXX_LIBS mongo::mongocxx_shared LOCATION)
-    ENDIF ()
-    get_target_property(MONGOCXX_INCLUDE_DIRS mongo::mongocxx_shared INTERFACE_INCLUDE_DIRECTORIES)
-ENDIF ()
-
-# Set runtime path for libraries
-get_filename_component(MONGO_C_RPATH "${MONGOC_LIBS}" PATH)
-get_filename_component(MONGO_CXX_RPATH "${AMONGOCXX_LIBS}" PATH)
-
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set(CMAKE_INSTALL_RPATH "${MONGO_C_RPATH};${MONGO_CXX_RPATH}")
-
-# Inlude boost headers in case if boost used
+# Include boost headers in case if boost used
 IF (BOOST_ROOT)
     include_directories(${BOOST_ROOT})
-ENDIF ()
-
-IF (MSVC AND STATIC_BUILD)
-    # Link with some system libraries
-    set(LIBS ${LIBS} ws2_32.lib Secur32.lib Crypt32.lib BCrypt.lib Dnsapi.lib)
-    # Add preprocessor definitions which are required for correct linking
-    add_definitions(
-      -DBSON_STATIC
-      -DMONGOC_STATIC
-      -DBSONCXX_STATIC
-      -DMONGOCXX_STATIC
-    )
 ENDIF ()

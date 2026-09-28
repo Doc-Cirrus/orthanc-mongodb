@@ -1,82 +1,54 @@
 # Prerequisites
 
-The host system will need som dependencies preinstall, which are needed by orthanc/mongoc/mongocxx
+The plugins need a C++17 compiler, CMake 3.15 or later, and the MongoDB C (2.x) and C++ (4.x) drivers.
 
-## General system dependencies
-### Centos like
+## System packages
+
+The [release binaries](../README.md#supported-platforms) need none of this: they only need glibc 2.28 or later.
+
+### RHEL-like (Oracle Linux 9, Rocky, Alma), as in `.docker/Dockerfile`
 
 ```bash
-yum -y install centos-release-scl centos-release-scl-rh epel-release
-yum -y install make devtoolset-8 libuuid-devel openssl-devel cyrus-sasl-devel cmake3 zlib-devel
+dnf config-manager --enable ol9_addons   # Oracle Linux only
+dnf -y install gcc gcc-c++ make cmake patch git curl unzip python3 \
+               libuuid-devel openssl-devel cyrus-sasl-devel zlib-devel
 ```
 
-### Debian like
+### Debian-like
+
 ```bash
-apt -y install build-essential unzip cmake make libsasl2-dev uuid-dev libssl-dev zlib1g-dev git curl
+apt -y install build-essential cmake git curl unzip python3 \
+               uuid-dev libssl-dev libsasl2-dev zlib1g-dev
 ```
 
-## Note
-It's highly recommended to Use the ```AUTO_INSTALL_DEPENDENCIES``` while building, 
-since it will take care of all the dependencies but at a performance cost.
-Check [AUTO_CONFIG](./DEPENDENCIES_AUTO_CONFIG.md) for mo details.
+## MongoDB drivers
 
-## MongoC library
-The mongoc library needs to precompiled in order to be linked against the db plugin
-https://github.com/mongodb/mongo-c-driver/releases
+The simplest is to let CMake download and build them, with `-DAUTO_INSTALL_DEPENDENCIES=ON` (see [AUTO_CONFIG](./DEPENDENCIES_AUTO_CONFIG.md)). The tested versions are:
 
-### Centos like
+- MongoDB C driver (libmongoc and libbson) **2.5.4**; 2.0 at least;
+- MongoDB C++ driver (mongocxx and bsoncxx) **4.6.0**; 4.0 at least.
+
+To use drivers installed on the system instead, build them as static libraries with position-independent code:
+
 ```bash
-curl -L --output mongo-c-driver-1.23.2.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.23.2.tar.gz
-tar -xzf mongo-c-driver-1.23.2.tar.gz
-mkdir -p mongo-c-driver-1.23.2/build
-cd mongo-c-driver-1.23.2/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF .."
-scl enable devtoolset-8 "make"
-scl enable devtoolset-8 "sudo make install"
+curl -fL -o mongo-c-driver-2.5.4.tar.gz https://github.com/mongodb/mongo-c-driver/releases/download/2.5.4/mongo-c-driver-2.5.4.tar.gz
+tar -xzf mongo-c-driver-2.5.4.tar.gz
+cmake -S mongo-c-driver-2.5.4 -B mongo-c-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_INSTALL_PREFIX=/usr/local -DENABLE_STATIC=ON -DENABLE_SHARED=OFF -DENABLE_ICU=OFF \
+      -DENABLE_TESTS=OFF -DENABLE_EXAMPLES=OFF
+cmake --build mongo-c-build -j"$(nproc)" && sudo cmake --install mongo-c-build
+
+curl -fL -o mongo-cxx-driver-r4.6.0.tar.gz https://github.com/mongodb/mongo-cxx-driver/releases/download/r4.6.0/mongo-cxx-driver-r4.6.0.tar.gz
+tar -xzf mongo-cxx-driver-r4.6.0.tar.gz
+cmake -S mongo-cxx-driver-r4.6.0 -B mongo-cxx-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH=/usr/local
+cmake --build mongo-cxx-build -j"$(nproc)" && sudo cmake --install mongo-cxx-build
 ```
 
-### Debian like
-```bash
-# Static build
-curl -L --output mongo-c-driver-1.23.2.tar.gz https://github.com/mongodb/mongo-c-driver/archive/1.23.2.tar.gz
-tar -xzf mongo-c-driver-1.23.2.tar.gz
-mkdir -p mongo-c-driver-1.23.2/build
-cd mongo-c-driver-1.23.2/build
-cmake -DCMAKE_C_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=ON -DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF -DENABLE_ICU=OFF ../mongo-c-driver-1.23.2
-make
-sudo make install
-```
-
-## MongoCXX library
-The mongocxx library needs to precompiled in order to be linked against the db plugin
-https://github.com/mongodb/mongo-cxx-driver/releases
-
-### Centos like
-```bash
-curl -L --output mongo-cxx-driver-3.7.0.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/3.7.0.tar.gz
-tar -xzf mongo-cxx-driver-3.7.0.tar.gz
-mkdir -p mongo-cxx-driver-3.7.0/build
-cd mongo-cxx-driver-r3.7.0/build
-scl enable devtoolset-8 "cmake3 -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local .."
-# for any reason it requires write permissions to /usr/local/include/bsoncxx/v_noabi/bsoncxx/third_party/mnmlstc/share/cmake/core
-# so use sudo for make too
-scl enable devtoolset-8 "sudo make"
-scl enable devtoolset-8 "sudo make install"
-```
-
-### Debian like
-```bash
-# static compilation
-curl -L --output mongo-cxx-driver-3.7.0.tar.gz https://github.com/mongodb/mongo-cxx-driver/archive/3.7.0.tar.gz
-tar -xzf mongo-cxx-driver-3.7.0.tar.gz
-mkdir -p mongo-cxx-driver-3.7.0/build
-cd mongo-cxx-driver-r3.7.0/build
-cmake -DCMAKE_CXX_FLAGS='-fPIC' -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLIBBSON_DIR=/usr/local -DLIBMONGOC_DIR=/usr/local ..
-sudo make
-sudo make install
-```
+Then configure the plugins with `-DLINK_STATIC_LIBS=ON`, and `-DMONGOC_ROOT=/usr/local -DMONGOCXX_ROOT=/usr/local` if CMake does not find them.
 
 ## Useful resources
-- Mongoc library http://mongoc.org/libmongoc/current/installing.html
-- Mongo-cxx library https://mongodb.github.io/mongo-cxx-driver/mongocxx-v3/installation/
-- Orthanc build https://hg.orthanc-server.com/orthanc/file/tip/INSTALL
+
+- MongoDB C driver: https://mongoc.org/libmongoc/current/learn/get/installing.html
+- MongoDB C++ driver: https://www.mongodb.com/docs/languages/cpp/cpp-driver/current/get-started/
+- Orthanc build: https://orthanc.uclouvain.be/book/faq/compiling.html

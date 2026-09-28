@@ -1,59 +1,50 @@
-// Taken from https://hg.orthanc-server.com/orthanc-databases/
+/**
+ * MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
+ * Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ **/
+
 
 #include "IndexBackend.h"
 
-#include "DatabaseBackendAdapterV2.h"
-#include "DatabaseBackendAdapterV3.h"
+#include "DatabaseBackendAdapterV4.h"
 #include "GlobalProperties.h"
 
-#include <Compatibility.h> // For std::unique_ptr<>
+#include <Compatibility.h>  // For std::unique_ptr<>
 #include <Logging.h>
 #include <OrthancException.h>
 
+#include <boost/lexical_cast.hpp>
+
+
+#define THROW_NOT_IMPLEMENTED(primitive)                                  \
+  throw Orthanc::OrthancException(Orthanc::ErrorCode_NotImplemented,     \
+                                  "Primitive not supported by this database back-end: " primitive)
+
+
 namespace OrthancDatabases
 {
-  void IndexBackend::ReadChangesInternal(IDatabaseBackendOutput &output,
-                                         bool &done,
-                                         DatabaseManager &manager,
-                                         uint32_t maxResults)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ReadExportedResourcesInternal(IDatabaseBackendOutput &output,
-                                                   bool &done,
-                                                   uint32_t maxResults)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ClearDeletedFiles(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ClearDeletedResources(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SignalDeletedFiles(IDatabaseBackendOutput &output,
-                                        DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SignalDeletedResources(IDatabaseBackendOutput &output,
-                                            DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  IndexBackend::IndexBackend(OrthancPluginContext *context) : context_(context)
+  IndexBackend::IndexBackend(OrthancPluginContext* context,
+                             bool readOnly) :
+    context_(context),
+    readOnly_(readOnly)
   {
   }
 
-  void IndexBackend::SetOutputFactory(IDatabaseBackendOutput::IFactory *factory)
+
+  void IndexBackend::SetOutputFactory(IDatabaseBackendOutput::IFactory* factory)
   {
     boost::unique_lock<boost::shared_mutex> lock(outputFactoryMutex_);
 
@@ -71,7 +62,8 @@ namespace OrthancDatabases
     }
   }
 
-  IDatabaseBackendOutput *IndexBackend::CreateOutput()
+
+  IDatabaseBackendOutput* IndexBackend::CreateOutput()
   {
     boost::shared_lock<boost::shared_mutex> lock(outputFactoryMutex_);
 
@@ -85,553 +77,42 @@ namespace OrthancDatabases
     }
   }
 
-  static void ExecuteAddAttachment(int64_t id,
-                                   const OrthancPluginAttachment &attachment)
+
+  uint32_t IndexBackend::GetDatabaseVersion(DatabaseManager& manager)
   {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
+    // Create a read-only, explicit transaction to read the database version
+    DatabaseManager::Transaction transaction(manager, TransactionType_ReadOnly);
+
+    std::string version = "unknown";
+
+    if (LookupGlobalProperty(version, manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseSchemaVersion))
+    {
+      try
+      {
+        return boost::lexical_cast<unsigned int>(version);
+      }
+      catch (boost::bad_lexical_cast&)
+      {
+      }
+    }
+
+    LOG(ERROR) << "The database is corrupted. Drop it manually for Orthanc to recreate it";
+    throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
   }
 
-  void IndexBackend::AddAttachment(DatabaseManager &manager,
-                                   int64_t id,
-                                   const OrthancPluginAttachment &attachment,
-                                   int64_t revision)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
 
-  void IndexBackend::AttachChild(DatabaseManager &manager,
-                                 int64_t parent,
-                                 int64_t child)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ClearChanges(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ClearExportedResources(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::DeleteAttachment(IDatabaseBackendOutput &output,
-                                      DatabaseManager &manager,
-                                      int64_t id,
-                                      int32_t attachment)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::DeleteMetadata(DatabaseManager &manager,
-                                    int64_t id,
-                                    int32_t metadataType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::DeleteResource(IDatabaseBackendOutput &output,
-                                    DatabaseManager &manager,
-                                    int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::GetAllInternalIds(std::list<int64_t> &target,
-                                       DatabaseManager &manager,
-                                       OrthancPluginResourceType resourceType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::GetAllPublicIds(std::list<std::string> &target,
-                                     DatabaseManager &manager,
-                                     OrthancPluginResourceType resourceType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::GetAllPublicIds(std::list<std::string> &target,
-                                     DatabaseManager &manager,
-                                     OrthancPluginResourceType resourceType,
-                                     uint64_t since,
-                                     uint64_t limit)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerChange() */
-  void IndexBackend::GetChanges(IDatabaseBackendOutput &output,
-                                bool &done /*out*/,
-                                DatabaseManager &manager,
-                                int64_t since,
-                                uint32_t maxResults)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::GetChildrenInternalId(std::list<int64_t> &target /*out*/,
-                                           DatabaseManager &manager,
-                                           int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::GetChildrenPublicId(std::list<std::string> &target /*out*/,
-                                         DatabaseManager &manager,
-                                         int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerExportedResource() */
-  void IndexBackend::GetExportedResources(IDatabaseBackendOutput &output,
-                                          bool &done /*out*/,
-                                          DatabaseManager &manager,
-                                          int64_t since,
-                                          uint32_t maxResults)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerChange() */
-  void IndexBackend::GetLastChange(IDatabaseBackendOutput &output,
-                                   DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerExportedResource() */
-  void IndexBackend::GetLastExportedResource(IDatabaseBackendOutput &output,
-                                             DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerDicomTag() */
-  void IndexBackend::GetMainDicomTags(IDatabaseBackendOutput &output,
-                                      DatabaseManager &manager,
-                                      int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  std::string IndexBackend::GetPublicId(DatabaseManager &manager,
-                                        int64_t resourceId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  uint64_t IndexBackend::GetResourcesCount(DatabaseManager &manager,
-                                           OrthancPluginResourceType resourceType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  OrthancPluginResourceType IndexBackend::GetResourceType(DatabaseManager &manager,
-                                                          int64_t resourceId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  uint64_t IndexBackend::GetTotalCompressedSize(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  uint64_t IndexBackend::GetTotalUncompressedSize(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::IsExistingResource(DatabaseManager &manager,
-                                        int64_t internalId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::IsProtectedPatient(DatabaseManager &manager,
-                                        int64_t internalId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ListAvailableMetadata(std::list<int32_t> &target /*out*/,
-                                           DatabaseManager &manager,
-                                           int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::ListAvailableAttachments(std::list<int32_t> &target /*out*/,
-                                              DatabaseManager &manager,
-                                              int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::LogChange(DatabaseManager &manager,
-                               int32_t changeType,
-                               int64_t resourceId,
-                               OrthancPluginResourceType resourceType,
-                               const char *date)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::LogExportedResource(DatabaseManager &manager,
-                                         const OrthancPluginExportedResource &resource)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  static bool ExecuteLookupAttachment(IDatabaseBackendOutput &output,
-                                      int64_t id,
-                                      int32_t contentType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  /* Use GetOutput().AnswerAttachment() */
-  bool IndexBackend::LookupAttachment(IDatabaseBackendOutput &output,
-                                      int64_t &revision /*out*/,
-                                      DatabaseManager &manager,
-                                      int64_t id,
-                                      int32_t contentType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  static bool ReadGlobalProperty(std::string &target)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::LookupGlobalProperty(std::string &target /*out*/,
-                                          DatabaseManager &manager,
-                                          const char *serverIdentifier,
-                                          int32_t property)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::LookupIdentifier(std::list<int64_t> &target /*out*/,
-                                      DatabaseManager &manager,
-                                      OrthancPluginResourceType resourceType,
-                                      uint16_t group,
-                                      uint16_t element,
-                                      OrthancPluginIdentifierConstraint constraint,
-                                      const char *value)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::LookupIdentifierRange(std::list<int64_t> &target /*out*/,
-                                           DatabaseManager &manager,
-                                           OrthancPluginResourceType resourceType,
-                                           uint16_t group,
-                                           uint16_t element,
-                                           const char *start,
-                                           const char *end)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::LookupMetadata(std::string &target /*out*/,
-                                    int64_t &revision /*out*/,
-                                    DatabaseManager &manager,
-                                    int64_t id,
-                                    int32_t metadataType)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::LookupParent(int64_t &parentId /*out*/,
-                                  DatabaseManager &manager,
-                                  int64_t resourceId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::LookupResource(int64_t &id /*out*/,
-                                    OrthancPluginResourceType &type /*out*/,
-                                    DatabaseManager &manager,
-                                    const char *publicId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::SelectPatientToRecycle(int64_t &internalId /*out*/,
-                                            DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  bool IndexBackend::SelectPatientToRecycle(int64_t &internalId /*out*/,
-                                            DatabaseManager &manager,
-                                            int64_t patientIdToAvoid)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  static void RunSetGlobalPropertyStatement(bool hasServer,
-                                            bool hasValue,
-                                            const char *serverIdentifier,
-                                            int32_t property,
-                                            const char *utf8)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SetGlobalProperty(DatabaseManager &manager,
-                                       const char *serverIdentifier,
-                                       int32_t property,
-                                       const char *utf8)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  static void ExecuteSetTag(int64_t id,
-                            uint16_t group,
-                            uint16_t element,
-                            const char *value)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SetMainDicomTag(DatabaseManager &manager,
-                                     int64_t id,
-                                     uint16_t group,
-                                     uint16_t element,
-                                     const char *value)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SetIdentifierTag(DatabaseManager &manager,
-                                      int64_t id,
-                                      uint16_t group,
-                                      uint16_t element,
-                                      const char *value)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  static void ExecuteSetMetadata(int64_t id,
-                                 int32_t metadataType,
-                                 const char *value)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SetMetadata(DatabaseManager &manager,
-                                 int64_t id,
-                                 int32_t metadataType,
-                                 const char *value,
-                                 int64_t revision)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  void IndexBackend::SetProtectedPatient(DatabaseManager &manager,
-                                         int64_t internalId,
-                                         bool isProtected)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  uint32_t IndexBackend::GetDatabaseVersion(DatabaseManager &manager)
-  {
-    return 6;
-  }
-
-  /**
-   * Upgrade the database to the specified version of the database
-   * schema.  The upgrade script is allowed to make calls to
-   * OrthancPluginReconstructMainDicomTags().
-   **/
-  void IndexBackend::UpgradeDatabase(DatabaseManager &manager,
-                                     uint32_t targetVersion,
-                                     OrthancPluginStorageArea *storageArea)
+  void IndexBackend::UpgradeDatabase(DatabaseManager& manager,
+                                     uint32_t  targetVersion,
+                                     OrthancPluginStorageArea* storageArea)
   {
     LOG(ERROR) << "Upgrading database is not implemented by this plugin";
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NotImplemented);
+    ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
   }
 
-  void IndexBackend::ClearMainDicomTags(DatabaseManager &manager,
-                                        int64_t internalId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
 
-  // For unit testing only!
-  uint64_t IndexBackend::GetAllResourcesCount(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  // For unit testing only!
-  uint64_t IndexBackend::GetUnprotectedPatientsCount(DatabaseManager &manager)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  // For unit testing only!
-  bool IndexBackend::GetParentPublicId(std::string &target,
-                                       DatabaseManager &manager,
-                                       int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-  // For unit tests only!
-  void IndexBackend::GetChildren(std::list<std::string> &childrenPublicIds,
-                                 DatabaseManager &manager,
-                                 int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
-  // New primitive since Orthanc 1.5.2
-  void IndexBackend::LookupResources(IDatabaseBackendOutput &output,
-                                     DatabaseManager &manager,
-                                     const std::vector<Orthanc::DatabaseConstraint> &lookup,
-                                     OrthancPluginResourceType queryLevel,
-                                     uint32_t limit,
-                                     bool requestSomeInstance)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-
-#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
-  static void ExecuteSetResourcesContentTags(
-      DatabaseManager &manager,
-      const std::string &table,
-      const std::string &variablePrefix,
-      uint32_t count,
-      const OrthancPluginResourcesContentTags *tags)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-
-#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
-  static void ExecuteSetResourcesContentMetadata(
-      DatabaseManager &manager,
-      bool hasRevisionsSupport,
-      uint32_t count,
-      const OrthancPluginResourcesContentMetadata *metadata)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-
-#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
-  // New primitive since Orthanc 1.5.2
-  void IndexBackend::SetResourcesContent(
-      DatabaseManager &manager,
-      uint32_t countIdentifierTags,
-      const OrthancPluginResourcesContentTags *identifierTags,
-      uint32_t countMainDicomTags,
-      const OrthancPluginResourcesContentTags *mainDicomTags,
-      uint32_t countMetadata,
-      const OrthancPluginResourcesContentMetadata *metadata)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-
-  // New primitive since Orthanc 1.5.2
-  void IndexBackend::GetChildrenMetadata(std::list<std::string> &target,
-                                         DatabaseManager &manager,
-                                         int64_t resourceId,
-                                         int32_t metadata)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-    // New primitive since Orthanc 1.5.2
-  void IndexBackend::TagMostRecentPatient(DatabaseManager& manager,
-                                          int64_t patient)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-
-#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE) // Macro introduced in 1.3.1
-#if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 5, 4)
-  // New primitive since Orthanc 1.5.4
-  bool IndexBackend::LookupResourceAndParent(int64_t &id,
-                                             OrthancPluginResourceType &type,
-                                             std::string &parentPublicId,
-                                             DatabaseManager &manager,
-                                             const char *publicId)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-#endif
-
-#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE) // Macro introduced in 1.3.1
-#if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 5, 4)
-  // New primitive since Orthanc 1.5.4
-  void IndexBackend::GetAllMetadata(std::map<int32_t, std::string> &result,
-                                    DatabaseManager &manager,
-                                    int64_t id)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-#endif
-
-#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
-  void IndexBackend::CreateInstanceGeneric(OrthancPluginCreateInstanceResult &result,
-                                           DatabaseManager &manager,
-                                           const char *hashPatient,
-                                           const char *hashStudy,
-                                           const char *hashSeries,
-                                           const char *hashInstance)
-  {
-    throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-  }
-#endif
-
-  void IndexBackend::Register(IndexBackend *backend,
-                              size_t countConnections,
-                              unsigned int maxDatabaseRetries)
-  {
-    if (backend == NULL)
-    {
-      throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
-    }
-
-    bool hasLoadedV3 = false;
-
-#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE) // Macro introduced in Orthanc 1.3.1
-#if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 9, 2)
-    if (OrthancPluginCheckVersionAdvanced(backend->GetContext(), 1, 9, 2) == 1)
-    {
-      LOG(WARNING) << "The index plugin will use " << countConnections << " connection(s) to the database, "
-                   << "and will retry up to " << maxDatabaseRetries << " time(s) in the case of a collision";
-
-      OrthancDatabases::DatabaseBackendAdapterV3::Register(backend, countConnections, maxDatabaseRetries);
-      hasLoadedV3 = true;
-    }
-#endif
-#endif
-
-    if (!hasLoadedV3)
-    {
-      LOG(WARNING) << "Performance warning: Your version of the Orthanc core or SDK doesn't support multiple readers/writers";
-      OrthancDatabases::DatabaseBackendAdapterV2::Register(backend);
-    }
-  }
-
-  bool IndexBackend::LookupGlobalIntegerProperty(int &target,
-                                                 DatabaseManager &manager,
-                                                 const char *serverIdentifier,
+  bool IndexBackend::LookupGlobalIntegerProperty(int& target,
+                                                 DatabaseManager& manager,
+                                                 const char* serverIdentifier,
                                                  int32_t property)
   {
     std::string value;
@@ -643,9 +124,9 @@ namespace OrthancDatabases
         target = boost::lexical_cast<int>(value);
         return true;
       }
-      catch (boost::bad_lexical_cast &)
+      catch (boost::bad_lexical_cast&)
       {
-        LOG(ERROR) << "Corrupted PostgreSQL database";
+        LOG(ERROR) << "Corrupted database";
         throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
       }
     }
@@ -655,8 +136,9 @@ namespace OrthancDatabases
     }
   }
 
-  void IndexBackend::SetGlobalIntegerProperty(DatabaseManager &manager,
-                                              const char *serverIdentifier,
+
+  void IndexBackend::SetGlobalIntegerProperty(DatabaseManager& manager,
+                                              const char* serverIdentifier,
                                               int32_t property,
                                               int value)
   {
@@ -664,21 +146,422 @@ namespace OrthancDatabases
     SetGlobalProperty(manager, serverIdentifier, property, s.c_str());
   }
 
-  void IndexBackend::Finalize()
-  {
-    OrthancDatabases::DatabaseBackendAdapterV2::Finalize();
 
-#if defined(ORTHANC_PLUGINS_VERSION_IS_ABOVE) // Macro introduced in Orthanc 1.3.1
-#if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 9, 2)
-    OrthancDatabases::DatabaseBackendAdapterV3::Finalize();
+#if ORTHANC_PLUGINS_HAS_ATTACHMENTS_CUSTOM_DATA == 1
+  void IndexBackend::AddAttachment(DatabaseManager& manager,
+                                   int64_t id,
+                                   const OrthancPluginAttachment& attachment,
+                                   int64_t revision,
+                                   const std::string& customData)
+  {
+    if (customData.empty())
+    {
+      AddAttachment(manager, id, attachment, revision);
+    }
+    else
+    {
+      THROW_NOT_IMPLEMENTED("AddAttachment with custom data");
+    }
+  }
 #endif
-#endif
+
+
+  void IndexBackend::GetChangesExtended(IDatabaseBackendOutput& output,
+                                        bool& done,
+                                        DatabaseManager& manager,
+                                        int64_t since,
+                                        int64_t to,
+                                        const std::set<uint32_t>& changeTypes,
+                                        uint32_t limit)
+  {
+    THROW_NOT_IMPLEMENTED("GetChangesExtended");
   }
 
-  DatabaseManager *IndexBackend::CreateSingleDatabaseManager(IDatabaseBackend &backend)
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+  void IndexBackend::CreateInstance(OrthancPluginCreateInstanceResult& result,
+                                    DatabaseManager& manager,
+                                    const char* hashPatient,
+                                    const char* hashStudy,
+                                    const char* hashSeries,
+                                    const char* hashInstance)
+  {
+    THROW_NOT_IMPLEMENTED("CreateInstance");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+  void IndexBackend::CreateInstanceGeneric(OrthancPluginCreateInstanceResult& result,
+                                           DatabaseManager& manager,
+                                           const char* hashPatient,
+                                           const char* hashStudy,
+                                           const char* hashSeries,
+                                           const char* hashInstance)
+  {
+    // Check out "OrthancServer/Sources/Database/Compatibility/ICreateInstance.cpp"
+    
+    {
+      OrthancPluginResourceType type;
+      int64_t tmp;
+        
+      if (LookupResource(tmp, type, manager, hashInstance))
+      {
+        // The instance already exists
+        assert(type == OrthancPluginResourceType_Instance);
+        result.instanceId = tmp;
+        result.isNewInstance = false;
+        return;
+      }
+    }
+
+    result.instanceId = CreateResource(manager, hashInstance, OrthancPluginResourceType_Instance);
+    result.isNewInstance = true;
+
+    result.isNewPatient = false;
+    result.isNewStudy = false;
+    result.isNewSeries = false;
+    result.patientId = -1;
+    result.studyId = -1;
+    result.seriesId = -1;
+      
+    // Detect up to which level the patient/study/series/instance
+    // hierarchy must be created
+
+    {
+      OrthancPluginResourceType dummy;
+
+      if (LookupResource(result.seriesId, dummy, manager, hashSeries))
+      {
+        assert(dummy == OrthancPluginResourceType_Series);
+        // The patient, the study and the series already exist
+
+        bool ok = (LookupResource(result.patientId, dummy, manager, hashPatient) &&
+                   LookupResource(result.studyId, dummy, manager, hashStudy));
+        (void) ok;  // Remove warning about unused variable in release builds
+        assert(ok);
+      }
+      else if (LookupResource(result.studyId, dummy, manager, hashStudy))
+      {
+        assert(dummy == OrthancPluginResourceType_Study);
+
+        // New series: The patient and the study already exist
+        result.isNewSeries = true;
+
+        bool ok = LookupResource(result.patientId, dummy, manager, hashPatient);
+        (void) ok;  // Remove warning about unused variable in release builds
+        assert(ok);
+      }
+      else if (LookupResource(result.patientId, dummy, manager, hashPatient))
+      {
+        assert(dummy == OrthancPluginResourceType_Patient);
+
+        // New study and series: The patient already exist
+        result.isNewStudy = true;
+        result.isNewSeries = true;
+      }
+      else
+      {
+        // New patient, study and series: Nothing exists
+        result.isNewPatient = true;
+        result.isNewStudy = true;
+        result.isNewSeries = true;
+      }
+    }
+
+    // Create the series if needed
+    if (result.isNewSeries)
+    {
+      result.seriesId = CreateResource(manager, hashSeries, OrthancPluginResourceType_Series);
+    }
+
+    // Create the study if needed
+    if (result.isNewStudy)
+    {
+      result.studyId = CreateResource(manager, hashStudy, OrthancPluginResourceType_Study);
+    }
+
+    // Create the patient if needed
+    if (result.isNewPatient)
+    {
+      result.patientId = CreateResource(manager, hashPatient, OrthancPluginResourceType_Patient);
+    }
+
+    // Create the parent-to-child links
+    AttachChild(manager, result.seriesId, result.instanceId);
+
+    if (result.isNewSeries)
+    {
+      AttachChild(manager, result.studyId, result.seriesId);
+    }
+
+    if (result.isNewStudy)
+    {
+      AttachChild(manager, result.patientId, result.studyId);
+    }
+
+    TagMostRecentPatient(manager, result.patientId);
+      
+    // Sanity checks
+    assert(result.patientId != -1);
+    assert(result.studyId != -1);
+    assert(result.seriesId != -1);
+    assert(result.instanceId != -1);
+  }
+#endif
+
+
+  void IndexBackend::AddLabel(DatabaseManager& manager,
+                              int64_t resource,
+                              const std::string& label)
+  {
+    THROW_NOT_IMPLEMENTED("AddLabel");
+  }
+
+
+  void IndexBackend::RemoveLabel(DatabaseManager& manager,
+                                 int64_t resource,
+                                 const std::string& label)
+  {
+    THROW_NOT_IMPLEMENTED("RemoveLabel");
+  }
+
+
+  void IndexBackend::ListLabels(std::list<std::string>& target,
+                                DatabaseManager& manager,
+                                int64_t resource)
+  {
+    THROW_NOT_IMPLEMENTED("ListLabels");
+  }
+
+
+  void IndexBackend::ListAllLabels(std::list<std::string>& target,
+                                   DatabaseManager& manager)
+  {
+    THROW_NOT_IMPLEMENTED("ListAllLabels");
+  }
+
+
+  int64_t IndexBackend::IncrementGlobalProperty(DatabaseManager& manager,
+                                                const char* serverIdentifier,
+                                                int32_t property,
+                                                int64_t increment)
+  {
+    THROW_NOT_IMPLEMENTED("IncrementGlobalProperty");
+  }
+
+
+  void IndexBackend::UpdateAndGetStatistics(DatabaseManager& manager,
+                                            int64_t& patientsCount,
+                                            int64_t& studiesCount,
+                                            int64_t& seriesCount,
+                                            int64_t& instancesCount,
+                                            int64_t& compressedSize,
+                                            int64_t& uncompressedSize)
+  {
+    THROW_NOT_IMPLEMENTED("UpdateAndGetStatistics");
+  }
+
+
+  uint64_t IndexBackend::MeasureLatency(DatabaseManager& manager)
+  {
+    THROW_NOT_IMPLEMENTED("MeasureLatency");
+  }
+
+
+#if ORTHANC_PLUGINS_VERSION_IS_ABOVE(1, 12, 5)
+  void IndexBackend::ExecuteFind(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                 DatabaseManager& manager,
+                                 const Orthanc::DatabasePluginMessages::Find_Request& request)
+  {
+    THROW_NOT_IMPLEMENTED("ExecuteFind");
+  }
+
+
+  void IndexBackend::ExecuteCount(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                  DatabaseManager& manager,
+                                  const Orthanc::DatabasePluginMessages::Find_Request& request)
+  {
+    THROW_NOT_IMPLEMENTED("ExecuteCount");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_KEY_VALUE_STORES == 1
+  void IndexBackend::StoreKeyValue(DatabaseManager& manager,
+                                   const std::string& storeId,
+                                   const std::string& key,
+                                   const std::string& value)
+  {
+    THROW_NOT_IMPLEMENTED("StoreKeyValue");
+  }
+
+
+  void IndexBackend::DeleteKeyValue(DatabaseManager& manager,
+                                    const std::string& storeId,
+                                    const std::string& key)
+  {
+    THROW_NOT_IMPLEMENTED("DeleteKeyValue");
+  }
+
+
+  bool IndexBackend::GetKeyValue(std::string& value,
+                                 DatabaseManager& manager,
+                                 const std::string& storeId,
+                                 const std::string& key)
+  {
+    THROW_NOT_IMPLEMENTED("GetKeyValue");
+  }
+
+
+  void IndexBackend::ListKeysValues(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                    DatabaseManager& manager,
+                                    const Orthanc::DatabasePluginMessages::ListKeysValues_Request& request)
+  {
+    THROW_NOT_IMPLEMENTED("ListKeysValues");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_QUEUES == 1
+  void IndexBackend::EnqueueValue(DatabaseManager& manager,
+                                  const std::string& queueId,
+                                  const std::string& value)
+  {
+    THROW_NOT_IMPLEMENTED("EnqueueValue");
+  }
+
+
+  bool IndexBackend::DequeueValue(std::string& value,
+                                  DatabaseManager& manager,
+                                  const std::string& queueId,
+                                  bool fromFront)
+  {
+    THROW_NOT_IMPLEMENTED("DequeueValue");
+  }
+
+
+  uint64_t IndexBackend::GetQueueSize(DatabaseManager& manager,
+                                      const std::string& queueId)
+  {
+    THROW_NOT_IMPLEMENTED("GetQueueSize");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_RESERVE_QUEUE_VALUE == 1
+  bool IndexBackend::ReserveQueueValue(std::string& value,
+                                       uint64_t& valueId,
+                                       DatabaseManager& manager,
+                                       const std::string& queueId,
+                                       bool fromFront,
+                                       uint32_t reserveTimeout)
+  {
+    THROW_NOT_IMPLEMENTED("ReserveQueueValue");
+  }
+
+
+  void IndexBackend::AcknowledgeQueueValue(DatabaseManager& manager,
+                                           const std::string& queueId,
+                                           uint64_t valueId)
+  {
+    THROW_NOT_IMPLEMENTED("AcknowledgeQueueValue");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_ATTACHMENTS_CUSTOM_DATA == 1
+  void IndexBackend::GetAttachmentCustomData(std::string& customData,
+                                             DatabaseManager& manager,
+                                             const std::string& attachmentUuid)
+  {
+    THROW_NOT_IMPLEMENTED("GetAttachmentCustomData");
+  }
+
+
+  void IndexBackend::SetAttachmentCustomData(DatabaseManager& manager,
+                                             const std::string& attachmentUuid,
+                                             const std::string& customData)
+  {
+    THROW_NOT_IMPLEMENTED("SetAttachmentCustomData");
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_AUDIT_LOGS == 1
+  void IndexBackend::RecordAuditLog(DatabaseManager& manager,
+                                    const std::string& sourcePlugin,
+                                    const std::string& userId,
+                                    OrthancPluginResourceType type,
+                                    const std::string& resourceId,
+                                    const std::string& action,
+                                    const void* logData,
+                                    uint32_t logDataSize)
+  {
+    THROW_NOT_IMPLEMENTED("RecordAuditLog");
+  }
+
+
+  void IndexBackend::GetAuditLogs(DatabaseManager& manager,
+                                  std::list<AuditLog>& logs,
+                                  const std::string& userIdFilter,
+                                  const std::string& resourceIdFilter,
+                                  const std::string& actionFilter,
+                                  const std::string& fromTsIsoFormat,
+                                  const std::string& toTsIsoFormat,
+                                  uint64_t since,
+                                  uint64_t limit)
+  {
+    THROW_NOT_IMPLEMENTED("GetAuditLogs");
+  }
+#endif
+
+
+  void IndexBackend::PerformDbHousekeeping(DatabaseManager& manager)
+  {
+    THROW_NOT_IMPLEMENTED("PerformDbHousekeeping");
+  }
+
+
+  void IndexBackend::Register(IndexBackend* backend,
+                              size_t countConnections,
+                              bool useDynamicConnectionPool,
+                              unsigned int maxDatabaseRetries,
+                              unsigned int housekeepingDelaySeconds)
+  {
+    if (backend == NULL)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
+    }
+
+    LOG(WARNING) << "The index plugin will use " << countConnections << " connection(s) to the database, "
+                 << "and will retry up to " << maxDatabaseRetries << " time(s) in the case of a collision";
+
+    if (OrthancPluginCheckVersionAdvanced(backend->GetContext(), 1, 13, 0) == 1)
+    {
+      DatabaseBackendAdapterV4::Register(backend, countConnections, useDynamicConnectionPool, maxDatabaseRetries, housekeepingDelaySeconds);
+    }
+    else
+    {
+      delete backend;
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_Plugin,
+                                      "The MongoDB index plugin requires Orthanc >= 1.13.0");
+    }
+  }
+
+
+  void IndexBackend::Finalize()
+  {
+    DatabaseBackendAdapterV4::Finalize();
+  }
+
+
+  DatabaseManager* IndexBackend::CreateSingleDatabaseManager(IDatabaseBackend& backend,
+                                                             bool hasIdentifierTags,
+                                                             const std::list<IdentifierTag>& identifierTags)
   {
     std::unique_ptr<DatabaseManager> manager(new DatabaseManager(backend.CreateDatabaseFactory()));
-    backend.ConfigureDatabase(*manager);
+    backend.ConfigureDatabase(*manager, hasIdentifierTags, identifierTags);
     return manager.release();
   }
 }

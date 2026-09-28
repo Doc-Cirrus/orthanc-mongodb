@@ -1,4 +1,25 @@
-// Taken from https://hg.orthanc-server.com/orthanc-databases/
+/**
+ * MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
+ * Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ **/
 
 #include "DatabaseManager.h"
 #include "ITransaction.h"
@@ -63,12 +84,29 @@ namespace OrthancDatabases
     return *transaction_;
   }
 
-  DatabaseManager::DatabaseManager(IDatabaseFactory *factory) : factory_(factory)
+  DatabaseManager::DatabaseManager(IDatabaseFactory *factory) :
+    factory_(factory),
+    creationTime_(boost::posix_time::second_clock::universal_time()),
+    lastUseTime_(boost::posix_time::second_clock::universal_time())
   {
     if (factory == NULL)
     {
       throw Orthanc::OrthancException(Orthanc::ErrorCode_NullPointer);
     }
+  }
+
+  uint64_t DatabaseManager::GetElapsedSecondsSinceCreation() const
+  {
+    boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
+    boost::posix_time::time_duration diff = now - creationTime_;
+    return static_cast<uint64_t>(diff.total_seconds());
+  }
+
+  uint64_t DatabaseManager::GetElapsedSecondsSinceLastUse() const
+  {
+    boost::posix_time::ptime now = boost::posix_time::second_clock::universal_time();
+    boost::posix_time::time_duration diff = now - lastUseTime_;
+    return static_cast<uint64_t>(diff.total_seconds());
   }
 
   IDatabase &DatabaseManager::GetDatabase()
@@ -99,6 +137,7 @@ namespace OrthancDatabases
       }
 
       transaction_.reset(GetDatabase().CreateTransaction(type));
+      lastUseTime_ = boost::posix_time::second_clock::universal_time();
     }
     catch (Orthanc::OrthancException &e)
     {

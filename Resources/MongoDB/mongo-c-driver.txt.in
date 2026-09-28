@@ -1,21 +1,49 @@
-cmake_minimum_required(VERSION 3.2)
+# MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
+# Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+cmake_minimum_required(VERSION 3.15)
 
 project(${MONGO_C_PROJECT})
 
 include(ExternalProject)
 
 ExternalProject_Add(${MONGO_C_PROJECT}
-    URL "https://github.com/mongodb/mongo-c-driver/archive/refs/tags/${MONGO_C_VERSION}.tar.gz"
+    URL             "https://github.com/mongodb/mongo-c-driver/releases/download/${MONGO_C_VERSION}/mongo-c-driver-${MONGO_C_VERSION}.tar.gz"
+    URL_HASH        "SHA256=${MONGO_C_SHA256}"
+    DOWNLOAD_DIR    "${MONGO_DOWNLOAD_DIR}"
     SOURCE_DIR      "${MONGO_C_SOURCE_DIR}"
     BINARY_DIR      "${MONGO_C_BINARY_DIR}"
     INSTALL_DIR     "${MONGO_C_INSTALL_DIR}"
     CMAKE_CACHE_ARGS
+        "-DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}"
+        "-DCMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}"
         "-DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}"
         "-DCMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}:STRING=${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
-        "-DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}"
-        "-DCMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}:STRING=${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
         -DCMAKE_INSTALL_PREFIX:PATH=${MONGO_C_INSTALL_DIR}
+        -DCMAKE_INSTALL_LIBDIR:STRING=lib
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
         -DBUILD_TESTING:BOOL=OFF
-        -DENABLE_AUTOMATIC_INIT_AND_CLEANUP:BOOL=OFF
+        -DENABLE_TESTS:BOOL=OFF
+        -DENABLE_EXAMPLES:BOOL=OFF
+        -DENABLE_STATIC:BOOL=${MONGO_ENABLE_STATIC}
+        -DENABLE_SHARED:BOOL=${MONGO_ENABLE_SHARED}
+        -DENABLE_ZSTD:STRING=OFF
+        -DENABLE_SNAPPY:STRING=OFF
+        -DENABLE_SRV:STRING=ON
+        ${MONGO_C_EXTRA_CACHE_ARGS}
 )

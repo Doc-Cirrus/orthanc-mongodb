@@ -1,0 +1,43 @@
+# Development shell: the sources are mounted from the host, the build
+# directory is kept in a volume. The Orthanc and PostgreSQL plugin sources
+# are set by ORTHANC_SOURCES and POSTGRESQL_SOURCES in ".env".
+#
+#   docker compose up -d dev
+#   docker compose exec dev bash
+#
+# In the shell, the MongoDB servers are $MONGO_URL (standalone) and
+# $MONGO_RS_URL (replica set), e.g. "./UnitTests "$MONGO_URL"".
+
+volumes:
+  build:
+    name: orthanc-mongodb-build
+
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+      target: dev
+    stdin_open: true
+    tty: true
+    command: bash
+    volumes:
+      - ../:/usr/local/src/:rw,delegated
+      - build:/usr/local/build
+      - type: bind
+        source: ${ORTHANC_SOURCES:-../../../orthanc/Orthanc-1.13.0}
+        target: /usr/local/orthanc
+      - type: bind
+        source: ${POSTGRESQL_SOURCES:-../../../orthanc/OrthancPostgreSQL-11.0}
+        target: /usr/local/orthanc-postgress
+    environment:
+      MONGO_URL: mongodb://database:27017/
+      MONGO_RS_URL: mongodb://database-rs:27017/?replicaSet=rs0
+    ports:
+      - ${ORTHANC_HTTP_PORT:-8042}:8042
+      - ${ORTHANC_DICOM_PORT:-4242}:4242
+    depends_on:
+      - database
+      - database-rs
+    networks:
+      local:
