@@ -42,7 +42,9 @@ if (ORTHANC_PLUGIN_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "hg")
 else()
   set(ORTHANC_FRAMEWORK_VERSION "1.13.0")
-  set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
+  # The source archive of Orthanc is in the repository, as orthanc.uclouvain.be is sometimes unreachable
+  set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "archive")
+  set(ORTHANC_FRAMEWORK_DEFAULT_ARCHIVE "${CMAKE_SOURCE_DIR}/../Resources/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz")
 endif()
 
 set(BUILD_TESTS ON CACHE BOOL "Build the unit tests")

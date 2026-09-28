@@ -30,7 +30,7 @@ This builds `libOrthancMongoDBIndex.so`, `libOrthancMongoDBStorage.so` and the `
 | `BUILD_TESTS` | `ON` | Build the `UnitTests` program. |
 | `PORTABLE_BUILD` | `OFF` | Plugins that only need glibc: the MongoDB C driver uses the static OpenSSL installed in `OPENSSL_ROOT_DIR`, no SASL (so no Kerberos) and its own copy of zlib, and libstdc++ and libgcc are linked statically. Needs `STATIC_BUILD` and `AUTO_INSTALL_DEPENDENCIES`. See [Portable build](#portable-build). |
 | `ENABLE_COVERAGE` | `OFF` | Instrument the plugins and the unit tests for code coverage (GCC, `--coverage`), see [Testing](./TESTING.md#code-coverage). |
-| `ORTHANC_FRAMEWORK_SOURCE` | `web` | Where to get the Orthanc framework 1.13.0: `web`, `hg`, `archive` (with `ORTHANC_FRAMEWORK_ARCHIVE`) or `path` (with `ORTHANC_FRAMEWORK_ROOT`). |
+| `ORTHANC_FRAMEWORK_SOURCE` | `archive` | Where to get the Orthanc framework 1.13.0: `archive` (with `ORTHANC_FRAMEWORK_ARCHIVE`, by default `Resources/Orthanc-1.13.0.tar.gz`, the source archive of Orthanc kept in the repository), `web`, `hg` or `path` (with `ORTHANC_FRAMEWORK_ROOT`). |
 | `USE_SYSTEM_ORTHANC_SDK` | `ON` | Use the Orthanc SDK headers of the system. With `OFF`, or with `STATIC_BUILD`, the copy of SDK 1.13.0 in `Resources/Orthanc/Sdk-1.13.0` is used. |
 
 ## Portable build

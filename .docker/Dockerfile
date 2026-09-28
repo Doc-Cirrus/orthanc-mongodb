@@ -61,23 +61,11 @@ RUN dnf -y install patch \
  && dnf clean all
 
 
-# Source archive of the Orthanc framework (ORTHANC_FRAMEWORK_VERSION of MongoDB/CMakeLists.txt),
-# downloaded with retries (CMake tries only once)
-FROM base AS orthanc-framework
-
-ARG ORTHANC_FRAMEWORK_VERSION=1.13.0
-
-RUN mkdir /downloads \
- && curl -fL --retry 5 --retry-all-errors --connect-timeout 30 \
-      https://orthanc.uclouvain.be/downloads/sources/orthanc/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz \
-      -o /downloads/Orthanc-${ORTHANC_FRAMEWORK_VERSION}.tar.gz
-
 # Files of MongoDB/ThirdPartyDownloads, where CMake uses them (after checking their MD5) instead of
-# downloading them: by default, the archive above. The pipeline replaces this stage by the downloads
-# of its previous builds ("--build-context third-party-downloads=<dir>", saved from the stages
-# "*-third-party-downloads"), as orthanc.uclouvain.be is sometimes unreachable from GitHub.
+# downloading them: none by default. The pipeline replaces this stage by the downloads of its previous
+# builds ("--build-context third-party-downloads=<dir>", saved from the stages "*-third-party-downloads"),
+# as orthanc.uclouvain.be is sometimes unreachable from GitHub.
 FROM scratch AS third-party-downloads
-COPY --from=orthanc-framework /downloads/ /
 
 
 FROM base AS dev
