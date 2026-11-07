@@ -35,7 +35,7 @@ namespace OrthancDatabases
   /**
    * "LookupResources()", the primitive behind the generic Find of
    * Orthanc while "supports_find" is off, and "AppendCandidates()", the
-   * start of the pipelines of "MongoDBFind".
+   * start of the pipelines of the integrated Find.
    *
    * The whole lookup is one aggregation pipeline, which needs MongoDB
    * 7.0 or later. The constraints are grouped by tag and level (all
