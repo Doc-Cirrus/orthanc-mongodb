@@ -3,7 +3,7 @@
 #
 #   docker-compose.override.dev.yaml.example      development shell
 #   docker-compose.override.runtime.yaml.example  Orthanc with the MongoDB plugins
-#   docker-compose.override.test.yaml.example     unit tests
+#   docker-compose.override.test.yaml.example     unit and integration tests
 #
 # Copy one of them to "docker-compose.override.yaml" and ".env.example" to
 # ".env", then run "docker compose" from this folder, which loads both files:
