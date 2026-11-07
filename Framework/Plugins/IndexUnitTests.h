@@ -1,14 +1,34 @@
-// Taken from https://hg.orthanc-server.com/orthanc-databases/
+/**
+ * Orthanc - A Lightweight, RESTful DICOM Store
+ * Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
+ * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+ * Department, University Hospital of Liege, Belgium
+ * Copyright (C) 2017-2023 Osimis S.A., Belgium
+ * Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+ * Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+ *
+ * This program is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU Affero General Public License
+ * as published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Affero General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ **/
 
 
 #pragma once
 
-#include "DatabaseBackendAdapterV2.h"
+#include "IndexBackend.h"
 #include "GlobalProperties.h"
 
 #include <Compatibility.h>  // For std::unique_ptr<>
-
-#include <orthanc/OrthancCDatabasePlugin.h>
+#include <SystemToolbox.h>
 
 #include <gtest/gtest.h>
 #include <list>
@@ -19,7 +39,38 @@
 #endif
 
 
-# define HAS_REVISIONS 1
+#if ORTHANC_ENABLE_POSTGRESQL == 1
+#  define HAS_REVISIONS 1
+// we can not test patient protection in PG because it is now deeply intricated in the CreateInstance function that is too difficult to call from here
+#  define CAN_TEST_PATIENT_PROTECTION 0
+#elif ORTHANC_ENABLE_MYSQL == 1
+#  define HAS_REVISIONS 0
+#  define CAN_TEST_PATIENT_PROTECTION 1
+#elif ORTHANC_ENABLE_SQLITE == 1
+#  define HAS_REVISIONS 1
+#  define CAN_TEST_PATIENT_PROTECTION 1
+#elif ORTHANC_ENABLE_ODBC == 1
+#  define HAS_REVISIONS 1
+#  define CAN_TEST_PATIENT_PROTECTION 1
+#elif ORTHANC_ENABLE_MONGODB == 1
+#  define HAS_REVISIONS 1
+#  define CAN_TEST_PATIENT_PROTECTION 1
+// Values over 15MB are stored in GridFS (cf. "LargeGlobalProperty")
+#  define CAN_TEST_LARGE_PROPERTIES 1
+// The cascade is implemented in "MongoDBResources::DeleteResource()"
+#  define CAN_TEST_CASCADE_DELETE 1
+#  include "../../MongoDB/UnitTests/MongoDBTestsToolbox.h"
+#else
+#  error Unknown database backend
+#endif
+
+#if !defined(CAN_TEST_LARGE_PROPERTIES)
+#  define CAN_TEST_LARGE_PROPERTIES 1
+#endif
+
+#if !defined(CAN_TEST_CASCADE_DELETE)
+#  define CAN_TEST_CASCADE_DELETE 1
+#endif
 
 
 namespace Orthanc
@@ -27,7 +78,7 @@ namespace Orthanc
   /**
    * Mock enumeration inspired from the source code of Orthanc... only
    * for use in the unit tests!
-   * https://hg.orthanc-server.com/orthanc/file/default/OrthancServer/Sources/ServerEnumerations.h
+   * https://orthanc.uclouvain.be/hg/orthanc/file/default/OrthancServer/Sources/ServerEnumerations.h
    **/
   enum MetadataType
   {
@@ -48,7 +99,7 @@ static const uint8_t UTF8[] = {
   0x48, 0x6f, 0x6e, 0x67, 0x5e, 0x47, 0x69, 0x6c, 0x64, 0x6f, 0x6e, 0x67, 0x3d, 0xe6,
   0xb4, 0xaa, 0x5e, 0xe5, 0x90, 0x89, 0xe6, 0xb4, 0x9e, 0x3d, 0xed, 0x99, 0x8d, 0x5e,
   0xea, 0xb8, 0xb8, 0xeb, 0x8f, 0x99,
-
+  
   // cf. TEST(Toolbox, EncodingsJapaneseKanji)
   0x59, 0x61, 0x6d, 0x61, 0x64, 0x61, 0x5e, 0x54, 0x61, 0x72, 0x6f, 0x75, 0x3d, 0xe5,
   0xb1, 0xb1, 0xe7, 0x94, 0xb0, 0x5e, 0xe5, 0xa4, 0xaa, 0xe9, 0x83, 0x8e, 0x3d, 0xe3,
@@ -113,65 +164,131 @@ static void CheckDicomTag(const OrthancPluginDicomTag& tag)
 
 
 
+/**
+ * Records the answers of the index backend into the global variables
+ * above. Upstream, this is done by the output of
+ * "DatabaseBackendAdapterV2", which is not compiled in this plugin
+ * since it only supports the V4 database SDK.
+ **/
+class TestOutput : public OrthancDatabases::IDatabaseBackendOutput
+{
+public:
+  class Factory : public IDatabaseBackendOutput::IFactory
+  {
+  public:
+    virtual IDatabaseBackendOutput* CreateOutput() ORTHANC_OVERRIDE
+    {
+      return new TestOutput;
+    }
+  };
+
+  virtual void SignalDeletedAttachment(const std::string& uuid,
+                                       int32_t            contentType,
+                                       uint64_t           uncompressedSize,
+                                       const std::string& uncompressedHash,
+                                       int32_t            compressionType,
+                                       uint64_t           compressedSize,
+                                       const std::string& compressedHash,
+                                       const std::string& customData) ORTHANC_OVERRIDE
+  {
+    deletedAttachments.insert(uuid);
+  }
+
+  virtual void SignalDeletedResource(const std::string& publicId,
+                                     OrthancPluginResourceType resourceType) ORTHANC_OVERRIDE
+  {
+    deletedResources[publicId] = resourceType;
+  }
+
+  virtual void SignalRemainingAncestor(const std::string& ancestorId,
+                                       OrthancPluginResourceType ancestorType) ORTHANC_OVERRIDE
+  {
+    remainingAncestor.reset(new std::pair<std::string, OrthancPluginResourceType>());
+    *remainingAncestor = std::make_pair(ancestorId, ancestorType);
+  }
+
+  virtual void AnswerAttachment(const std::string& uuid,
+                                int32_t            contentType,
+                                uint64_t           uncompressedSize,
+                                const std::string& uncompressedHash,
+                                int32_t            compressionType,
+                                uint64_t           compressedSize,
+                                const std::string& compressedHash,
+                                const std::string& customData) ORTHANC_OVERRIDE
+  {
+    OrthancPluginAttachment attachment;
+    attachment.uuid = uuid.c_str();
+    attachment.contentType = contentType;
+    attachment.uncompressedSize = uncompressedSize;
+    attachment.uncompressedHash = uncompressedHash.c_str();
+    attachment.compressionType = compressionType;
+    attachment.compressedSize = compressedSize;
+    attachment.compressedHash = compressedHash.c_str();
+    CheckAttachment(attachment);
+  }
+
+  virtual void AnswerChange(int64_t                    seq,
+                            int32_t                    changeType,
+                            OrthancPluginResourceType  resourceType,
+                            const std::string&         publicId,
+                            const std::string&         date) ORTHANC_OVERRIDE
+  {
+  }
+
+  virtual void AnswerDicomTag(uint16_t group,
+                              uint16_t element,
+                              const std::string& value) ORTHANC_OVERRIDE
+  {
+    OrthancPluginDicomTag tag;
+    tag.group = group;
+    tag.element = element;
+    tag.value = value.c_str();
+    CheckDicomTag(tag);
+    countDicomTags++;
+  }
+
+  virtual void AnswerExportedResource(int64_t                    seq,
+                                      OrthancPluginResourceType  resourceType,
+                                      const std::string&         publicId,
+                                      const std::string&         modality,
+                                      const std::string&         date,
+                                      const std::string&         patientId,
+                                      const std::string&         studyInstanceUid,
+                                      const std::string&         seriesInstanceUid,
+                                      const std::string&         sopInstanceUid) ORTHANC_OVERRIDE
+  {
+    OrthancPluginExportedResource exported;
+    exported.seq = seq;
+    exported.resourceType = resourceType;
+    exported.publicId = publicId.c_str();
+    exported.modality = modality.c_str();
+    exported.date = date.c_str();
+    exported.patientId = patientId.c_str();
+    exported.studyInstanceUid = studyInstanceUid.c_str();
+    exported.seriesInstanceUid = seriesInstanceUid.c_str();
+    exported.sopInstanceUid = sopInstanceUid.c_str();
+    CheckExportedResource(exported);
+  }
+
+#if ORTHANC_PLUGINS_HAS_DATABASE_CONSTRAINT == 1
+  virtual void AnswerMatchingResource(const std::string& resourceId) ORTHANC_OVERRIDE
+  {
+  }
+
+  virtual void AnswerMatchingResource(const std::string& resourceId,
+                                      const std::string& someInstanceId) ORTHANC_OVERRIDE
+  {
+  }
+#endif
+};
+
+
 static OrthancPluginErrorCode InvokeService(struct _OrthancPluginContext_t* context,
                                             _OrthancPluginService service,
                                             const void* params)
 {
   switch (service)
   {
-    case _OrthancPluginService_DatabaseAnswer:
-    {
-      const _OrthancPluginDatabaseAnswer& answer =
-        *reinterpret_cast<const _OrthancPluginDatabaseAnswer*>(params);
-
-      switch (answer.type)
-      {
-        case _OrthancPluginDatabaseAnswerType_Attachment:
-        {
-          const OrthancPluginAttachment& attachment =
-            *reinterpret_cast<const OrthancPluginAttachment*>(answer.valueGeneric);
-          CheckAttachment(attachment);
-          break;
-        }
-
-        case _OrthancPluginDatabaseAnswerType_ExportedResource:
-        {
-          const OrthancPluginExportedResource& attachment =
-            *reinterpret_cast<const OrthancPluginExportedResource*>(answer.valueGeneric);
-          CheckExportedResource(attachment);
-          break;
-        }
-
-        case _OrthancPluginDatabaseAnswerType_DicomTag:
-        {
-          const OrthancPluginDicomTag& tag =
-            *reinterpret_cast<const OrthancPluginDicomTag*>(answer.valueGeneric);
-          CheckDicomTag(tag);
-          countDicomTags++;
-          break;
-        }
-
-        case _OrthancPluginDatabaseAnswerType_DeletedResource:
-          deletedResources[answer.valueString] = static_cast<OrthancPluginResourceType>(answer.valueInt32);
-          break;
-
-        case _OrthancPluginDatabaseAnswerType_RemainingAncestor:
-          remainingAncestor.reset(new std::pair<std::string, OrthancPluginResourceType>());
-          *remainingAncestor = std::make_pair(answer.valueString, static_cast<OrthancPluginResourceType>(answer.valueInt32));
-          break;
-
-        case _OrthancPluginDatabaseAnswerType_DeletedAttachment:
-          deletedAttachments.insert(reinterpret_cast<const OrthancPluginAttachment*>(answer.valueGeneric)->uuid);
-          break;
-
-        default:
-          printf("Unhandled message: %d\n", answer.type);
-          break;
-      }
-
-      return OrthancPluginErrorCode_Success;
-    }
-
     case _OrthancPluginService_GetExpectedDatabaseVersion:
     {
       const _OrthancPluginReturnSingleValue& p =
@@ -188,6 +305,102 @@ static OrthancPluginErrorCode InvokeService(struct _OrthancPluginContext_t* cont
 }
 
 
+#if ORTHANC_PLUGINS_HAS_KEY_VALUE_STORES == 1
+static void ListKeys(std::set<std::string>& keys,
+                     OrthancDatabases::IndexBackend& db,
+                     OrthancDatabases::DatabaseManager& manager,
+                     const std::string& storeId)
+{
+  {
+    Orthanc::DatabasePluginMessages::ListKeysValues_Request request;
+    request.set_store_id(storeId);
+    request.set_from_first(true);
+    request.set_limit(0);
+
+    Orthanc::DatabasePluginMessages::TransactionResponse response;
+    db.ListKeysValues(response, manager, request);
+
+    keys.clear();
+
+    for (int i = 0; i < response.list_keys_values().keys_values_size(); i++)
+    {
+      const Orthanc::DatabasePluginMessages::ListKeysValues_Response_KeyValue& item = response.list_keys_values().keys_values(i);
+      keys.insert(item.key());
+
+      std::string value;
+      if (!db.GetKeyValue(value, manager, storeId, item.key()) ||
+          value != item.value())
+      {
+        ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+      }
+    }
+  }
+
+  {
+    std::set<std::string> keys2;
+
+    // Alternative implementation using an iterator
+    Orthanc::DatabasePluginMessages::ListKeysValues_Request request;
+    request.set_store_id(storeId);
+    request.set_from_first(true);
+    request.set_limit(1);
+
+    Orthanc::DatabasePluginMessages::TransactionResponse response;
+    db.ListKeysValues(response, manager, request);
+
+    while (response.list_keys_values().keys_values_size() > 0)
+    {
+      int count = response.list_keys_values().keys_values_size();
+
+      for (int i = 0; i < count; i++)
+      {
+        keys2.insert(response.list_keys_values().keys_values(i).key());
+      }
+
+      request.set_from_first(false);
+      request.set_from_key(response.list_keys_values().keys_values(count - 1).key());
+      db.ListKeysValues(response, manager, request);
+    }
+
+    if (keys.size() != keys2.size())
+    {
+      ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+    }
+    else
+    {
+      for (std::set<std::string>::const_iterator it = keys.begin(); it != keys.end(); ++it)
+      {
+        if (keys2.find(*it) == keys2.end())
+        {
+          ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+        }
+      }
+    }
+  }
+}
+#endif
+
+
+static void FillBlob(std::string& blob)
+{
+  blob.clear();
+  blob.push_back(0);
+  blob.push_back(1);
+  blob.push_back(0);
+  blob.push_back(2);
+}
+
+
+static void CheckBlob(const std::string& s)
+{
+  ASSERT_EQ(4u, s.size());
+  ASSERT_EQ(0u, static_cast<uint8_t>(s[0]));
+  ASSERT_EQ(1u, static_cast<uint8_t>(s[1]));
+  ASSERT_EQ(0u, static_cast<uint8_t>(s[2]));
+  ASSERT_EQ(2u, static_cast<uint8_t>(s[3]));
+}
+
+
 TEST(IndexBackend, Basic)
 {
   using namespace OrthancDatabases;
@@ -199,89 +412,99 @@ TEST(IndexBackend, Basic)
   context.InvokeService = InvokeService;
 
 #if ORTHANC_ENABLE_POSTGRESQL == 1
-  PostgreSQLIndex db(&context, globalParameters_);
+  PostgreSQLIndex db(&context, globalParameters_, false);
   db.SetClearAll(true);
 #elif ORTHANC_ENABLE_MYSQL == 1
-  MySQLIndex db(&context, globalParameters_);
+  MySQLIndex db(&context, globalParameters_, false);
   db.SetClearAll(true);
 #elif ORTHANC_ENABLE_ODBC == 1
-  OdbcIndex db(&context, connectionString_);
+  OdbcIndex db(&context, connectionString_, false);
+#elif ORTHANC_ENABLE_MONGODB == 1
+  TestDatabase testDatabase;  // Dropped once "db" is destroyed
+  MongoDBIndex db(&context, CreateTestParameters(testDatabase.GetUri()), false);
 #elif ORTHANC_ENABLE_SQLITE == 1  // Must be the last one
   SQLiteIndex db(&context);  // Open in memory
 #else
 #  error Unsupported database backend
 #endif
 
-  db.SetOutputFactory(new DatabaseBackendAdapterV2::Factory(&context, NULL));
+  db.SetOutputFactory(new TestOutput::Factory);
 
-  std::unique_ptr<DatabaseManager> manager(IndexBackend::CreateSingleDatabaseManager(db));
-
+  std::list<IdentifierTag> identifierTags;
+  std::unique_ptr<DatabaseManager> manager(IndexBackend::CreateSingleDatabaseManager(db, false, identifierTags));
+  
   std::unique_ptr<IDatabaseBackendOutput> output(db.CreateOutput());
 
-  std::string s;
-  ASSERT_TRUE(db.LookupGlobalProperty(s, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseSchemaVersion));
-  ASSERT_EQ("6", s);
+  {
+    // Sanity check
+    std::string blob;
+    FillBlob(blob);
+    CheckBlob(blob);
+  }
+
+  std::string a;
+  ASSERT_TRUE(db.LookupGlobalProperty(a, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseSchemaVersion));
+  ASSERT_EQ("6", a);
 
   db.SetGlobalProperty(*manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9, "Hello");
-  ASSERT_TRUE(db.LookupGlobalProperty(s, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9));
-  ASSERT_EQ("Hello", s);
+  ASSERT_TRUE(db.LookupGlobalProperty(a, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9));
+  ASSERT_EQ("Hello", a);
   db.SetGlobalProperty(*manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9, "HelloWorld");
-  ASSERT_TRUE(db.LookupGlobalProperty(s, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9));
-  ASSERT_EQ("HelloWorld", s);
+  ASSERT_TRUE(db.LookupGlobalProperty(a, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal9));
+  ASSERT_EQ("HelloWorld", a);
 
   ASSERT_EQ(0u, db.GetAllResourcesCount(*manager));
   ASSERT_EQ(0u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Patient));
   ASSERT_EQ(0u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Study));
   ASSERT_EQ(0u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Series));
 
-  int64_t a = db.CreateResource(*manager, "study", OrthancPluginResourceType_Study);
-  ASSERT_TRUE(db.IsExistingResource(*manager, a));
-  ASSERT_FALSE(db.IsExistingResource(*manager, a + 1));
+  int64_t studyId = db.CreateResource(*manager, "study", OrthancPluginResourceType_Study);
+  ASSERT_TRUE(db.IsExistingResource(*manager, studyId));
+  ASSERT_FALSE(db.IsExistingResource(*manager, studyId + 1));
 
-  int64_t b;
+  int64_t tmp;
   OrthancPluginResourceType t;
-  ASSERT_FALSE(db.LookupResource(b, t, *manager, "world"));
-  ASSERT_TRUE(db.LookupResource(b, t, *manager, "study"));
-  ASSERT_EQ(a, b);
+  ASSERT_FALSE(db.LookupResource(tmp, t, *manager, "world"));
+  ASSERT_TRUE(db.LookupResource(tmp, t, *manager, "study"));
+  ASSERT_EQ(studyId, tmp);
   ASSERT_EQ(OrthancPluginResourceType_Study, t);
+  
+  int64_t seriesId = db.CreateResource(*manager, "series", OrthancPluginResourceType_Series);
+  ASSERT_NE(studyId, seriesId);
 
-  b = db.CreateResource(*manager, "series", OrthancPluginResourceType_Series);
-  ASSERT_NE(a, b);
+  ASSERT_EQ("study", db.GetPublicId(*manager, studyId));
+  ASSERT_EQ("series", db.GetPublicId(*manager, seriesId));
+  ASSERT_EQ(OrthancPluginResourceType_Study, db.GetResourceType(*manager, studyId));
+  ASSERT_EQ(OrthancPluginResourceType_Series, db.GetResourceType(*manager, seriesId));
 
-  ASSERT_EQ("study", db.GetPublicId(*manager, a));
-  ASSERT_EQ("series", db.GetPublicId(*manager, b));
-  ASSERT_EQ(OrthancPluginResourceType_Study, db.GetResourceType(*manager, a));
-  ASSERT_EQ(OrthancPluginResourceType_Series, db.GetResourceType(*manager, b));
+  db.AttachChild(*manager, studyId, seriesId);
 
-  db.AttachChild(*manager, a, b);
+  ASSERT_FALSE(db.LookupParent(tmp, *manager, studyId));
+  ASSERT_TRUE(db.LookupParent(tmp, *manager, seriesId));
+  ASSERT_EQ(studyId, tmp);
 
-  int64_t c;
-  ASSERT_FALSE(db.LookupParent(c, *manager, a));
-  ASSERT_TRUE(db.LookupParent(c, *manager, b));
-  ASSERT_EQ(a, c);
-
-  c = db.CreateResource(*manager, "series2", OrthancPluginResourceType_Series);
-  db.AttachChild(*manager, a, c);
+  int64_t series2Id = db.CreateResource(*manager, "series2", OrthancPluginResourceType_Series);
+  db.AttachChild(*manager, studyId, series2Id);
 
   ASSERT_EQ(3u, db.GetAllResourcesCount(*manager));
   ASSERT_EQ(0u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Patient));
   ASSERT_EQ(1u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Study));
   ASSERT_EQ(2u, db.GetResourcesCount(*manager, OrthancPluginResourceType_Series));
 
-  ASSERT_FALSE(db.GetParentPublicId(s, *manager, a));
-  ASSERT_TRUE(db.GetParentPublicId(s, *manager, b));  ASSERT_EQ("study", s);
-  ASSERT_TRUE(db.GetParentPublicId(s, *manager, c));  ASSERT_EQ("study", s);
+  ASSERT_FALSE(db.GetParentPublicId(a, *manager, studyId));
+  ASSERT_TRUE(db.GetParentPublicId(a, *manager, seriesId));  ASSERT_EQ("study", a);
+  ASSERT_TRUE(db.GetParentPublicId(a, *manager, series2Id));  ASSERT_EQ("study", a);
 
   std::list<std::string> children;
-  db.GetChildren(children, *manager, a);
+  db.GetChildren(children, *manager, studyId);
   ASSERT_EQ(2u, children.size());
-  db.GetChildren(children, *manager, b);
+  db.GetChildren(children, *manager, seriesId);
   ASSERT_EQ(0u, children.size());
-  db.GetChildren(children, *manager, c);
+  db.GetChildren(children, *manager, series2Id);
   ASSERT_EQ(0u, children.size());
 
   std::list<std::string> cp;
-  db.GetChildrenPublicId(cp, *manager, a);
+  db.GetChildrenPublicId(cp, *manager, studyId);
   ASSERT_EQ(2u, cp.size());
   ASSERT_TRUE(cp.front() == "series" || cp.front() == "series2");
   ASSERT_TRUE(cp.back() == "series" || cp.back() == "series2");
@@ -300,18 +523,18 @@ TEST(IndexBackend, Basic)
   ASSERT_NE(pub.front(), pub.back());
 
   std::list<int64_t> ci;
-  db.GetChildrenInternalId(ci, *manager, a);
+  db.GetChildrenInternalId(ci, *manager, studyId);
   ASSERT_EQ(2u, ci.size());
-  ASSERT_TRUE(ci.front() == b || ci.front() == c);
-  ASSERT_TRUE(ci.back() == b || ci.back() == c);
+  ASSERT_TRUE(ci.front() == seriesId || ci.front() == series2Id);
+  ASSERT_TRUE(ci.back() == seriesId || ci.back() == series2Id);
   ASSERT_NE(ci.front(), ci.back());
 
-  db.SetMetadata(*manager, a, Orthanc::MetadataType_ModifiedFrom, "modified", 42);
-  db.SetMetadata(*manager, a, Orthanc::MetadataType_LastUpdate, "update2", 43);
+  db.SetMetadata(*manager, studyId, Orthanc::MetadataType_ModifiedFrom, "modified", 42);
+  db.SetMetadata(*manager, studyId, Orthanc::MetadataType_LastUpdate, "update2", 43);
   int64_t revision = -1;
-  ASSERT_FALSE(db.LookupMetadata(s, revision, *manager, b, Orthanc::MetadataType_LastUpdate));
-  ASSERT_TRUE(db.LookupMetadata(s, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
-  ASSERT_EQ("update2", s);
+  ASSERT_FALSE(db.LookupMetadata(a, revision, *manager, seriesId, Orthanc::MetadataType_LastUpdate));
+  ASSERT_TRUE(db.LookupMetadata(a, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
+  ASSERT_EQ("update2", a);
 
 #if HAS_REVISIONS == 1
   ASSERT_EQ(43, revision);
@@ -319,9 +542,9 @@ TEST(IndexBackend, Basic)
   ASSERT_EQ(0, revision);
 #endif
 
-  db.SetMetadata(*manager, a, Orthanc::MetadataType_LastUpdate, reinterpret_cast<const char*>(UTF8), 44);
-  ASSERT_TRUE(db.LookupMetadata(s, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
-  ASSERT_STREQ(reinterpret_cast<const char*>(UTF8), s.c_str());
+  db.SetMetadata(*manager, studyId, Orthanc::MetadataType_LastUpdate, reinterpret_cast<const char*>(UTF8), 44);
+  ASSERT_TRUE(db.LookupMetadata(a, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
+  ASSERT_STREQ(reinterpret_cast<const char*>(UTF8), a.c_str());
 
 #if HAS_REVISIONS == 1
   ASSERT_EQ(44, revision);
@@ -330,12 +553,12 @@ TEST(IndexBackend, Basic)
 #endif
 
   std::list<int32_t> md;
-  db.ListAvailableMetadata(md, *manager, a);
+  db.ListAvailableMetadata(md, *manager, studyId);
   ASSERT_EQ(2u, md.size());
   ASSERT_TRUE(md.front() == Orthanc::MetadataType_ModifiedFrom || md.back() == Orthanc::MetadataType_ModifiedFrom);
   ASSERT_TRUE(md.front() == Orthanc::MetadataType_LastUpdate || md.back() == Orthanc::MetadataType_LastUpdate);
   std::string mdd;
-  ASSERT_TRUE(db.LookupMetadata(mdd, revision, *manager, a, Orthanc::MetadataType_ModifiedFrom));
+  ASSERT_TRUE(db.LookupMetadata(mdd, revision, *manager, studyId, Orthanc::MetadataType_ModifiedFrom));
   ASSERT_EQ("modified", mdd);
 
 #if HAS_REVISIONS == 1
@@ -344,7 +567,7 @@ TEST(IndexBackend, Basic)
   ASSERT_EQ(0, revision);
 #endif
 
-  ASSERT_TRUE(db.LookupMetadata(mdd, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
+  ASSERT_TRUE(db.LookupMetadata(mdd, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
   ASSERT_EQ(reinterpret_cast<const char*>(UTF8), mdd);
 
 #if HAS_REVISIONS == 1
@@ -353,16 +576,16 @@ TEST(IndexBackend, Basic)
   ASSERT_EQ(0, revision);
 #endif
 
-  db.ListAvailableMetadata(md, *manager, b);
+  db.ListAvailableMetadata(md, *manager, seriesId);
   ASSERT_EQ(0u, md.size());
 
-  ASSERT_TRUE(db.LookupMetadata(s, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
-  db.DeleteMetadata(*manager, a, Orthanc::MetadataType_LastUpdate);
-  ASSERT_FALSE(db.LookupMetadata(s, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
-  db.DeleteMetadata(*manager, b, Orthanc::MetadataType_LastUpdate);
-  ASSERT_FALSE(db.LookupMetadata(s, revision, *manager, a, Orthanc::MetadataType_LastUpdate));
+  ASSERT_TRUE(db.LookupMetadata(a, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
+  db.DeleteMetadata(*manager, studyId, Orthanc::MetadataType_LastUpdate);
+  ASSERT_FALSE(db.LookupMetadata(a, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
+  db.DeleteMetadata(*manager, seriesId, Orthanc::MetadataType_LastUpdate);
+  ASSERT_FALSE(db.LookupMetadata(a, revision, *manager, studyId, Orthanc::MetadataType_LastUpdate));
 
-  db.ListAvailableMetadata(md, *manager, a);
+  db.ListAvailableMetadata(md, *manager, studyId);
   ASSERT_EQ(1u, md.size());
   ASSERT_EQ(Orthanc::MetadataType_ModifiedFrom, md.front());
 
@@ -372,32 +595,70 @@ TEST(IndexBackend, Basic)
 
   std::list<int32_t> fc;
 
-  OrthancPluginAttachment a1;
-  a1.uuid = "uuid1";
-  a1.contentType = Orthanc::FileContentType_Dicom;
-  a1.uncompressedSize = 42;
-  a1.uncompressedHash = "md5_1";
-  a1.compressionType = Orthanc::CompressionType_None;
-  a1.compressedSize = 42;
-  a1.compressedHash = "md5_1";
+  OrthancPluginAttachment att1;
+  att1.uuid = "uuid1";
+  att1.contentType = Orthanc::FileContentType_Dicom;
+  att1.uncompressedSize = 42;
+  att1.uncompressedHash = "md5_1";
+  att1.compressionType = Orthanc::CompressionType_None;
+  att1.compressedSize = 42;
+  att1.compressedHash = "md5_1";
+    
+  OrthancPluginAttachment att2;
+  att2.uuid = "uuid2";
+  att2.contentType = Orthanc::FileContentType_DicomAsJson;
+  att2.uncompressedSize = 4242;
+  att2.uncompressedHash = "md5_2";
+  att2.compressionType = Orthanc::CompressionType_None;
+  att2.compressedSize = 4242;
+  att2.compressedHash = "md5_2";
+    
+#if ORTHANC_PLUGINS_HAS_ATTACHMENTS_CUSTOM_DATA == 1
+  if (db.HasAttachmentCustomDataSupport())
+  {
+    db.AddAttachment(*manager, studyId, att1, 42, "my_custom_data");
+    db.ListAvailableAttachments(fc, *manager, studyId);
+  }
+  else
+#endif
+  {
+    db.AddAttachment(*manager, studyId, att1, 42);
+  }
 
-  OrthancPluginAttachment a2;
-  a2.uuid = "uuid2";
-  a2.contentType = Orthanc::FileContentType_DicomAsJson;
-  a2.uncompressedSize = 4242;
-  a2.uncompressedHash = "md5_2";
-  a2.compressionType = Orthanc::CompressionType_None;
-  a2.compressedSize = 4242;
-  a2.compressedHash = "md5_2";
-
-  db.AddAttachment(*manager, a, a1, 42);
-  db.ListAvailableAttachments(fc, *manager, a);
+  db.ListAvailableAttachments(fc, *manager, studyId);
   ASSERT_EQ(1u, fc.size());
   ASSERT_EQ(Orthanc::FileContentType_Dicom, fc.front());
-  db.AddAttachment(*manager, a, a2, 43);
-  db.ListAvailableAttachments(fc, *manager, a);
+  db.AddAttachment(*manager, studyId, att2, 43);
+  db.ListAvailableAttachments(fc, *manager, studyId);
   ASSERT_EQ(2u, fc.size());
-  ASSERT_FALSE(db.LookupAttachment(*output, revision, *manager, b, Orthanc::FileContentType_Dicom));
+  ASSERT_FALSE(db.LookupAttachment(*output, revision, *manager, seriesId, Orthanc::FileContentType_Dicom));
+
+#if ORTHANC_PLUGINS_HAS_ATTACHMENTS_CUSTOM_DATA == 1
+  if (db.HasAttachmentCustomDataSupport())
+  {
+    std::string s;
+    ASSERT_THROW(db.GetAttachmentCustomData(s, *manager, "nope"), Orthanc::OrthancException);
+
+    db.GetAttachmentCustomData(s, *manager, "uuid1");
+    ASSERT_EQ("my_custom_data", s);
+
+    db.GetAttachmentCustomData(s, *manager, "uuid2");
+    ASSERT_TRUE(s.empty());
+
+    {
+      std::string blob;
+      FillBlob(blob);
+      db.SetAttachmentCustomData(*manager, "uuid1", blob);
+    }
+
+    db.GetAttachmentCustomData(s, *manager, "uuid1");
+    CheckBlob(s);
+
+    db.SetAttachmentCustomData(*manager, "uuid1", "");
+    db.GetAttachmentCustomData(s, *manager, "uuid1");
+    ASSERT_TRUE(s.empty());
+  }
+#endif
 
   ASSERT_EQ(4284u, db.GetTotalCompressedSize(*manager));
   ASSERT_EQ(4284u, db.GetTotalUncompressedSize(*manager));
@@ -410,7 +671,7 @@ TEST(IndexBackend, Basic)
   expectedAttachment->compressionType = Orthanc::CompressionType_None;
   expectedAttachment->compressedSize = 42;
   expectedAttachment->compressedHash = "md5_1";
-  ASSERT_TRUE(db.LookupAttachment(*output, revision, *manager, a, Orthanc::FileContentType_Dicom));
+  ASSERT_TRUE(db.LookupAttachment(*output, revision, *manager, studyId, Orthanc::FileContentType_Dicom));
 
 #if HAS_REVISIONS == 1
   ASSERT_EQ(42, revision);
@@ -427,7 +688,7 @@ TEST(IndexBackend, Basic)
   expectedAttachment->compressedSize = 4242;
   expectedAttachment->compressedHash = "md5_2";
   revision = -1;
-  ASSERT_TRUE(db.LookupAttachment(*output, revision, *manager, a, Orthanc::FileContentType_DicomAsJson));
+  ASSERT_TRUE(db.LookupAttachment(*output, revision, *manager, studyId, Orthanc::FileContentType_DicomAsJson));
 
 #if HAS_REVISIONS == 1
   ASSERT_EQ(43, revision);
@@ -435,21 +696,21 @@ TEST(IndexBackend, Basic)
   ASSERT_EQ(0, revision);
 #endif
 
-  db.ListAvailableAttachments(fc, *manager, b);
+  db.ListAvailableAttachments(fc, *manager, seriesId);
   ASSERT_EQ(0u, fc.size());
-  db.DeleteAttachment(*output, *manager, a, Orthanc::FileContentType_Dicom);
-  db.ListAvailableAttachments(fc, *manager, a);
+  db.DeleteAttachment(*output, *manager, studyId, Orthanc::FileContentType_Dicom);
+  db.ListAvailableAttachments(fc, *manager, studyId);
   ASSERT_EQ(1u, fc.size());
   ASSERT_EQ(Orthanc::FileContentType_DicomAsJson, fc.front());
-  db.DeleteAttachment(*output, *manager, a, Orthanc::FileContentType_DicomAsJson);
-  db.ListAvailableAttachments(fc, *manager, a);
+  db.DeleteAttachment(*output, *manager, studyId, Orthanc::FileContentType_DicomAsJson);
+  db.ListAvailableAttachments(fc, *manager, studyId);
   ASSERT_EQ(0u, fc.size());
 
-  db.SetIdentifierTag(*manager, a, 0x0010, 0x0020, "patient");
-  db.SetIdentifierTag(*manager, a, 0x0020, 0x000d, "study");
-  db.SetMainDicomTag(*manager, a, 0x0010, 0x0020, "patient");
-  db.SetMainDicomTag(*manager, a, 0x0020, 0x000d, "study");
-  db.SetMainDicomTag(*manager, a, 0x0008, 0x1030, reinterpret_cast<const char*>(UTF8));
+  db.SetIdentifierTag(*manager, studyId, 0x0010, 0x0020, "patient");
+  db.SetIdentifierTag(*manager, studyId, 0x0020, 0x000d, "study");
+  db.SetMainDicomTag(*manager, studyId, 0x0010, 0x0020, "patient");
+  db.SetMainDicomTag(*manager, studyId, 0x0020, 0x000d, "study");
+  db.SetMainDicomTag(*manager, studyId, 0x0008, 0x1030, reinterpret_cast<const char*>(UTF8));
 
   expectedDicomTags.clear();
   expectedDicomTags.push_back(OrthancPluginDicomTag());
@@ -466,36 +727,35 @@ TEST(IndexBackend, Basic)
   expectedDicomTags.back().value = reinterpret_cast<const char*>(UTF8);
 
   countDicomTags = 0;
-  db.GetMainDicomTags(*output, *manager, a);
+  db.GetMainDicomTags(*output, *manager, studyId);
   ASSERT_EQ(3u, countDicomTags);
 
-  db.LookupIdentifier(ci, *manager, OrthancPluginResourceType_Study, 0x0010, 0x0020,
+  db.LookupIdentifier(ci, *manager, OrthancPluginResourceType_Study, 0x0010, 0x0020, 
                       OrthancPluginIdentifierConstraint_Equal, "patient");
   ASSERT_EQ(1u, ci.size());
-  ASSERT_EQ(a, ci.front());
-  db.LookupIdentifier(ci, *manager, OrthancPluginResourceType_Study, 0x0010, 0x0020,
+  ASSERT_EQ(studyId, ci.front());
+  db.LookupIdentifier(ci, *manager, OrthancPluginResourceType_Study, 0x0010, 0x0020, 
                       OrthancPluginIdentifierConstraint_Equal, "study");
   ASSERT_EQ(0u, ci.size());
 
 
-  OrthancPluginExportedResource exp;
-  exp.seq = -1;
-  exp.resourceType = OrthancPluginResourceType_Study;
-  exp.publicId = "id";
-  exp.modality = "remote";
-  exp.date = "date";
-  exp.patientId = "patient";
-  exp.studyInstanceUid = "study";
-  exp.seriesInstanceUid = "series";
-  exp.sopInstanceUid = "instance";
-  db.LogExportedResource(*manager, exp);
+  db.LogExportedResource(*manager, OrthancPluginResourceType_Study, "id", "remote", "date",
+                         "patient", "study", "series", "instance");
 
   expectedExported.reset(new OrthancPluginExportedResource());
-  *expectedExported = exp;
+  expectedExported->seq = -1;
+  expectedExported->resourceType = OrthancPluginResourceType_Study;
+  expectedExported->publicId = "id";
+  expectedExported->modality = "remote";
+  expectedExported->date = "date";
+  expectedExported->patientId = "patient";
+  expectedExported->studyInstanceUid = "study";
+  expectedExported->seriesInstanceUid = "series";
+  expectedExported->sopInstanceUid = "instance";
 
   bool done;
   db.GetExportedResources(*output, done, *manager, 0, 10);
-
+  
 
   db.GetAllPublicIds(pub, *manager, OrthancPluginResourceType_Patient); ASSERT_EQ(0u, pub.size());
   db.GetAllPublicIds(pub, *manager, OrthancPluginResourceType_Study); ASSERT_EQ(1u, pub.size());
@@ -503,8 +763,11 @@ TEST(IndexBackend, Basic)
   db.GetAllPublicIds(pub, *manager, OrthancPluginResourceType_Instance); ASSERT_EQ(0u, pub.size());
   ASSERT_EQ(3u, db.GetAllResourcesCount(*manager));
 
-  ASSERT_EQ(0u, db.GetUnprotectedPatientsCount(*manager));  // No patient was inserted
-  ASSERT_TRUE(db.IsExistingResource(*manager, c));
+  #if CAN_TEST_PATIENT_PROTECTION == 1
+    ASSERT_EQ(0u, db.GetUnprotectedPatientsCount(*manager));  // No patient was inserted
+  #endif
+
+  ASSERT_TRUE(db.IsExistingResource(*manager, series2Id));
 
   {
     // A transaction is needed here for MySQL, as it was not possible
@@ -515,8 +778,8 @@ TEST(IndexBackend, Basic)
     deletedAttachments.clear();
     deletedResources.clear();
     remainingAncestor.reset();
-
-    db.DeleteResource(*output, *manager, c);
+    
+    db.DeleteResource(*output, *manager, series2Id);
 
     ASSERT_EQ(0u, deletedAttachments.size());
     ASSERT_EQ(1u, deletedResources.size());
@@ -524,31 +787,39 @@ TEST(IndexBackend, Basic)
     ASSERT_TRUE(remainingAncestor.get() != NULL);
     ASSERT_EQ("study", remainingAncestor->first);
     ASSERT_EQ(OrthancPluginResourceType_Study, remainingAncestor->second);
-
+    
     manager->CommitTransaction();
   }
-
+  
   deletedAttachments.clear();
   deletedResources.clear();
   remainingAncestor.reset();
 
-  ASSERT_FALSE(db.IsExistingResource(*manager, c));
-  ASSERT_TRUE(db.IsExistingResource(*manager, a));
-  ASSERT_TRUE(db.IsExistingResource(*manager, b));
+  ASSERT_FALSE(db.IsExistingResource(*manager, series2Id));
+  ASSERT_TRUE(db.IsExistingResource(*manager, studyId));
+  ASSERT_TRUE(db.IsExistingResource(*manager, seriesId));
   ASSERT_EQ(2u, db.GetAllResourcesCount(*manager));
-  db.DeleteResource(*output, *manager, a);
+
+  {
+    // An explicit transaction is needed here
+    manager->StartTransaction(TransactionType_ReadWrite);
+    db.DeleteResource(*output, *manager, studyId);  // delete the study that only has one series left -> 2 resources shall be deleted
+    manager->CommitTransaction();
+  }
+
   ASSERT_EQ(0u, db.GetAllResourcesCount(*manager));
-  ASSERT_FALSE(db.IsExistingResource(*manager, a));
-  ASSERT_FALSE(db.IsExistingResource(*manager, b));
-  ASSERT_FALSE(db.IsExistingResource(*manager, c));
+  ASSERT_FALSE(db.IsExistingResource(*manager, studyId));
+  ASSERT_FALSE(db.IsExistingResource(*manager, seriesId));
+  ASSERT_FALSE(db.IsExistingResource(*manager, series2Id));
 
   ASSERT_EQ(0u, deletedAttachments.size());
   ASSERT_EQ(2u, deletedResources.size());
   ASSERT_EQ(OrthancPluginResourceType_Series, deletedResources["series"]);
   ASSERT_EQ(OrthancPluginResourceType_Study, deletedResources["study"]);
   ASSERT_FALSE(remainingAncestor.get() != NULL);
-
+  
   ASSERT_EQ(0u, db.GetAllResourcesCount(*manager));
+#if CAN_TEST_PATIENT_PROTECTION == 1
   ASSERT_EQ(0u, db.GetUnprotectedPatientsCount(*manager));
   int64_t p1 = db.CreateResource(*manager, "patient1", OrthancPluginResourceType_Patient);
   int64_t p2 = db.CreateResource(*manager, "patient2", OrthancPluginResourceType_Patient);
@@ -568,10 +839,26 @@ TEST(IndexBackend, Basic)
   ASSERT_FALSE(db.IsProtectedPatient(*manager, p1));
   ASSERT_TRUE(db.SelectPatientToRecycle(r, *manager));
   ASSERT_EQ(p2, r);
-  db.DeleteResource(*output, *manager, p2);
+
+  {
+    // An explicit transaction is needed here
+    manager->StartTransaction(TransactionType_ReadWrite);
+    db.DeleteResource(*output, *manager, p2);
+    manager->CommitTransaction();
+  }
+
   ASSERT_TRUE(db.SelectPatientToRecycle(r, *manager, p3));
   ASSERT_EQ(p1, r);
 
+  {
+    manager->StartTransaction(TransactionType_ReadWrite);
+    db.DeleteResource(*output, *manager, p1);
+    db.DeleteResource(*output, *manager, p3);
+    manager->CommitTransaction();
+  }
+#endif
+
+#if CAN_TEST_LARGE_PROPERTIES == 1
   {
     // Test creating a large property of 16MB (large properties are
     // notably necessary to serialize jobs)
@@ -589,18 +876,16 @@ TEST(IndexBackend, Basic)
     // column in "ServerProperties" is "TEXT" instead of "LONGTEXT"
     db.SetGlobalProperty(*manager, "some-server", Orthanc::GlobalProperty_DatabaseInternal8, longProperty.c_str());
 
-    std::string tmp;
-    ASSERT_TRUE(db.LookupGlobalProperty(tmp, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal8));
-    ASSERT_EQ(longProperty, tmp);
+    ASSERT_TRUE(db.LookupGlobalProperty(a, *manager, MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseInternal8));
+    ASSERT_EQ(longProperty, a);
 
-    tmp.clear();
-    ASSERT_TRUE(db.LookupGlobalProperty(tmp, *manager, "some-server", Orthanc::GlobalProperty_DatabaseInternal8));
-    ASSERT_EQ(longProperty, tmp);
+    a.clear();
+    ASSERT_TRUE(db.LookupGlobalProperty(a, *manager, "some-server", Orthanc::GlobalProperty_DatabaseInternal8));
+    ASSERT_EQ(longProperty, a);
   }
+#endif
 
-  db.DeleteResource(*output, *manager, p1);
-  db.DeleteResource(*output, *manager, p3);
-
+#if CAN_TEST_CASCADE_DELETE == 1
   for (size_t level = 0; level < 4; level++)
   {
     for (size_t attachmentLevel = 0; attachmentLevel < 4; attachmentLevel++)
@@ -623,7 +908,7 @@ TEST(IndexBackend, Basic)
       d.compressedSize = 4242;
       d.compressedHash = "md5";
       db.AddAttachment(*manager, resources[attachmentLevel], d, 42);
-
+    
       db.AttachChild(*manager, resources[0], resources[1]);
       db.AttachChild(*manager, resources[1], resources[2]);
       db.AttachChild(*manager, resources[2], resources[3]);
@@ -632,9 +917,13 @@ TEST(IndexBackend, Basic)
       deletedAttachments.clear();
       deletedResources.clear();
       remainingAncestor.reset();
-
-      db.DeleteResource(*output, *manager, resources[level]);
-
+    
+      {
+        manager->StartTransaction(TransactionType_ReadWrite);
+        db.DeleteResource(*output, *manager, resources[level]);
+        manager->CommitTransaction();
+      }
+    
       ASSERT_EQ(1u, deletedAttachments.size());
       ASSERT_EQ("attachment", *deletedAttachments.begin());
       ASSERT_EQ(4u, deletedResources.size());
@@ -645,6 +934,10 @@ TEST(IndexBackend, Basic)
       ASSERT_TRUE(remainingAncestor.get() == NULL);
     }
   }
+
+#endif
+
+#if ORTHANC_ENABLE_POSTGRESQL == 0 && CAN_TEST_CASCADE_DELETE == 1  // In PostgreSQL, remaining ancestor are implemented in the PostgreSQLIndex, not in the IndexBackend.  Note: they are tested in the integration tests
 
   for (size_t level = 1; level < 4; level++)
   {
@@ -683,14 +976,18 @@ TEST(IndexBackend, Basic)
       db.DeleteAttachment(*output, *manager, resources[attachmentLevel], Orthanc::FileContentType_DicomAsJson);
       ASSERT_EQ(1u, deletedAttachments.size());
       ASSERT_EQ("attachment", *deletedAttachments.begin());
-
+      
       db.AddAttachment(*manager, resources[attachmentLevel], d, 43);
-
+      
       deletedAttachments.clear();
       deletedResources.clear();
       remainingAncestor.reset();
-
-      db.DeleteResource(*output, *manager, resources[3]);  // delete instance
+    
+      {
+        manager->StartTransaction(TransactionType_ReadWrite);
+        db.DeleteResource(*output, *manager, resources[3]);  // delete instance
+        manager->CommitTransaction();
+      }
 
       if (attachmentLevel < level)
       {
@@ -701,11 +998,11 @@ TEST(IndexBackend, Basic)
         ASSERT_EQ(1u, deletedAttachments.size());
         ASSERT_EQ("attachment2", *deletedAttachments.begin());
       }
-
+      
       ASSERT_EQ(OrthancPluginResourceType_Instance, deletedResources["instance"]);
-
+    
       ASSERT_TRUE(remainingAncestor.get() != NULL);
-
+    
       switch (level)
       {
         case 1:
@@ -730,13 +1027,207 @@ TEST(IndexBackend, Basic)
           break;
 
         default:
-          throw Orthanc::OrthancException(Orthanc::ErrorCode_InternalError);
+          ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
       }
-
-      db.DeleteResource(*output, *manager, resources[0]);
-      db.DeleteResource(*output, *manager, unrelated);
+    
+      {
+        manager->StartTransaction(TransactionType_ReadWrite);
+        db.DeleteResource(*output, *manager, resources[0]);
+        db.DeleteResource(*output, *manager, unrelated);
+        manager->CommitTransaction();
+      }
     }
   }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_KEY_VALUE_STORES == 1
+  if (db.HasKeyValueStores())
+  {
+    manager->StartTransaction(TransactionType_ReadWrite);
+
+    std::set<std::string> keys;
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(0u, keys.size());
+
+    std::string s;
+    ASSERT_FALSE(db.GetKeyValue(s, *manager, "test", "hello"));
+    db.DeleteKeyValue(*manager, s, "test");
+
+    db.StoreKeyValue(*manager, "test", "hello", "world");
+    db.StoreKeyValue(*manager, "another", "hello", "world");
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(1u, keys.size());
+    ASSERT_EQ("hello", *keys.begin());
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello"));  ASSERT_EQ("world", s);
+
+    db.StoreKeyValue(*manager, "test", "hello", "overwritten");
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(1u, keys.size());
+    ASSERT_EQ("hello", *keys.begin());
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello"));  ASSERT_EQ("overwritten", s);
+
+    db.StoreKeyValue(*manager, "test", "hello2", "world2");
+    db.StoreKeyValue(*manager, "test", "hello3", "world3");
+
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(3u, keys.size());
+    ASSERT_TRUE(keys.find("hello") != keys.end());
+    ASSERT_TRUE(keys.find("hello2") != keys.end());
+    ASSERT_TRUE(keys.find("hello3") != keys.end());
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello"));   ASSERT_EQ("overwritten", s);
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello2"));  ASSERT_EQ("world2", s);
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello3"));  ASSERT_EQ("world3", s);
+
+    db.DeleteKeyValue(*manager, "test", "hello2");
+
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(2u, keys.size());
+    ASSERT_TRUE(keys.find("hello") != keys.end());
+    ASSERT_TRUE(keys.find("hello3") != keys.end());
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello"));   ASSERT_EQ("overwritten", s);
+    ASSERT_FALSE(db.GetKeyValue(s, *manager, "test", "hello2"));
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "hello3"));  ASSERT_EQ("world3", s);
+
+    db.DeleteKeyValue(*manager, "test", "nope");
+    db.DeleteKeyValue(*manager, "test", "hello");
+    db.DeleteKeyValue(*manager, "test", "hello3");
+
+    ListKeys(keys, db, *manager, "test");
+    ASSERT_EQ(0u, keys.size());
+
+    {
+      std::string blob;
+      FillBlob(blob);
+      db.StoreKeyValue(*manager, "test", "blob", blob); // Storing binary values
+    }
+
+    ASSERT_TRUE(db.GetKeyValue(s, *manager, "test", "blob"));
+    CheckBlob(s);
+    db.DeleteKeyValue(*manager, "test", "blob");
+    ASSERT_FALSE(db.GetKeyValue(s, *manager, "test", "blob"));
+
+    manager->CommitTransaction();
+  }
+#endif
+
+
+#if ORTHANC_PLUGINS_HAS_QUEUES == 1
+  if (db.HasQueues())
+  {
+    manager->StartTransaction(TransactionType_ReadWrite);
+
+    ASSERT_EQ(0u, db.GetQueueSize(*manager, "test"));
+    db.EnqueueValue(*manager, "test", "a");
+    db.EnqueueValue(*manager, "another", "hello");
+    ASSERT_EQ(1u, db.GetQueueSize(*manager, "test"));
+    db.EnqueueValue(*manager, "test", "b");
+    ASSERT_EQ(2u, db.GetQueueSize(*manager, "test"));
+    db.EnqueueValue(*manager, "test", "c");
+    ASSERT_EQ(3u, db.GetQueueSize(*manager, "test"));
+
+    std::string s;
+    ASSERT_FALSE(db.DequeueValue(s, *manager, "nope", false));
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", true));  ASSERT_EQ("a", s);
+    ASSERT_EQ(2u, db.GetQueueSize(*manager, "test"));
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", true));  ASSERT_EQ("b", s);
+    ASSERT_EQ(1u, db.GetQueueSize(*manager, "test"));
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", true));  ASSERT_EQ("c", s);
+    ASSERT_EQ(0u, db.GetQueueSize(*manager, "test"));
+    ASSERT_FALSE(db.DequeueValue(s, *manager, "test", true));
+
+    db.EnqueueValue(*manager, "test", "a");
+    db.EnqueueValue(*manager, "test", "b");
+    db.EnqueueValue(*manager, "test", "c");
+
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", false));  ASSERT_EQ("c", s);
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", false));  ASSERT_EQ("b", s);
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", false));  ASSERT_EQ("a", s);
+    ASSERT_FALSE(db.DequeueValue(s, *manager, "test", false));
+
+    {
+      std::string blob;
+      FillBlob(blob);
+      db.EnqueueValue(*manager, "test", blob); // Storing binary values
+    }
+
+    ASSERT_TRUE(db.DequeueValue(s, *manager, "test", true));
+    CheckBlob(s);
+
+    ASSERT_FALSE(db.DequeueValue(s, *manager, "test", true));
+
+    ASSERT_EQ(1u, db.GetQueueSize(*manager, "another"));
+
+    manager->CommitTransaction();
+  }
+#endif
+
+#if ORTHANC_PLUGINS_HAS_RESERVE_QUEUE_VALUE == 1
+  if (db.HasReserveQueueValue())
+  {
+    std::string value;
+    uint64_t valueIdA, valueIdB, valueIdC, valueIdD, valueIdE;
+
+    {
+      manager->StartTransaction(TransactionType_ReadWrite);
+
+      db.EnqueueValue(*manager, "test", "a");
+      db.EnqueueValue(*manager, "test", "b");
+      db.EnqueueValue(*manager, "test", "c");
+      db.EnqueueValue(*manager, "test", "d");
+      db.EnqueueValue(*manager, "test", "e");
+
+      ASSERT_EQ(5u, db.GetQueueSize(*manager, "test"));
+
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdA, *manager, "test", true, 1000));
+      ASSERT_EQ("a", value);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdB, *manager, "test", true, 1));
+      ASSERT_EQ("b", value);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdE, *manager, "test", false, 1));
+      ASSERT_EQ("e", value);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdD, *manager, "test", false, 1));
+      ASSERT_EQ("d", value);
+      manager->CommitTransaction(); 
+    }
+
+    {
+      manager->StartTransaction(TransactionType_ReadWrite);
+
+      db.AcknowledgeQueueValue(*manager, "test", valueIdA);
+      db.AcknowledgeQueueValue(*manager, "test", valueIdE);
+      manager->CommitTransaction(); 
+    }
+
+    Orthanc::SystemToolbox::USleep(2000000);  // Wait 2 seconds -> b and d should be released
+
+    {
+      manager->StartTransaction(TransactionType_ReadWrite);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdB, *manager, "test", true, 1));
+      ASSERT_EQ("b", value);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdD, *manager, "test", false, 1));
+      ASSERT_EQ("d", value);
+      ASSERT_TRUE(db.ReserveQueueValue(value, valueIdC, *manager, "test", false, 1));
+      ASSERT_EQ("c", value);
+
+      uint64_t valueIdFail;
+      ASSERT_FALSE(db.ReserveQueueValue(value, valueIdFail, *manager, "test", false, 1));
+
+      manager->CommitTransaction();
+    }
+
+    Orthanc::SystemToolbox::USleep(2000000);  // Wait 2 seconds -> b, c and d should be released
+
+    // try to acknowledge a value after it has expired
+    {
+      manager->StartTransaction(TransactionType_ReadWrite);
+
+      ASSERT_THROW(db.AcknowledgeQueueValue(*manager, "test", valueIdC), Orthanc::OrthancException);
+
+      manager->CommitTransaction();
+    }
+
+  }
+#endif
 
   manager->Close();
 }
