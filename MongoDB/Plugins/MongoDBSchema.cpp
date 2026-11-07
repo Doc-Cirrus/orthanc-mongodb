@@ -150,6 +150,10 @@ namespace OrthancDatabases
     indexes.emplace_back("Labels", make_document(kvp("id", 1), kvp("label", 1)), true);
     indexes.emplace_back("Labels", make_document(kvp("label", 1), kvp("id", 1)), false);
 
+    // Revision 2: the key-value stores (unique) and the queues, in their order
+    indexes.emplace_back("KeyValueStores", make_document(kvp("storeId", 1), kvp("key", 1)), true);
+    indexes.emplace_back("Queues", make_document(kvp("queueId", 1), kvp("id", 1)), false);
+
     return indexes;
   }
 

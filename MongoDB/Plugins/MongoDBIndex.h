@@ -80,6 +80,62 @@ namespace OrthancDatabases
     virtual void ListAllLabels(std::list<std::string>& target,
                                DatabaseManager& manager) ORTHANC_OVERRIDE;
 
+    virtual bool HasKeyValueStores() const ORTHANC_OVERRIDE
+    {
+      return true;
+    }
+
+    virtual void StoreKeyValue(DatabaseManager& manager,
+                               const std::string& storeId,
+                               const std::string& key,
+                               const std::string& value) ORTHANC_OVERRIDE;
+
+    virtual void DeleteKeyValue(DatabaseManager& manager,
+                                const std::string& storeId,
+                                const std::string& key) ORTHANC_OVERRIDE;
+
+    virtual bool GetKeyValue(std::string& value,
+                             DatabaseManager& manager,
+                             const std::string& storeId,
+                             const std::string& key) ORTHANC_OVERRIDE;
+
+    virtual void ListKeysValues(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                DatabaseManager& manager,
+                                const Orthanc::DatabasePluginMessages::ListKeysValues_Request& request) ORTHANC_OVERRIDE;
+
+    virtual bool HasQueues() const ORTHANC_OVERRIDE
+    {
+      return true;
+    }
+
+    virtual void EnqueueValue(DatabaseManager& manager,
+                              const std::string& queueId,
+                              const std::string& value) ORTHANC_OVERRIDE;
+
+    virtual bool DequeueValue(std::string& value,
+                              DatabaseManager& manager,
+                              const std::string& queueId,
+                              bool fromFront) ORTHANC_OVERRIDE;
+
+    virtual uint64_t GetQueueSize(DatabaseManager& manager,
+                                  const std::string& queueId) ORTHANC_OVERRIDE;
+
+    virtual bool HasReserveQueueValue() const ORTHANC_OVERRIDE
+    {
+      return true;
+    }
+
+    virtual bool ReserveQueueValue(std::string& value,
+                                   uint64_t& valueId,
+                                   DatabaseManager& manager,
+                                   const std::string& queueId,
+                                   bool fromFront,
+                                   uint32_t reserveTimeout) ORTHANC_OVERRIDE;
+
+    virtual void AcknowledgeQueueValue(DatabaseManager& manager,
+                                       const std::string& queueId,
+                                       uint64_t valueId) ORTHANC_OVERRIDE;
+
     virtual bool HasAtomicIncrementGlobalProperty() ORTHANC_OVERRIDE
     {
       return true;

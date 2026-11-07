@@ -93,6 +93,10 @@
     // Revision 2: the labels, by resource (unique) and by name
     ['Labels',                { id: 1, label: 1 },         true],
     ['Labels',                { label: 1, id: 1 }],
+
+    // Revision 2: the key-value stores (unique) and the queues, in their order
+    ['KeyValueStores',        { storeId: 1, key: 1 },      true],
+    ['Queues',                { queueId: 1, id: 1 }],
   ];
 
   // Same names as "IndexDefinition::GetName()" in "MongoDBSchema.cpp"

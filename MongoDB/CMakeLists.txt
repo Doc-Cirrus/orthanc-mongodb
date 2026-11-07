@@ -120,11 +120,13 @@ set(MONGODB_PLUGINS_SOURCES
   Plugins/Index/MongoDBExportedResources.cpp
   Plugins/Index/MongoDBFind.cpp
   Plugins/Index/MongoDBGlobalProperties.cpp
+  Plugins/Index/MongoDBKeyValueStores.cpp
   Plugins/Index/MongoDBLabels.cpp
   Plugins/Index/MongoDBLookup.cpp
   Plugins/Index/MongoDBMainDicomTags.cpp
   Plugins/Index/MongoDBMetadata.cpp
   Plugins/Index/MongoDBPatientRecycling.cpp
+  Plugins/Index/MongoDBQueues.cpp
   Plugins/Index/MongoDBResources.cpp
   Plugins/Index/MongoDBStatistics.cpp
   Plugins/MongoDBIndex.cpp
