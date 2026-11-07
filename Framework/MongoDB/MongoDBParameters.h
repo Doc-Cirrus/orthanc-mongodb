@@ -52,6 +52,7 @@ namespace OrthancDatabases
     MongoDBTransactionsMode  transactionsMode_;
     bool                     createIndexesAtStartup_;
     bool                     enableExtendedFind_;
+    unsigned int             auditLogsRetentionDays_;
 
     void Reset();
 
@@ -122,6 +123,17 @@ namespace OrthancDatabases
     bool IsExtendedFindEnabled() const
     {
       return enableExtendedFind_;
+    }
+
+    void SetAuditLogsRetentionDays(unsigned int days)
+    {
+      auditLogsRetentionDays_ = days;
+    }
+
+    // 0 means that the audit logs are kept forever
+    unsigned int GetAuditLogsRetentionDays() const
+    {
+      return auditLogsRetentionDays_;
     }
 
     static MongoDBTransactionsMode ParseTransactionsMode(const Json::Value& value);
