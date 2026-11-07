@@ -40,9 +40,9 @@ namespace OrthancDatabases
    *   1  The layout of the previous versions of the plugin (which
    *      reset the property to 1 whenever they start).
    *   2  The unique indexes, and the indexes of the lookups, of the
-   *      sequences, and of the new "Labels", "KeyValueStores",
-   *      "Queues" and "AuditLogs" collections. The revision stays at 1 as long as one of these
-   *      indexes is missing, e.g. because of duplicates in the data.
+   *      sequences, and of the new collections (e.g. "Labels"). The
+   *      revision stays at 1 as long as one of these indexes is
+   *      missing, e.g. because of duplicates in the data.
    *
    * Every upgrade step is idempotent, and runs under the lock document
    * "SchemaUpgrade" of the "Locks" collection, so that only one
