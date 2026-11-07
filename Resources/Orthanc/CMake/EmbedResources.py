@@ -1,6 +1,26 @@
 #!/usr/bin/python
 
-# Taken from https://hg.orthanc-server.com/orthanc-databases/
+# Orthanc - A Lightweight, RESTful DICOM Store
+# Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+# Department, University Hospital of Liege, Belgium
+# Copyright (C) 2017-2023 Osimis S.A., Belgium
+# Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+# Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+#
+# This program is free software: you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public License
+# as published by the Free Software Foundation, either version 3 of
+# the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
 
 import sys
 import os
@@ -70,7 +90,7 @@ while i < len(SOURCES):
 
     if resourceName in resources:
         raise Exception("Twice the same resource: " + resourceName)
-
+    
     if os.path.isdir(pathName):
         # The resource is a directory: Recursively explore its files
         content = {}
@@ -145,7 +165,7 @@ header.write("""
 
 for ns in NAMESPACE.split('.'):
     header.write('namespace %s {\n' % ns)
-
+    
 
 header.write("""
     enum FileResourceId
@@ -157,7 +177,7 @@ for name in resources:
     if resources[name]['Type'] == 'File':
         if isFirst:
             isFirst = False
-        else:
+        else:    
             header.write(',\n')
         header.write('      %s' % name)
 
@@ -173,7 +193,7 @@ for name in resources:
     if resources[name]['Type'] == 'Directory':
         if isFirst:
             isFirst = False
-        else:
+        else:    
             header.write(',\n')
         header.write('      %s' % name)
 
@@ -215,8 +235,8 @@ def WriteResource(cpp, item):
 
     # http://stackoverflow.com/a/1035360
     pos = 0
-    buffer = []  # instead of appending a few bytes at a time to the cpp file,
-                 # we first append each chunk to a list, join it and write it
+    buffer = []  # instead of appending a few bytes at a time to the cpp file, 
+                 # we first append each chunk to a list, join it and write it 
                  # to the file.  We've measured that it was 2-3 times faster in python3.
                  # Note that speed is important since if generation is too slow,
                  # cmake might try to compile the EmbeddedResources.cpp file while it is
