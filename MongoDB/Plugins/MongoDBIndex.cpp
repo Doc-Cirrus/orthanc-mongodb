@@ -25,11 +25,13 @@
 #include "Index/MongoDBExportedResources.h"
 #include "Index/MongoDBFind.h"
 #include "Index/MongoDBGlobalProperties.h"
+#include "Index/MongoDBKeyValueStores.h"
 #include "Index/MongoDBLabels.h"
 #include "Index/MongoDBLookup.h"
 #include "Index/MongoDBMainDicomTags.h"
 #include "Index/MongoDBMetadata.h"
 #include "Index/MongoDBPatientRecycling.h"
+#include "Index/MongoDBQueues.h"
 #include "Index/MongoDBResources.h"
 #include "Index/MongoDBStatistics.h"
 
@@ -88,6 +90,83 @@ namespace OrthancDatabases
                                    DatabaseManager& manager)
   {
     MongoDBLabels(manager).ListAllLabels(target);
+  }
+
+
+  void MongoDBIndex::StoreKeyValue(DatabaseManager& manager,
+                                   const std::string& storeId,
+                                   const std::string& key,
+                                   const std::string& value)
+  {
+    MongoDBKeyValueStores(manager).StoreKeyValue(storeId, key, value);
+  }
+
+
+  void MongoDBIndex::DeleteKeyValue(DatabaseManager& manager,
+                                    const std::string& storeId,
+                                    const std::string& key)
+  {
+    MongoDBKeyValueStores(manager).DeleteKeyValue(storeId, key);
+  }
+
+
+  bool MongoDBIndex::GetKeyValue(std::string& value,
+                                 DatabaseManager& manager,
+                                 const std::string& storeId,
+                                 const std::string& key)
+  {
+    return MongoDBKeyValueStores(manager).GetKeyValue(value, storeId, key);
+  }
+
+
+  void MongoDBIndex::ListKeysValues(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                    DatabaseManager& manager,
+                                    const Orthanc::DatabasePluginMessages::ListKeysValues_Request& request)
+  {
+    MongoDBKeyValueStores(manager).ListKeysValues(response, request);
+  }
+
+
+  void MongoDBIndex::EnqueueValue(DatabaseManager& manager,
+                                  const std::string& queueId,
+                                  const std::string& value)
+  {
+    MongoDBQueues(manager).EnqueueValue(queueId, value);
+  }
+
+
+  bool MongoDBIndex::DequeueValue(std::string& value,
+                                  DatabaseManager& manager,
+                                  const std::string& queueId,
+                                  bool fromFront)
+  {
+    return MongoDBQueues(manager).DequeueValue(value, queueId, fromFront);
+  }
+
+
+  uint64_t MongoDBIndex::GetQueueSize(DatabaseManager& manager,
+                                      const std::string& queueId)
+  {
+    return MongoDBQueues(manager).GetQueueSize(queueId);
+  }
+
+
+  bool MongoDBIndex::ReserveQueueValue(std::string& value,
+                                       uint64_t& valueId,
+                                       DatabaseManager& manager,
+                                       const std::string& queueId,
+                                       bool fromFront,
+                                       uint32_t reserveTimeout)
+  {
+    return MongoDBQueues(manager).ReserveQueueValue(value, valueId, queueId, fromFront, reserveTimeout);
+  }
+
+
+  void MongoDBIndex::AcknowledgeQueueValue(DatabaseManager& manager,
+                                           const std::string& queueId,
+                                           uint64_t valueId)
+  {
+    MongoDBQueues(manager).AcknowledgeQueueValue(queueId, valueId);
   }
 
 
