@@ -1,6 +1,6 @@
 /**
  * MongoDB Plugin - A plugin for Orthanc DICOM Server for storing DICOM data in MongoDB Database
- * Copyright (C) 2017 - 2023  (Doc Cirrus GmbH)
+ * Copyright (C) 2017 - 2026  (Doc Cirrus GmbH)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,88 +16,119 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  **/
 
-#include <mongoc.h>
 #include "MongoDBIndex.h"
-
+#include "../../Framework/MongoDB/MongoDBDatabase.h"
+#include "../../Framework/MongoDB/MongoDBParameters.h"
 #include "../../Framework/Plugins/PluginInitialization.h"
-#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
 #include <Logging.h>
+
+#include <google/protobuf/any.h>
+#include <google/protobuf/stubs/common.h>
+
+#include <memory>
+
+#define ORTHANC_PLUGIN_NAME "mongodb-index"
+
+
+// The MongoDB C++ driver must be initialized exactly once per shared library
+static std::unique_ptr<mongocxx::instance> mongoInstance_;
 
 
 extern "C"
 {
-ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext *context) {
-    if (!OrthancDatabases::InitializePlugin(context, "MongoDB", true)) {
-        return -1;
+  ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* context)
+  {
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+    if (!OrthancDatabases::InitializePlugin(context, ORTHANC_PLUGIN_NAME, "MongoDB", true))
+    {
+      return -1;
     }
 
     OrthancPlugins::OrthancConfiguration configuration;
 
-    if (!configuration.IsSection("MongoDB")) {
-        LOG(WARNING) << "No available configuration for the MongoDB index plugin";
-        return 0;
+    if (!configuration.IsSection("MongoDB"))
+    {
+      LOG(WARNING) << "No available configuration for the MongoDB index plugin";
+      return 0;
     }
 
     OrthancPlugins::OrthancConfiguration mongodb;
     configuration.GetSection(mongodb, "MongoDB");
 
     bool enable;
-    if (!mongodb.LookupBooleanValue(enable, "EnableIndex") || !enable) {
-        LOG(WARNING) << "The MongoDB index is currently disabled, set \"EnableIndex\" "
-                     << "to \"true\" in the \"MongoDB\" section of the configuration file of Orthanc";
-        return 0;
+    if (!mongodb.LookupBooleanValue(enable, "EnableIndex") ||
+        !enable)
+    {
+      LOG(WARNING) << "The MongoDB index is currently disabled, set \"EnableIndex\" "
+                   << "to \"true\" in the \"MongoDB\" section of the configuration file of Orthanc";
+      return 0;
     }
 
-    try {
-        /* Register the MongoDB index into Orthanc */
-        mongoc_init();
+    bool readOnly = configuration.GetBooleanValue("ReadOnly", false);
 
-        const std::string connectionUri = mongodb.GetStringValue("ConnectionUri", "");
-        const unsigned int chunkSize = mongodb.GetUnsignedIntegerValue("ChunkSize", 261120);
-
-        const unsigned int countConnections = mongodb.GetUnsignedIntegerValue("IndexConnectionsCount", 5);
-        const unsigned int maxConnectionRetries = mongodb.GetUnsignedIntegerValue("MaxConnectionRetries", 10);
-
-        if (connectionUri.empty()) {
-            throw Orthanc::OrthancException(
-                    Orthanc::ErrorCode_ParameterOutOfRange,
-                    "No connection string provided for the MongoDB index"
-            );
-        }
-
-        OrthancDatabases::IndexBackend::Register(
-                new OrthancDatabases::MongoDBIndex(context, connectionUri, chunkSize),
-                countConnections, maxConnectionRetries
-        );
+    if (readOnly)
+    {
+      LOG(WARNING) << "READ-ONLY SYSTEM: the Database plugin is working in read-only mode";
     }
-    catch (Orthanc::OrthancException &e) {
-        LOG(ERROR) << e.What();
-        return -1;
+
+    try
+    {
+      if (mongoInstance_.get() == NULL)
+      {
+        OrthancDatabases::MongoDBDatabase::KeepPluginLoaded();
+        mongoInstance_.reset(new mongocxx::instance);
+      }
+
+      const size_t countConnections = mongodb.GetUnsignedIntegerValue("IndexConnectionsCount", 5);
+      const bool useDynamicConnectionPool = mongodb.GetBooleanValue("UseDynamicConnectionPool", false);
+      const unsigned int housekeepingDelaySeconds = mongodb.GetUnsignedIntegerValue("HousekeepingInterval", 1);
+
+      OrthancDatabases::MongoDBParameters parameters(mongodb);
+      OrthancDatabases::IndexBackend::Register(
+        new OrthancDatabases::MongoDBIndex(context, parameters, readOnly),
+        countConnections, useDynamicConnectionPool, parameters.GetMaxConnectionRetries(), housekeepingDelaySeconds);
     }
-    catch (...) {
-        LOG(ERROR) << "Native exception while initializing the plugin";
-        return -1;
+    catch (Orthanc::OrthancException& e)
+    {
+      LOG(ERROR) << e.What();
+      return -1;
+    }
+    catch (std::exception& e)
+    {
+      LOG(ERROR) << "Exception while initializing the MongoDB index plugin: " << e.what();
+      return -1;
+    }
+    catch (...)
+    {
+      LOG(ERROR) << "Native exception while initializing the plugin";
+      return -1;
     }
 
     return 0;
-}
+  }
 
 
-ORTHANC_PLUGINS_API void OrthancPluginFinalize() {
+  ORTHANC_PLUGINS_API void OrthancPluginFinalize()
+  {
     LOG(WARNING) << "MongoDB index is finalizing";
     OrthancDatabases::IndexBackend::Finalize();
 
-    mongoc_cleanup();
-}
+    mongoInstance_.reset();
+
+    google::protobuf::ShutdownProtobufLibrary();
+  }
 
 
-ORTHANC_PLUGINS_API const char *OrthancPluginGetName() {
-    return "mongodb-index";
-}
+  ORTHANC_PLUGINS_API const char* OrthancPluginGetName()
+  {
+    return ORTHANC_PLUGIN_NAME;
+  }
 
 
-ORTHANC_PLUGINS_API const char *OrthancPluginGetVersion() {
+  ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
+  {
     return ORTHANC_PLUGIN_VERSION;
-}
+  }
 }
