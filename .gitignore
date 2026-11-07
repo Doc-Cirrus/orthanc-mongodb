@@ -11,6 +11,7 @@ build
 # Local settings of the compose environments (see .docker/.env.example)
 .docker/.env
 .docker/docker-compose.override.yaml
+.docker/integration-results/
 
 # Python caches (e.g. of .docker/DicomSender)
 __pycache__/
