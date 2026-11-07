@@ -118,6 +118,7 @@ set(MONGODB_PLUGINS_SOURCES
   Plugins/Index/MongoDBAttachments.cpp
   Plugins/Index/MongoDBChanges.cpp
   Plugins/Index/MongoDBExportedResources.cpp
+  Plugins/Index/MongoDBFind.cpp
   Plugins/Index/MongoDBGlobalProperties.cpp
   Plugins/Index/MongoDBLabels.cpp
   Plugins/Index/MongoDBLookup.cpp
