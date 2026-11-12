@@ -106,7 +106,7 @@ namespace OrthancDatabases
                                      OrthancPluginStorageArea* storageArea)
   {
     LOG(ERROR) << "Upgrading database is not implemented by this plugin";
-    ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+    PLUGIN_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
   }
 
 

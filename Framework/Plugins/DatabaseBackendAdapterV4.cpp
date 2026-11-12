@@ -507,7 +507,7 @@ namespace OrthancDatabases
 
       case Orthanc::DatabasePluginMessages::OPERATION_FLUSH_TO_DISK:
         // Raise an exception since "set_supports_flush_to_disk(false)"
-        ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+        PLUGIN_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
 
       case Orthanc::DatabasePluginMessages::OPERATION_START_TRANSACTION:
       {
@@ -1274,7 +1274,7 @@ namespace OrthancDatabases
             case OrthancPluginResourceType_Instance:
               if (parent.empty())
               {
-                ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+                PLUGIN_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
               }
               else
               {
@@ -1285,7 +1285,7 @@ namespace OrthancDatabases
             case OrthancPluginResourceType_Patient:
               if (!parent.empty())
               {
-                ORTHANC_PLUGINS_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
+                PLUGIN_THROW_WITH_FILE_AND_LINE_INFO(Orthanc::ErrorCode_NotImplemented);
               }
               break;
 
