@@ -1,6 +1,38 @@
-# Taken from https://hg.orthanc-server.com/orthanc-databases/
+# Orthanc - A Lightweight, RESTful DICOM Store
+# Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
+# Department, University Hospital of Liege, Belgium
+# Copyright (C) 2017-2023 Osimis S.A., Belgium
+# Copyright (C) 2024-2026 Orthanc Team SRL, Belgium
+# Copyright (C) 2021-2026 Sebastien Jodogne, ICTEAM UCLouvain, Belgium
+#
+# This program is free software: you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public License
+# as published by the Free Software Foundation, either version 3 of
+# the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
 
 # This file sets all the compiler-related flags
+message(STATUS "CMAKE_CXX_COMPILER_ID is ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "CMAKE_SYSTEM_NAME is ${CMAKE_SYSTEM_NAME}")
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+  # Since Orthanc 1.12.7 that allows CMake 4.0, builds for macOS
+  # require the C++ standard to be explicitly set to C++11. Do *not*
+  # do this on GNU/Linux, as third-party system libraries could have
+  # been compiled with higher versions of the C++ standard.
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
 
 
 # Save the current compiler flags to the cache every time cmake configures the project
@@ -11,7 +43,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" CACHE STRING "compiler flags" FORCE)
 include(CheckLibraryExists)
 
 if ((CMAKE_CROSSCOMPILING AND NOT
-      "${CMAKE_SYSTEM_VERSION}" STREQUAL "CrossToolNg") OR
+      "${CMAKE_SYSTEM_VERSION}" STREQUAL "CrossToolNg") OR    
     "${CMAKE_SYSTEM_VERSION}" STREQUAL "LinuxStandardBase")
   # Cross-compilation necessarily implies standalone and static build
   SET(STATIC_BUILD ON)
@@ -24,6 +56,13 @@ if ("${CMAKE_SYSTEM_VERSION}" STREQUAL "LinuxStandardBase")
   # use by "ExternalProject" in CMake
   SET(CMAKE_LSB_CC $ENV{LSB_CC} CACHE STRING "")
   SET(CMAKE_LSB_CXX $ENV{LSB_CXX} CACHE STRING "")
+
+  # This is necessary to build "Orthanc mainline - Framework LSB
+  # Release" on "buildbot-worker-debian11"
+  set(LSB_PTHREAD_NONSHARED "${LSB_PATH}/lib64-${LSB_TARGET_VERSION}/libpthread_nonshared.a")
+  if (EXISTS ${LSB_PTHREAD_NONSHARED})
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${LSB_PTHREAD_NONSHARED}")
+  endif()
 endif()
 
 
@@ -31,7 +70,7 @@ if (CMAKE_COMPILER_IS_GNUCXX)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-long-long")
 
   # --std=c99 makes libcurl not to compile
-  # -pedantic gives a lot of warnings on OpenSSL
+  # -pedantic gives a lot of warnings on OpenSSL 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -Wno-variadic-macros")
 
   if (CMAKE_CROSSCOMPILING)
@@ -46,12 +85,12 @@ elseif (MSVC)
   foreach(flag_var
     CMAKE_C_FLAGS_DEBUG
     CMAKE_CXX_FLAGS_DEBUG
-    CMAKE_C_FLAGS_RELEASE
+    CMAKE_C_FLAGS_RELEASE 
     CMAKE_CXX_FLAGS_RELEASE
-    CMAKE_C_FLAGS_MINSIZEREL
-    CMAKE_CXX_FLAGS_MINSIZEREL
-    CMAKE_C_FLAGS_RELWITHDEBINFO
-    CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+    CMAKE_C_FLAGS_MINSIZEREL 
+    CMAKE_CXX_FLAGS_MINSIZEREL 
+    CMAKE_C_FLAGS_RELWITHDEBINFO 
+    CMAKE_CXX_FLAGS_RELWITHDEBINFO) 
     string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
     string(REGEX REPLACE "/MDd" "/MTd" ${flag_var} "${${flag_var}}")
   endforeach(flag_var)
@@ -70,7 +109,7 @@ elseif (MSVC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
   endif()
-
+    
   add_definitions(
     -D_CRT_SECURE_NO_WARNINGS=1
     -D_CRT_SECURE_NO_DEPRECATE=1
@@ -105,12 +144,17 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR
     ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD" OR
     ${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD")
 
-  if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD" AND
+  if (# NOT ${CMAKE_SYSTEM_VERSION} STREQUAL "LinuxStandardBase" AND
+      NOT ${CMAKE_SYSTEM_NAME} STREQUAL "OpenBSD" AND
       NOT ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
     # The "--no-undefined" linker flag makes the shared libraries
     # (plugins ModalityWorklists and ServeFolders) fail to compile on
     # OpenBSD, and make the PostgreSQL plugin complain about missing
-    # "environ" global variable in FreeBSD
+    # "environ" global variable in FreeBSD.
+    #
+    # TODO - Furthermore, on Linux Standard Base running on Debian 12,
+    # the "-Wl,--no-undefined" seems to break the compilation (added
+    # after Orthanc 1.12.2). This is disabled for now.
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,--no-undefined")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined")
   endif()
@@ -144,7 +188,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR
     # for LFS (Large File Support).
     # https://ohse.de/uwe/articles/lfs.html
     add_definitions(
-      -D_LARGEFILE64_SOURCE=1
+      -D_LARGEFILE64_SOURCE=1 
       -D_FILE_OFFSET_BITS=64
       )
   endif()
@@ -200,15 +244,24 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   endif()
 
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+
+  # fix this error that appears with recent compilers on MacOS: boost/mpl/aux_/integral_wrapper.hpp:73:31: error: integer value -1 is outside the valid range of values [0, 3] for this enumeration type [-Wenum-constexpr-conversion]
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-enum-constexpr-conversion")
+
+  # it seems that some recent MacOS compilers don't set these flags correctly which prevents zlib from building correctly
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64")
+
   add_definitions(
     -D_XOPEN_SOURCE=1
     )
-  link_libraries(iconv)
+  
+  # Linking with iconv breaks the Universal builds on modern compilers
+  # link_libraries(iconv)
 
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   message("Building using Emscripten (for WebAssembly or asm.js targets)")
   include(${CMAKE_CURRENT_LIST_DIR}/EmscriptenParameters.cmake)
-
+  
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
 
 else()
@@ -218,7 +271,8 @@ endif()
 
 
 if (DEFINED ENABLE_PROFILING AND ENABLE_PROFILING)
-  if (CMAKE_COMPILER_IS_GNUCXX)
+  if (CMAKE_COMPILER_IS_GNUCXX OR
+      CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
@@ -243,3 +297,24 @@ if (CMAKE_COMPILER_IS_GNUCXX)
   # preceding batches. https://cmake.org/Bug/view.php?id=14874
   set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> <LINK_FLAGS> q <TARGET> <OBJECTS>")
 endif()
+
+
+# This function defines macro "__ORTHANC_FILE__" as a replacement to
+# macro "__FILE__", as the latter leaks the full path of the source
+# files in the binaries
+# https://stackoverflow.com/questions/8487986/file-macro-shows-full-path
+# https://twitter.com/wget42/status/1676877802375634944?s=20
+function(DefineSourceBasenameForTarget targetname)
+  # Microsoft Visual Studio is extremely slow if using
+  # "set_property()", we only enable this feature for gcc and clang
+  if (CMAKE_COMPILER_IS_GNUCXX OR
+      CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    get_target_property(source_files "${targetname}" SOURCES)
+    foreach(sourcefile ${source_files})
+      get_filename_component(basename "${sourcefile}" NAME)
+      set_property(
+        SOURCE "${sourcefile}" APPEND
+        PROPERTY COMPILE_DEFINITIONS "__ORTHANC_FILE__=\"${basename}\"")
+    endforeach()
+  endif()
+endfunction()
