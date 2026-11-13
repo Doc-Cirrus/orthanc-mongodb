@@ -46,6 +46,7 @@ namespace OrthancDatabases
                  const OrthancPluginResourcesContentTags* tags);
 
     void LookupIdentifiers(std::list<int64_t>& target,
+                           OrthancPluginResourceType resourceType,
                            const bsoncxx::document::view_or_value& filter);
 
   public:
@@ -83,12 +84,14 @@ namespace OrthancDatabases
     void ClearMainDicomTags(int64_t id);
 
     void LookupIdentifier(std::list<int64_t>& target /*out*/,
+                          OrthancPluginResourceType resourceType,
                           uint16_t group,
                           uint16_t element,
                           OrthancPluginIdentifierConstraint constraint,
                           const char* value);
 
     void LookupIdentifierRange(std::list<int64_t>& target /*out*/,
+                               OrthancPluginResourceType resourceType,
                                uint16_t group,
                                uint16_t element,
                                const char* start,

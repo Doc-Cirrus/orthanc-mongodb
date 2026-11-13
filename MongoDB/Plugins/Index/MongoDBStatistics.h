@@ -69,8 +69,8 @@ namespace OrthancDatabases
    *   every read is a full scan, as in the previous versions.
    *
    * Without a transaction (standalone server), an interruption in the
-   * middle of a write or of a consolidation can make the statistics
-   * drift. Deleting the totals document makes the housekeeping compute
+   * middle of a write can make the statistics drift (a consolidation
+   * is resumed, cf. "Consolidate()"). Deleting the totals document makes the housekeeping compute
    * them again. The previous versions of the plugin record no changes,
    * so the statistics are only exact if every Orthanc on the database
    * runs this version.
@@ -80,7 +80,7 @@ namespace OrthancDatabases
   private:
     MongoDBDatabase&  database_;
 
-    bool LookupTotals(MongoDBStatisticsValues& totals);
+    std::optional<bsoncxx::document::value> LookupTotals();
 
     void SumChanges(MongoDBStatisticsValues& target,
                     const bsoncxx::document::view_or_value& filter);

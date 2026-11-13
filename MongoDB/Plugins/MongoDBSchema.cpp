@@ -33,6 +33,8 @@
 
 #include <atomic>
 #include <map>
+#include <optional>
+#include <set>
 #include <vector>
 
 
@@ -210,6 +212,7 @@ namespace OrthancDatabases
     class ExistingIndexes : public boost::noncopyable
     {
     private:
+      mongocxx::client&                                             client_;
       mongocxx::database&                                           database_;
       std::map<std::string, std::vector<bsoncxx::document::value> > content_;
 
@@ -231,6 +234,8 @@ namespace OrthancDatabases
           {
             indexes.push_back(bsoncxx::document::value(index));
           }
+
+          RemoveBuildsInProgress(collection, indexes);
         }
         catch (mongocxx::operation_exception& e)
         {
@@ -247,8 +252,88 @@ namespace OrthancDatabases
         return indexes;
       }
 
+      /**
+       * "listIndexes" also lists the indexes still being built, e.g. by
+       * "CreateIndexes.js" running meanwhile: such a build can still
+       * fail on duplicates. They are found with "$currentOp" (MongoDB
+       * 7.0 has no "includeIndexBuildInfo"). If the user may not run
+       * it, all the listed indexes are taken as built.
+       **/
+      void RemoveBuildsInProgress(const std::string& collection,
+                                  std::vector<bsoncxx::document::value>& indexes)
+      {
+        std::set<std::string> building;
+
+        if (!ListBuildsInProgress(building, collection, true /* all users */))
+        {
+          // Without the "inprog" privilege, only the builds of the user of this plugin are seen
+          LOG(WARNING) << "MongoDB: cannot list the index builds of all the users on " << collection
+                       << " (privilege \"inprog\"), the builds of other users (e.g. CreateIndexes.js) "
+                       << "are taken as finished";
+
+          if (!ListBuildsInProgress(building, collection, false))
+          {
+            return;
+          }
+        }
+
+        std::vector<bsoncxx::document::value> built;
+        for (size_t i = 0; i < indexes.size(); i++)
+        {
+          bsoncxx::document::element name = indexes[i].view()["name"];
+          if (!name ||
+              name.type() != bsoncxx::type::k_string ||
+              building.find(std::string(name.get_string().value)) == building.end())
+          {
+            built.push_back(indexes[i]);
+          }
+        }
+
+        indexes.swap(built);
+      }
+
+      // The names of the indexes being built on "collection"
+      bool ListBuildsInProgress(std::set<std::string>& building,
+                                const std::string& collection,
+                                bool allUsers)
+      {
+        try
+        {
+          mongocxx::pipeline pipeline;
+          pipeline.current_op(make_document(kvp("allUsers", allUsers), kvp("idleConnections", false)));
+          pipeline.match(make_document(kvp("ns", std::string(database_.name()) + "." + collection),
+                                       kvp("command.createIndexes", make_document(kvp("$exists", true)))));
+
+          mongocxx::database admin = client_["admin"];
+          for (const bsoncxx::document::view& operation : admin.aggregate(pipeline))
+          {
+            bsoncxx::document::element specs = operation["command"]["indexes"];
+            if (specs && specs.type() == bsoncxx::type::k_array)
+            {
+              for (const bsoncxx::array::element& spec : specs.get_array().value)
+              {
+                if (spec.type() == bsoncxx::type::k_document &&
+                    spec["name"] &&
+                    spec["name"].type() == bsoncxx::type::k_string)
+                {
+                  building.insert(std::string(spec["name"].get_string().value));
+                }
+              }
+            }
+          }
+        }
+        catch (mongocxx::exception&)
+        {
+          return false;  // E.g. no "inprog" privilege for all the users
+        }
+
+        return true;
+      }
+
     public:
-      explicit ExistingIndexes(mongocxx::database& database) :
+      ExistingIndexes(mongocxx::client& client,
+                      mongocxx::database& database) :
+        client_(client),
         database_(database)
       {
       }
@@ -292,7 +377,8 @@ namespace OrthancDatabases
       MongoDBDatabase&       database_;
       std::string            owner_;
       std::atomic<bool>      done_;
-      mongocxx::pool::entry  keeperClient_;  // The client of "keeper_"
+      std::atomic<bool>      lost_;
+      std::optional<mongocxx::pool::entry>  keeperClient_;  // The client of "keeper_"
       boost::thread          keeper_;
 
       static mongocxx::pipeline GetLease(const std::string& owner)
@@ -342,6 +428,21 @@ namespace OrthancDatabases
         }
       }
 
+      // The owner and the expiration of the lock, to see whether it is renewed
+      std::string GetLeaseDescription()
+      {
+        try
+        {
+          std::optional<bsoncxx::document::value> lock =
+            database_.GetDatabase()["Locks"].find_one(make_document(kvp("_id", "SchemaUpgrade")));
+          return (lock ? bsoncxx::to_json(lock->view()) : std::string());
+        }
+        catch (mongocxx::exception& e)
+        {
+          MongoDBDatabase::ThrowException(e);
+        }
+      }
+
       static void LogIndexBuilds(mongocxx::client& client,
                                  const std::string& databaseName)
       {
@@ -375,7 +476,6 @@ namespace OrthancDatabases
 
       static void Keeper(SchemaLock* that)
       {
-        mongocxx::client& client = *that->keeperClient_;
         const std::string databaseName = that->database_.GetDatabaseName();
         unsigned int elapsed = 0;
 
@@ -388,9 +488,17 @@ namespace OrthancDatabases
           {
             try
             {
-              client[databaseName]["Locks"].update_one(
+              std::optional<mongocxx::result::update> result = (**that->keeperClient_)[databaseName]["Locks"].update_one(
                 make_document(kvp("_id", "SchemaUpgrade"), kvp("owner", that->owner_)),
                 GetLease(that->owner_));
+
+              if (result &&
+                  result->matched_count() == 0)
+              {
+                // Another Orthanc may be upgrading the database as well
+                that->lost_ = true;
+                LOG(ERROR) << "MongoDB: the lock of the schema upgrade was lost (expired or taken)";
+              }
             }
             catch (mongocxx::exception& e)
             {
@@ -400,7 +508,7 @@ namespace OrthancDatabases
 
           if (elapsed % (PROGRESS * 10) == 0)
           {
-            LogIndexBuilds(client, databaseName);
+            LogIndexBuilds(**that->keeperClient_, databaseName);
           }
         }
       }
@@ -410,12 +518,34 @@ namespace OrthancDatabases
         database_(database),
         owner_(Orthanc::Toolbox::GenerateUuid()),
         done_(false),
-        keeperClient_(database.AcquireClient())
+        lost_(false)
       {
+        // Fails at once if the pool has a single client ("maxPoolSize=1")
+        keeperClient_.emplace(database.AcquireClient());
+
+        /**
+         * A live holder renews its lease, however long its index builds
+         * take. Only a lease that stops advancing, while it is not
+         * expired, means something is wrong (e.g. clocks of the servers).
+         **/
+        static const unsigned int STALL_TIMEOUT = 600;  // Seconds
+
         unsigned int waited = 0;
+        unsigned int stalled = 0;
+        std::string lastLease;
 
         while (!TryAcquire())
         {
+          const std::string lease = GetLeaseDescription();
+          stalled = (lease == lastLease ? stalled + 1 : 0);
+          lastLease = lease;
+
+          if (stalled >= STALL_TIMEOUT)
+          {
+            throw Orthanc::OrthancException(Orthanc::ErrorCode_Database,
+                                            "MongoDB: the lock of the schema upgrade is held, but no longer renewed: " + lease);
+          }
+
           if (waited % 30 == 0)
           {
             LOG(WARNING) << "MongoDB: waiting for another Orthanc to finish upgrading the database";
@@ -428,6 +558,16 @@ namespace OrthancDatabases
         keeper_ = boost::thread(Keeper, this);
       }
 
+      // Throws if another Orthanc may have taken over the upgrade
+      void Check() const
+      {
+        if (lost_)
+        {
+          throw Orthanc::OrthancException(Orthanc::ErrorCode_Database,
+                                          "MongoDB: the lock of the schema upgrade was lost, restart Orthanc");
+        }
+      }
+
       ~SchemaLock()
       {
         done_ = true;
@@ -437,7 +577,7 @@ namespace OrthancDatabases
           keeper_.join();
         }
 
-        keeperClient_ = nullptr;
+        keeperClient_.reset();
 
         try
         {
@@ -469,11 +609,13 @@ namespace OrthancDatabases
 
 
   bool MongoDBSchema::CreateIndexes(std::list<std::string>& missing,
-                                    DatabaseManager& manager)
+                                    DatabaseManager& manager,
+                                    const std::function<void()>& checkLock)
   {
     // The schema never runs inside a transaction, so the driver is used directly
-    mongocxx::database database = MongoDBDatabase::GetDatabase(manager).GetDatabase();
-    ExistingIndexes existing(database);
+    MongoDBDatabase& db = MongoDBDatabase::GetDatabase(manager);
+    mongocxx::database database = db.GetDatabase();
+    ExistingIndexes existing(db.GetClient(), database);
 
     missing.clear();
 
@@ -487,6 +629,8 @@ namespace OrthancDatabases
       {
         continue;
       }
+
+      checkLock();
 
       const int64_t count = EstimateDocumentsCount(database, index.collection_);
       if (count > 0)
@@ -511,7 +655,16 @@ namespace OrthancDatabases
       catch (mongocxx::operation_exception& e)
       {
         if (index.unique_ &&
-            e.code().value() == 11000 /* DuplicateKey */)
+            e.code().value() == 67 /* CannotCreateIndex */)
+        {
+          // E.g. on a sharded cluster whose shard key is not a prefix of the index
+          LOG(WARNING) << "MongoDB: the unique index " << index.GetDescription()
+                       << " cannot be built: " << e.what();
+          missing.push_back(index.GetDescription());
+          continue;
+        }
+        else if (index.unique_ &&
+                 e.code().value() == 11000 /* DuplicateKey */)
         {
           LOG(WARNING) << "MongoDB: the unique index " << index.GetDescription()
                        << " cannot be built, because of duplicates in the database: " << e.what();
@@ -544,8 +697,9 @@ namespace OrthancDatabases
   bool MongoDBSchema::CheckIndexes(std::list<std::string>& missing,
                                    DatabaseManager& manager)
   {
-    mongocxx::database database = MongoDBDatabase::GetDatabase(manager).GetDatabase();
-    ExistingIndexes existing(database);
+    MongoDBDatabase& db = MongoDBDatabase::GetDatabase(manager);
+    mongocxx::database database = db.GetDatabase();
+    ExistingIndexes existing(db.GetClient(), database);
 
     missing.clear();
 
@@ -604,10 +758,19 @@ namespace OrthancDatabases
     MongoDBDatabase& database = MongoDBDatabase::GetDatabase(manager);
     MongoDBGlobalProperties properties(manager);
 
+    // Checked before anything is written, even the lock: another schema version is never modified
+    unsigned int version;
+    if (LookupIntegerProperty(version, properties, Orthanc::GlobalProperty_DatabaseSchemaVersion) &&
+        version != MongoDBSchema::SCHEMA_VERSION)
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_Database,
+                                      "MongoDB plugin is incompatible with database schema version: " +
+                                      std::to_string(version));
+    }
+
     SchemaLock lock(database);
 
-    unsigned int value;
-    if (!LookupIntegerProperty(value, properties, Orthanc::GlobalProperty_DatabaseSchemaVersion))
+    if (!LookupIntegerProperty(version, properties, Orthanc::GlobalProperty_DatabaseSchemaVersion))
     {
       properties.SetGlobalProperty(MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabaseSchemaVersion,
                                    std::to_string(MongoDBSchema::SCHEMA_VERSION).c_str());
@@ -625,7 +788,7 @@ namespace OrthancDatabases
 
     if (parameters.IsCreateIndexesAtStartup())
     {
-      complete = MongoDBSchema::CreateIndexes(missing, manager);
+      complete = MongoDBSchema::CreateIndexes(missing, manager, [&lock]() { lock.Check(); });
     }
     else
     {
@@ -665,6 +828,7 @@ namespace OrthancDatabases
                    << "without its unique indexes, concurrent writes on a standalone server can create duplicates";
     }
 
+    lock.Check();
     properties.SetGlobalProperty(MISSING_SERVER_IDENTIFIER, Orthanc::GlobalProperty_DatabasePatchLevel,
                                  std::to_string(revision).c_str());
 

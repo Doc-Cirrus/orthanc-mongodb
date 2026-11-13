@@ -65,7 +65,8 @@ namespace OrthancDatabases
 
     /**
      * Another client of the same pool, for a helper thread that runs
-     * next to this connection (a client is not thread-safe).
+     * next to this connection (a client is not thread-safe). Throws
+     * at once if the pool has none left (e.g. "maxPoolSize=1").
      **/
     mongocxx::pool::entry AcquireClient();
 

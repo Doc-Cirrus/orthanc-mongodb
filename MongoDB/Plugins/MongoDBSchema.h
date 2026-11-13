@@ -22,6 +22,7 @@
 #include "../../Framework/Common/DatabaseManager.h"
 #include "../../Framework/MongoDB/MongoDBParameters.h"
 
+#include <functional>
 #include <list>
 #include <string>
 
@@ -57,10 +58,12 @@ namespace OrthancDatabases
     /**
      * Builds the missing indexes. Returns false if a unique index
      * cannot be built because of duplicates, whose name is then added
-     * to "missing" (the other indexes are still built).
+     * to "missing" (the other indexes are still built). "checkLock"
+     * runs before each build, and throws if the lock was lost.
      **/
     static bool CreateIndexes(std::list<std::string>& missing,
-                              DatabaseManager& manager);
+                              DatabaseManager& manager,
+                              const std::function<void()>& checkLock);
 
     // Returns false, and the names of the missing indexes, if some are missing
     static bool CheckIndexes(std::list<std::string>& missing,

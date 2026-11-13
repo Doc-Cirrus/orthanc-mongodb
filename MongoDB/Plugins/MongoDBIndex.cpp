@@ -526,7 +526,7 @@ namespace OrthancDatabases
                                       OrthancPluginIdentifierConstraint constraint,
                                       const char* value)
   {
-    MongoDBMainDicomTags(manager).LookupIdentifier(target, group, element, constraint, value);
+    MongoDBMainDicomTags(manager).LookupIdentifier(target, resourceType, group, element, constraint, value);
   }
 
 
@@ -538,7 +538,7 @@ namespace OrthancDatabases
                                            const char* start,
                                            const char* end)
   {
-    MongoDBMainDicomTags(manager).LookupIdentifierRange(target, group, element, start, end);
+    MongoDBMainDicomTags(manager).LookupIdentifierRange(target, resourceType, group, element, start, end);
   }
 
 

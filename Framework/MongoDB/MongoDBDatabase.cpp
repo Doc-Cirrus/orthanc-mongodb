@@ -78,6 +78,11 @@ namespace OrthancDatabases
       return pool_.acquire();
     }
 
+    std::optional<mongocxx::pool::entry> TryAcquire()
+    {
+      return pool_.try_acquire();
+    }
+
     /**
      * Sends "hello" to the server, which fails if the server cannot
      * be reached (the pool itself connects lazily). The first
@@ -255,7 +260,18 @@ namespace OrthancDatabases
 
   mongocxx::pool::entry MongoDBDatabase::AcquireClient()
   {
-    return pool_->Acquire();
+    std::optional<mongocxx::pool::entry> client = pool_->TryAcquire();
+
+    if (client)
+    {
+      return std::move(*client);
+    }
+    else
+    {
+      throw Orthanc::OrthancException(Orthanc::ErrorCode_Database,
+                                      "MongoDB: the connection pool has no free client, "
+                                      "increase \"maxPoolSize\" in the connection URI (2 at least)");
+    }
   }
 
 
@@ -422,14 +438,94 @@ namespace OrthancDatabases
   }
 
 
+  /**
+   * The code of the error reported by the server, if any. The v_noabi
+   * API of mongocxx gives the client-side errors of libmongoc (stream,
+   * server selection...) the category of the server errors when they
+   * come from a "bson_error_t", and their numbers collide with the
+   * codes of the server: only the reply of the server tells them apart.
+   **/
+  static bool LookupServerCode(int& code,
+                               const mongocxx::exception& e)
+  {
+    const mongocxx::operation_exception* operation = dynamic_cast<const mongocxx::operation_exception*>(&e);
+    if (operation == NULL ||
+        !operation->raw_server_error())
+    {
+      return false;
+    }
+
+    const bsoncxx::document::view reply = operation->raw_server_error()->view();
+
+    if (reply["code"] &&
+        reply["code"].type() == bsoncxx::type::k_int32)
+    {
+      code = reply["code"].get_int32().value;
+      return true;
+    }
+
+    // "findAndModify" replies with "writeConcernError", the bulk writes of libmongoc with "writeConcernErrors"
+    std::optional<bsoncxx::document::view> writeConcern;
+    if (reply["writeConcernError"] &&
+        reply["writeConcernError"].type() == bsoncxx::type::k_document)
+    {
+      writeConcern = reply["writeConcernError"].get_document().value;
+    }
+    else if (reply["writeConcernErrors"] &&
+             reply["writeConcernErrors"].type() == bsoncxx::type::k_array)
+    {
+      const bsoncxx::array::element first = reply["writeConcernErrors"].get_array().value[0];
+      if (first &&
+          first.type() == bsoncxx::type::k_document)
+      {
+        writeConcern = first.get_document().value;
+      }
+    }
+
+    if (writeConcern &&
+        (*writeConcern)["code"] &&
+        (*writeConcern)["code"].type() == bsoncxx::type::k_int32)
+    {
+      code = (*writeConcern)["code"].get_int32().value;
+      return true;
+    }
+
+    if (reply["writeErrors"] &&
+        e.code().category() == mongocxx::server_error_category())
+    {
+      code = e.code().value();
+      return true;
+    }
+
+    return false;
+  }
+
+  // Whether the error is a client-side error of libmongoc
+  static bool IsClientError(const mongocxx::exception& e)
+  {
+    // The v1 API keeps the category of libmongoc, cf. "LookupServerCode()" for v_noabi
+    return (e.code().category() == mongocxx::server_error_category() ||
+            std::string(e.code().category().name()) == "mongoc_error_code_t");
+  }
+
   Orthanc::ErrorCode MongoDBDatabase::ConvertErrorCode(const mongocxx::exception& e)
   {
     const mongocxx::operation_exception* operation = dynamic_cast<const mongocxx::operation_exception*>(&e);
 
     if (operation != NULL)
     {
+      if (operation->has_error_label("UnknownTransactionCommitResult"))
+      {
+        /**
+         * The commit may have been applied: retrying the whole Orthanc
+         * transaction could store an instance twice, and delete the
+         * files of the first store. "MongoDBTransaction::Commit()"
+         * already retried the commit itself.
+         **/
+        return Orthanc::ErrorCode_DatabaseUnavailable;
+      }
+
       if (operation->has_error_label("TransientTransactionError") ||
-          operation->has_error_label("UnknownTransactionCommitResult") ||
           IsDuplicateKey(*operation))
       {
         // A retry of the whole Orthanc transaction can succeed
@@ -437,29 +533,51 @@ namespace OrthancDatabases
       }
     }
 
-    switch (e.code().value())
+    int code;
+    if (LookupServerCode(code, e))
     {
-      case 112:    // WriteConflict
-      case 251:    // NoSuchTransaction
-        return Orthanc::ErrorCode_DatabaseCannotSerialize;
+      switch (code)
+      {
+        case 112:    // WriteConflict
+        case 251:    // NoSuchTransaction
+          return Orthanc::ErrorCode_DatabaseCannotSerialize;
 
-      case MONGOC_ERROR_SERVER_SELECTION_FAILURE:
-      case 6:      // HostUnreachable
-      case 7:      // HostNotFound
-      case 89:     // NetworkTimeout
-      case 91:     // ShutdownInProgress
-      case 189:    // PrimarySteppedDown
-      case 10107:  // NotWritablePrimary
-      case 11600:  // InterruptedAtShutdown
-      case 11602:  // InterruptedDueToReplStateChange
-      case 13435:  // NotPrimaryNoSecondaryOk
-        return Orthanc::ErrorCode_DatabaseUnavailable;
+        case 6:      // HostUnreachable
+        case 7:      // HostNotFound
+        case 89:     // NetworkTimeout
+        case 91:     // ShutdownInProgress
+        case 189:    // PrimarySteppedDown
+        case 10107:  // NotWritablePrimary
+        case 11600:  // InterruptedAtShutdown
+        case 11602:  // InterruptedDueToReplStateChange
+        case 13435:  // NotPrimaryNoSecondaryOk
+          return Orthanc::ErrorCode_DatabaseUnavailable;
 
-      default:
-        return Orthanc::ErrorCode_Database;
+        default:
+          return Orthanc::ErrorCode_Database;
+      }
+    }
+    else if (IsClientError(e))
+    {
+      switch (e.code().value())
+      {
+        case MONGOC_ERROR_STREAM_NAME_RESOLUTION:
+        case MONGOC_ERROR_STREAM_SOCKET:
+        case MONGOC_ERROR_STREAM_CONNECT:
+        case MONGOC_ERROR_STREAM_NOT_ESTABLISHED:
+        case MONGOC_ERROR_SERVER_SELECTION_FAILURE:
+          return Orthanc::ErrorCode_DatabaseUnavailable;
+
+        default:
+          return Orthanc::ErrorCode_Database;
+      }
+    }
+    else
+    {
+      // E.g. a "logic_error" of mongocxx
+      return Orthanc::ErrorCode_Database;
     }
   }
-
 
   void MongoDBDatabase::ThrowException(const mongocxx::exception& e)
   {

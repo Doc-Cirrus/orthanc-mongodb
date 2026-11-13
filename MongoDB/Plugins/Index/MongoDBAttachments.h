@@ -81,16 +81,13 @@ namespace OrthancDatabases
     void ListAvailableAttachments(std::list<int32_t>& target /*out*/,
                                   int64_t id);
 
+    /**
+     * Deletes each attachment before signalling it, and only signals
+     * those it deleted: without transactions, a concurrent deletion or
+     * "AddAttachment()" may take them meanwhile. "DeleteResource()"
+     * calls it again once the resources are gone, as a sweep.
+     **/
     void DeleteForResources(IDatabaseBackendOutput& output,
                             const std::list<int64_t>& resources);
-
-    /**
-     * Without transactions, the second pass of "DeleteResource()", once
-     * the resources are gone. Unlike "DeleteForResources()", it deletes
-     * each attachment before signalling it, and only signals those it
-     * deleted, as "AddAttachment()" may take them back meanwhile.
-     **/
-    void SweepForResources(IDatabaseBackendOutput& output,
-                           const std::list<int64_t>& resources);
   };
 }

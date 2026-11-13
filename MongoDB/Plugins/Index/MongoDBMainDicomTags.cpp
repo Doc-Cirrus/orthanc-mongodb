@@ -128,6 +128,7 @@ namespace OrthancDatabases
 
 
   void MongoDBMainDicomTags::LookupIdentifiers(std::list<int64_t>& target,
+                                               OrthancPluginResourceType resourceType,
                                                const bsoncxx::document::view_or_value& filter)
   {
     target.clear();
@@ -135,14 +136,35 @@ namespace OrthancDatabases
     MongoDBCollection::Documents identifiers;
     database_.GetCollection(DICOM_IDENTIFIERS).Find(identifiers, filter);
 
+    if (identifiers.empty())
+    {
+      return;
+    }
+
+    // Some identifier tags exist at several levels (e.g. "PatientID" at
+    // the patient and study levels): keep the resources of the level
+    bsoncxx::builder::basic::array ids;
     for (size_t i = 0; i < identifiers.size(); i++)
     {
-      target.push_back(MongoDBToolbox::GetInteger(identifiers[i].view(), "id"));
+      ids.append(MongoDBToolbox::GetInteger(identifiers[i].view(), "id"));
+    }
+
+    mongocxx::options::find options;
+    options.projection(make_document(kvp("_id", 0), kvp("internalId", 1)));
+
+    MongoDBCollection::Documents resources;
+    database_.GetCollection("Resources").Find(
+      resources, make_document(kvp("internalId", make_document(kvp("$in", ids.extract()))),
+                               kvp("resourceType", static_cast<int32_t>(resourceType))), options);
+
+    for (size_t i = 0; i < resources.size(); i++)
+    {
+      target.push_back(MongoDBToolbox::GetInteger(resources[i].view(), "internalId"));
     }
   }
 
-
   void MongoDBMainDicomTags::LookupIdentifier(std::list<int64_t>& target /*out*/,
+                                              OrthancPluginResourceType resourceType,
                                               uint16_t group,
                                               uint16_t element,
                                               OrthancPluginIdentifierConstraint constraint,
@@ -172,19 +194,20 @@ namespace OrthancDatabases
         throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange);
     }
 
-    LookupIdentifiers(target, make_document(kvp("tagGroup", group),
+    LookupIdentifiers(target, resourceType, make_document(kvp("tagGroup", group),
                                             kvp("tagElement", element),
                                             kvp("value", condition.view())));
   }
 
 
   void MongoDBMainDicomTags::LookupIdentifierRange(std::list<int64_t>& target /*out*/,
+                                                   OrthancPluginResourceType resourceType,
                                                    uint16_t group,
                                                    uint16_t element,
                                                    const char* start,
                                                    const char* end)
   {
-    LookupIdentifiers(target, make_document(kvp("tagGroup", group),
+    LookupIdentifiers(target, resourceType, make_document(kvp("tagGroup", group),
                                             kvp("tagElement", element),
                                             kvp("value", make_document(kvp("$gte", start), kvp("$lte", end)))));
   }

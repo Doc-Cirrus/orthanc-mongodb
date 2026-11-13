@@ -452,7 +452,7 @@ namespace OrthancDatabases
     }
 
     // 2. What a store added to the resources since step 3 of "DeleteResource()"
-    MongoDBAttachments(manager_).SweepForResources(output, ids);
+    MongoDBAttachments(manager_).DeleteForResources(output, ids);
     MongoDBMetadata(manager_).DeleteForResources(ids);
     MongoDBLabels(manager_).DeleteForResources(ids);
     MongoDBMainDicomTags(manager_).DeleteForResources(ids);

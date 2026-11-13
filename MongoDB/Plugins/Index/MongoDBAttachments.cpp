@@ -56,23 +56,48 @@ namespace OrthancDatabases
     MongoDBCollection::Documents attachments;
     collection.Find(attachments, filter.view());
 
+    MongoDBStatisticsValues change;
+
     for (size_t i = 0; i < attachments.size(); i++)
     {
-      const bsoncxx::document::view attachment = attachments[i].view();
-      output.SignalDeletedAttachment(MongoDBToolbox::GetString(attachment, "uuid"),
-                                     MongoDBToolbox::GetInt32(attachment, "fileType"),
-                                     MongoDBToolbox::GetInteger(attachment, "uncompressedSize"),
-                                     MongoDBToolbox::GetString(attachment, "uncompressedHash"),
-                                     MongoDBToolbox::GetInt32(attachment, "compressionType"),
-                                     MongoDBToolbox::GetInteger(attachment, "compressedSize"),
-                                     MongoDBToolbox::GetString(attachment, "compressedHash"),
-                                     GetCustomDataField(attachment));
+      std::optional<bsoncxx::document::value> taken;
+
+      if (database_.GetSession() != NULL)
+      {
+        // The transaction isolates the "Find()": one "DeleteMany" below
+        taken = attachments[i];
+      }
+      else
+      {
+        /**
+         * One "findOneAndDelete" per attachment: without transactions, a
+         * concurrent deletion may have taken it since the "Find()", and
+         * only the call that deletes it signals its file and counts it.
+         * Deleting by "_id" also leaves alone an attachment added since.
+         **/
+        taken = collection.FindOneAndDelete(make_document(kvp("_id", attachments[i].view()["_id"].get_value())));
+      }
+
+      if (taken)
+      {
+        const bsoncxx::document::view attachment = taken->view();
+        output.SignalDeletedAttachment(MongoDBToolbox::GetString(attachment, "uuid"),
+                                       MongoDBToolbox::GetInt32(attachment, "fileType"),
+                                       MongoDBToolbox::GetInteger(attachment, "uncompressedSize"),
+                                       MongoDBToolbox::GetString(attachment, "uncompressedHash"),
+                                       MongoDBToolbox::GetInt32(attachment, "compressionType"),
+                                       MongoDBToolbox::GetInteger(attachment, "compressedSize"),
+                                       MongoDBToolbox::GetString(attachment, "compressedHash"),
+                                       GetCustomDataField(attachment));
+
+        change.compressedSize_ -= MongoDBToolbox::GetInteger(attachment, "compressedSize");
+        change.uncompressedSize_ -= MongoDBToolbox::GetInteger(attachment, "uncompressedSize");
+      }
     }
 
-    if (!attachments.empty())
+    if (database_.GetSession() != NULL &&
+        !attachments.empty())
     {
-      // Not by "filter": without transactions, an attachment added since the
-      // "Find()" would be deleted without being signalled, and its file kept
       bsoncxx::builder::basic::array ids;
       for (size_t i = 0; i < attachments.size(); i++)
       {
@@ -80,18 +105,10 @@ namespace OrthancDatabases
       }
 
       collection.DeleteMany(make_document(kvp("_id", make_document(kvp("$in", ids.extract())))));
-
-      MongoDBStatisticsValues change;
-      for (size_t i = 0; i < attachments.size(); i++)
-      {
-        change.compressedSize_ -= MongoDBToolbox::GetInteger(attachments[i].view(), "compressedSize");
-        change.uncompressedSize_ -= MongoDBToolbox::GetInteger(attachments[i].view(), "uncompressedSize");
-      }
-
-      MongoDBStatistics(database_).RecordChange(change);
     }
-  }
 
+    MongoDBStatistics(database_).RecordChange(change);
+  }
 
   void MongoDBAttachments::AddAttachment(int64_t id,
                                          const OrthancPluginAttachment& attachment,
@@ -215,46 +232,6 @@ namespace OrthancDatabases
                                               const std::list<int64_t>& resources)
   {
     SignalAndDelete(output, make_document(kvp("id", make_document(kvp("$in", MongoDBToolbox::ToArray(resources))))));
-  }
-
-
-  void MongoDBAttachments::SweepForResources(IDatabaseBackendOutput& output,
-                                             const std::list<int64_t>& resources)
-  {
-    MongoDBCollection collection = database_.GetCollection(COLLECTION);
-
-    MongoDBCollection::Documents attachments;
-    collection.Find(attachments, make_document(kvp("id", make_document(kvp("$in", MongoDBToolbox::ToArray(resources))))));
-
-    MongoDBStatisticsValues change;
-
-    for (size_t i = 0; i < attachments.size(); i++)
-    {
-      // "AddAttachment()" may take it back meanwhile, cf. its comment
-      std::optional<bsoncxx::document::value> taken =
-        collection.FindOneAndDelete(make_document(kvp("_id", attachments[i].view()["_id"].get_value())));
-
-      if (taken)
-      {
-        const bsoncxx::document::view attachment = taken->view();
-        output.SignalDeletedAttachment(MongoDBToolbox::GetString(attachment, "uuid"),
-                                       MongoDBToolbox::GetInt32(attachment, "fileType"),
-                                       MongoDBToolbox::GetInteger(attachment, "uncompressedSize"),
-                                       MongoDBToolbox::GetString(attachment, "uncompressedHash"),
-                                       MongoDBToolbox::GetInt32(attachment, "compressionType"),
-                                       MongoDBToolbox::GetInteger(attachment, "compressedSize"),
-                                       MongoDBToolbox::GetString(attachment, "compressedHash"),
-                                       GetCustomDataField(attachment));
-
-        change.compressedSize_ -= MongoDBToolbox::GetInteger(attachment, "compressedSize");
-        change.uncompressedSize_ -= MongoDBToolbox::GetInteger(attachment, "uncompressedSize");
-      }
-    }
-
-    if (!attachments.empty())
-    {
-      MongoDBStatistics(database_).RecordChange(change);
-    }
   }
 
 

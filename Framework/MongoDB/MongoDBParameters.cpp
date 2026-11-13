@@ -112,10 +112,15 @@ namespace OrthancDatabases
 
   void MongoDBParameters::SetChunkSize(unsigned int size)
   {
-    if (size == 0)
+    // A chunk is one document, which MongoDB limits to 16 MB with its other fields
+    static const unsigned int MAX_CHUNK_SIZE = 16 * 1024 * 1024 - 1024;
+
+    if (size == 0 ||
+        size > MAX_CHUNK_SIZE)
     {
       throw Orthanc::OrthancException(Orthanc::ErrorCode_ParameterOutOfRange,
-                                      "The GridFS chunk size must be strictly positive");
+                                      "The GridFS chunk size must be between 1 and " +
+                                      std::to_string(MAX_CHUNK_SIZE) + " bytes");
     }
 
     chunkSize_ = size;

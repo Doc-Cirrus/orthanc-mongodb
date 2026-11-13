@@ -22,6 +22,7 @@
 #include "../../Framework/MongoDB/MongoDBDatabase.h"
 #include "../../Framework/MongoDB/MongoDBToolbox.h"
 
+#include <Logging.h>
 #include <OrthancException.h>
 
 #include <algorithm>
@@ -188,7 +189,9 @@ namespace OrthancDatabases
         mongocxx::options::gridfs::upload options;
         options.chunk_size_bytes(that_.chunkSize_);
 
-        mongocxx::gridfs::uploader uploader = GetBucket().open_upload_stream(GetFileName(uuid, type), options);
+        const bsoncxx::types::b_oid id{bsoncxx::oid()};
+        mongocxx::gridfs::uploader uploader =
+          GetBucket().open_upload_stream_with_id(bsoncxx::types::bson_value::view(id), GetFileName(uuid, type), options);
 
         try
         {
@@ -201,12 +204,22 @@ namespace OrthancDatabases
         }
         catch (mongocxx::exception&)
         {
+          /**
+           * Not "uploader.abort()": "close()" marks the stream as closed
+           * before it writes the buffered chunks and the "fs.files"
+           * document, so "abort()" then throws without deleting anything.
+           * As a file is mostly written by "close()", its chunks, and the
+           * file document if its insertion went through, are deleted here.
+           **/
           try
           {
-            uploader.abort();  // Removes the chunks written so far
+            GetDatabase()[CHUNKS].delete_many(make_document(kvp("files_id", id)));
+            GetDatabase()[FILES].delete_one(make_document(kvp("_id", id)));
           }
-          catch (mongocxx::exception&)
+          catch (mongocxx::exception& e)
           {
+            LOG(ERROR) << "MongoDB: cannot remove the chunks of the failed upload of attachment "
+                       << uuid << ": " << e.what();
           }
 
           throw;

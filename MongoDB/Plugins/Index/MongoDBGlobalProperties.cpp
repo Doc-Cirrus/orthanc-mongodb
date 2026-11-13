@@ -248,37 +248,57 @@ namespace OrthancDatabases
   {
     bsoncxx::document::value filter = CreateFilter(serverIdentifier, property);
 
-    // value = String(Long(value or "0") + increment), computed by the server
+    // value = String(Long(value, or 0 if missing or not a number) + increment), computed by the server
     mongocxx::pipeline update;
     update.add_fields(make_document(
       kvp("value", make_document(
             kvp("$toString", make_document(
                   kvp("$add", make_array(
-                        make_document(kvp("$toLong", make_document(kvp("$ifNull", make_array("$value", "0"))))),
+                        make_document(kvp("$convert", make_document(kvp("input", "$value"),
+                                                                    kvp("to", "long"),
+                                                                    kvp("onError", int64_t(0)),
+                                                                    kvp("onNull", int64_t(0))))),
                         increment))))))));
 
+    // A counter is never a large value: a previous large value is dropped (its file below)
+    update.append_stage(make_document(kvp("$unset", FILE_FIELD)));
+
+    // The document before the update, for its large value: the new value is computed alike
     mongocxx::options::find_one_and_update options;
     options.upsert(true);
-    options.return_document(mongocxx::options::return_document::k_after);
+    options.return_document(mongocxx::options::return_document::k_before);
 
-    std::optional<bsoncxx::document::value> document =
+    std::optional<bsoncxx::document::value> previous =
       database_.GetCollection(GetCollectionName(serverIdentifier)).FindOneAndUpdate(filter.view(), update, options);
 
-    if (!document)
+    // As "$convert" with "onError" and "onNull": 0 if missing or not a number
+    int64_t current = 0;
+    if (previous)
     {
-      throw Orthanc::OrthancException(Orthanc::ErrorCode_Database);
+      const bsoncxx::document::element value = previous->view()["value"];
+
+      if (previous->view()[FILE_FIELD])
+      {
+        DeleteFile(previous->view()[FILE_FIELD].get_value());
+      }
+      else if (value &&
+               value.type() == bsoncxx::type::k_string &&
+               !boost::conversion::try_lexical_convert<int64_t>(std::string(value.get_string().value), current))
+      {
+        current = 0;
+      }
+      else if (value &&
+               value.type() == bsoncxx::type::k_int32)
+      {
+        current = value.get_int32().value;
+      }
+      else if (value &&
+               value.type() == bsoncxx::type::k_int64)
+      {
+        current = value.get_int64().value;
+      }
     }
 
-    const std::string value = MongoDBToolbox::GetString(document->view(), "value");
-
-    try
-    {
-      return boost::lexical_cast<int64_t>(value);
-    }
-    catch (boost::bad_lexical_cast&)
-    {
-      throw Orthanc::OrthancException(Orthanc::ErrorCode_Database,
-                                      "Global property " + std::to_string(property) + " is not an integer: " + value);
-    }
+    return current + increment;
   }
 }

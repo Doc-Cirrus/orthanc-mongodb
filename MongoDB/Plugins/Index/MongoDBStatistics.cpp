@@ -25,6 +25,8 @@
 #include <OrthancException.h>
 #include <Toolbox.h>
 
+#include <boost/thread/thread.hpp>
+
 
 namespace OrthancDatabases
 {
@@ -39,6 +41,7 @@ namespace OrthancDatabases
   static const std::string COUNT_FIELDS[4] = { "patients", "studies", "series", "instances" };
   static const std::string COMPRESSED_SIZE = "compressedSize";
   static const std::string UNCOMPRESSED_SIZE = "uncompressedSize";
+  static const std::string APPLIED_CLAIMS = "appliedClaims";
 
 
   static int64_t ReadNumber(const bsoncxx::document::view& document,
@@ -157,6 +160,34 @@ namespace OrthancDatabases
   }
 
 
+  /**
+   * The claims whose changes are already added to the totals, but not
+   * deleted yet (cf. "Consolidate()"). Their changes are not pending.
+   **/
+  static bsoncxx::array::value GetAppliedClaims(const bsoncxx::document::view& totals)
+  {
+    bsoncxx::builder::basic::array claims;
+    bsoncxx::document::element applied = totals[APPLIED_CLAIMS];
+
+    if (applied &&
+        applied.type() == bsoncxx::type::k_array)
+    {
+      for (const bsoncxx::array::element& claim : applied.get_array().value)
+      {
+        claims.append(claim.get_value());
+      }
+    }
+
+    return claims.extract();
+  }
+
+
+  static bsoncxx::document::value GetPendingFilter(const bsoncxx::document::view& totals)
+  {
+    return make_document(kvp("claim", make_document(kvp("$nin", GetAppliedClaims(totals)))));
+  }
+
+
   // Sums the documents of "collection" that match "filter"
   static void SumDocuments(MongoDBStatisticsValues& target,
                            mongocxx::collection collection,
@@ -227,19 +258,9 @@ namespace OrthancDatabases
   }
 
 
-  bool MongoDBStatistics::LookupTotals(MongoDBStatisticsValues& totals)
+  std::optional<bsoncxx::document::value> MongoDBStatistics::LookupTotals()
   {
-    std::optional<bsoncxx::document::value> document = database_.GetCollection(TOTALS).FindOne(GetTotalsFilter());
-
-    if (document)
-    {
-      totals.FromDocument(document->view());
-      return true;
-    }
-    else
-    {
-      return false;
-    }
+    return database_.GetCollection(TOTALS).FindOne(GetTotalsFilter());
   }
 
 
@@ -268,10 +289,14 @@ namespace OrthancDatabases
 
   void MongoDBStatistics::GetValues(MongoDBStatisticsValues& target)
   {
-    if (LookupTotals(target))
+    std::optional<bsoncxx::document::value> totals = LookupTotals();
+
+    if (totals)
     {
+      target.FromDocument(totals->view());
+
       MongoDBStatisticsValues pending;
-      SumChanges(pending, make_document());
+      SumChanges(pending, GetPendingFilter(totals->view()));
       target += pending;
     }
     else
@@ -291,9 +316,28 @@ namespace OrthancDatabases
 
   bool MongoDBStatistics::Consolidate()
   {
-    if (!database_.GetCollection(TOTALS).Exists(GetTotalsFilter()))
+    std::optional<bsoncxx::document::value> totals = LookupTotals();
+
+    if (!totals)
     {
       return false;
+    }
+
+    MongoDBCollection changes = database_.GetCollection(CHANGES);
+    MongoDBCollection properties = database_.GetCollection(TOTALS);
+
+    /**
+     * Without transactions, the "$inc" of the totals and the deletion of
+     * the changes are separate writes. The totals therefore record the
+     * claim they have added: a consolidation interrupted in between is
+     * finished here, and its changes are never added twice.
+     **/
+    const bsoncxx::array::value applied = GetAppliedClaims(totals->view());
+    for (const bsoncxx::array::element& claim : applied.view())
+    {
+      changes.DeleteMany(make_document(kvp("claim", claim.get_value())));
+      properties.UpdateOne(GetTotalsFilter(),
+                           make_document(kvp("$pull", make_document(kvp(APPLIED_CLAIMS, claim.get_value())))));
     }
 
     /**
@@ -302,7 +346,6 @@ namespace OrthancDatabases
      * never add the same change twice.
      **/
     const std::string claim = Orthanc::Toolbox::GenerateUuid();
-    MongoDBCollection changes = database_.GetCollection(CHANGES);
 
     if (changes.UpdateMany(make_document(kvp("claim", make_document(kvp("$exists", false)))),
                            make_document(kvp("$set", make_document(kvp("claim", claim))))) > 0)
@@ -310,12 +353,20 @@ namespace OrthancDatabases
       MongoDBStatisticsValues sum;
       SumChanges(sum, make_document(kvp("claim", claim)));
 
+      bsoncxx::builder::basic::document update;
+      update.append(kvp("$addToSet", make_document(kvp(APPLIED_CLAIMS, claim))));
+
       if (!sum.IsZero())
       {
-        database_.GetCollection(TOTALS).UpdateOne(GetTotalsFilter(), make_document(kvp("$inc", sum.ToDocument())));
+        update.append(kvp("$inc", sum.ToDocument()));
       }
 
+      properties.UpdateOne(make_document(kvp("property", TOTALS_PROPERTY),
+                                         kvp(APPLIED_CLAIMS, make_document(kvp("$ne", claim)))),
+                           update.extract());
+
       changes.DeleteMany(make_document(kvp("claim", claim)));
+      properties.UpdateOne(GetTotalsFilter(), make_document(kvp("$pull", make_document(kvp(APPLIED_CLAIMS, claim)))));
     }
 
     return true;
@@ -358,7 +409,7 @@ namespace OrthancDatabases
 
   bool MongoDBStatistics::ComputeTotals(bool force)
   {
-    if (database_.GetCollection(TOTALS).Exists(GetTotalsFilter()))
+    if (LookupTotals())
     {
       return true;
     }
@@ -388,9 +439,19 @@ namespace OrthancDatabases
       }
       else
       {
+        /**
+         * Every write changes the data first, and records its change
+         * right after. A write whose data the scan has seen may record
+         * its change after the scan: the changes are therefore counted
+         * again once such writes have had time to finish. Only a writer
+         * stalled longer than "SETTLE" between its two writes escapes.
+         **/
+        static const unsigned int SETTLE = 1000;  // Milliseconds
+
         const int64_t before = CountDocuments(database[CHANGES], NULL, make_document());
         Scan(totals, database, NULL);
         SumDocuments(pending, database[CHANGES], NULL, make_document());
+        boost::this_thread::sleep(boost::posix_time::milliseconds(SETTLE));
         const int64_t after = CountDocuments(database[CHANGES], NULL, make_document());
 
         if (before != after)
@@ -398,7 +459,8 @@ namespace OrthancDatabases
           if (force)
           {
             LOG(WARNING) << "MongoDB: the statistics are computed while " << (after - before)
-                         << " changes were written, they may be slightly off";
+                         << " changes were written: these may be miscounted until the totals are "
+                         << "computed again (delete the property " << TOTALS_PROPERTY << " of GlobalProperties)";
           }
           else
           {

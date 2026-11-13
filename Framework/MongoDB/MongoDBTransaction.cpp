@@ -22,6 +22,8 @@
 #include <Logging.h>
 #include <OrthancException.h>
 
+#include <boost/thread/thread.hpp>
+
 
 namespace OrthancDatabases
 {
@@ -30,7 +32,18 @@ namespace OrthancDatabases
     database_(database),
     isImplicit_(type == TransactionType_Implicit)
   {
-    if (database_.HasTransactions())
+    /**
+     * Only the read-write transactions are server-side transactions.
+     * These are capped by "transactionLifetimeLimitSeconds" (60 s by
+     * default), which a long read (e.g. a full scan of a large
+     * database) would exceed, and be retried until Orthanc gives up.
+     * The read-only and implicit ones read without a session, as the
+     * implicit transactions of PostgreSQL run each statement alone: each
+     * read sees the latest data of the primary (read concern "local"),
+     * not a snapshot shared by the reads of the transaction.
+     **/
+    if (type == TransactionType_ReadWrite &&
+        database_.HasTransactions())
     {
       try
       {
@@ -99,10 +112,17 @@ namespace OrthancDatabases
 
     try
     {
-      // The outcome of a commit can be unknown, e.g. after a network
-      // error. Committing again is safe, and is what the MongoDB
-      // specification recommends.
-      static const unsigned int MAX_COMMIT_ATTEMPTS = 3;
+      /**
+       * The outcome of a commit can be unknown, e.g. after a network
+       * error. Committing again is safe, and is what the MongoDB
+       * specification recommends. The attempts span more than an
+       * election of a new primary (about 10 seconds). Once they are
+       * exhausted, "ConvertErrorCode()" reports "DatabaseUnavailable",
+       * never a retry of the whole transaction, as the commit may be
+       * applied. Orthanc then removes the files of the store: if the
+       * commit was applied, the instance stays without its file.
+       **/
+      static const unsigned int MAX_COMMIT_ATTEMPTS = 8;
 
       for (unsigned int attempt = 1; ; attempt++)
       {
@@ -116,7 +136,10 @@ namespace OrthancDatabases
           if (attempt < MAX_COMMIT_ATTEMPTS &&
               e.has_error_label("UnknownTransactionCommitResult"))
           {
+            // 0.5, 1, 1.5... 3.5 seconds: 14 seconds of waiting in total, plus up to
+            // "serverSelectionTimeoutMS" (30 s by default) per attempt to find a primary
             LOG(WARNING) << "MongoDB: unknown result of a commit, retrying: " << e.what();
+            boost::this_thread::sleep(boost::posix_time::milliseconds(500 * attempt));
           }
           else
           {

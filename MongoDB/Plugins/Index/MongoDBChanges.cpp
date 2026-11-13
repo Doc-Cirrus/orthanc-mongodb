@@ -188,8 +188,18 @@ namespace OrthancDatabases
 
   int64_t MongoDBChanges::GetLastChangeIndex()
   {
-    // The changes of deleted resources are removed, so the last index
-    // comes from the sequence, as "sqlite_sequence" does in SQLite
+    /**
+     * The changes of deleted resources are removed, so the last index
+     * comes from the sequence, as "sqlite_sequence" does in SQLite. The
+     * sequence is incremented outside of the transactions: the index
+     * may belong to a change that is not committed yet, or never will
+     * be, and the changes may be committed out of order (as with the
+     * "serial" column of PostgreSQL). Unlike the PostgreSQL plugin, whose
+     * trigger updates "GlobalIntegers" inside the transaction, this
+     * avoids a document that every writer updates (write conflicts on
+     * a replica set). A client that starts from "/changes?last" may
+     * therefore miss a change committed right after.
+     **/
     std::optional<bsoncxx::document::value> sequence =
       database_.GetCollection("Sequences").FindOne(make_document(kvp("name", COLLECTION)));
 

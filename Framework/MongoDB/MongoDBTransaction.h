@@ -32,10 +32,12 @@ namespace OrthancDatabases
    * Counterpart of "PostgreSQLTransaction". The strategy is chosen
    * once per server (cf. "MongoDBDatabase::HasTransactions()"):
    *
-   * - On a replica set or a sharded cluster, each Orthanc transaction
-   *   is a multi-document transaction of a "client_session". Every
-   *   "MongoDBCollection" created from the database while this object
-   *   is alive takes part in it.
+   * - On a replica set or a sharded cluster, each read-write Orthanc
+   *   transaction is a multi-document transaction of a
+   *   "client_session". Every "MongoDBCollection" created from the
+   *   database while this object is alive takes part in it. The
+   *   read-only and implicit transactions use no session, so that a
+   *   long read is not aborted by "transactionLifetimeLimitSeconds".
    *
    * - On a standalone server, there are no multi-document
    *   transactions: each operation is applied immediately, "Commit()"
