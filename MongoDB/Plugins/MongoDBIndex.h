@@ -351,6 +351,22 @@ namespace OrthancDatabases
     virtual void ClearMainDicomTags(DatabaseManager& manager,
                                     int64_t internalId) ORTHANC_OVERRIDE;
 
+#if ORTHANC_PLUGINS_HAS_INTEGRATED_FIND == 1
+    // "EnableExtendedFind": false makes Orthanc use its generic Find on "LookupResources()"
+    virtual bool HasFindSupport() const ORTHANC_OVERRIDE
+    {
+      return parameters_.IsExtendedFindEnabled();
+    }
+
+    virtual void ExecuteFind(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                             DatabaseManager& manager,
+                             const Orthanc::DatabasePluginMessages::Find_Request& request) ORTHANC_OVERRIDE;
+
+    virtual void ExecuteCount(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                              DatabaseManager& manager,
+                              const Orthanc::DatabasePluginMessages::Find_Request& request) ORTHANC_OVERRIDE;
+#endif
+
     virtual void LookupResources(IDatabaseBackendOutput& output,
                                  DatabaseManager& manager,
                                  const DatabaseConstraints& lookup,

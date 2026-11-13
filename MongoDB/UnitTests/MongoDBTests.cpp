@@ -562,6 +562,7 @@ TEST(MongoDBParameters, Basic)
   ASSERT_EQ(5u, p.GetConnectionRetryInterval());
   ASSERT_EQ(MongoDBTransactionsMode_Auto, p.GetTransactionsMode());
   ASSERT_TRUE(p.IsCreateIndexesAtStartup());
+  ASSERT_TRUE(p.IsExtendedFindEnabled());
 
   p.SetConnectionUri("mongodb://localhost:27017/orthanc");
   ASSERT_EQ("orthanc", p.GetDatabaseName());
@@ -2943,3 +2944,936 @@ TEST_F(MongoDBIndexTest, AttachmentCustomData)
   ASSERT_TRUE(output.customData_["without"].empty());
 }
 
+
+namespace
+{
+  namespace Messages = Orthanc::DatabasePluginMessages;
+
+  static const uint16_t STUDY_DATE = 0x0020;           // (0008,0020), study
+
+  static const int32_t METADATA_TYPE = 1024;           // A user-defined metadata
+
+
+  /**
+   * The dataset of the Find tests:
+   *
+   *   pa (DOE)   - sa1 (CT head, 20200101) - sa1-1 (CT) - sa1-1-i1 (1), sa1-1-i2 (9), sa1-1-i3 (10), sa1-1-i4 (none)
+   *                                        - sa1-2 (SR) - sa1-2-i1 (1)
+   *              - sa2 (MR, 20210101)      - sa2-1 (MR) - sa2-1-i1 (1)
+   *   pb (SMITH) - sb1 (CT chest, 20190101) - sb1-1 (CT) - sb1-1-i1 (1)
+   *
+   * The studies also have the "PatientName" of their patient, as in Orthanc.
+   **/
+  class MongoDBFindTest : public MongoDBIndexTest
+  {
+  protected:
+    std::map<std::string, int64_t>  ids_;
+
+    int64_t Create(const std::string& publicId,
+                   OrthancPluginResourceType type,
+                   const std::string& parent)
+    {
+      int64_t id = CreateChild(publicId, type, parent.empty() ? -1 : ids_[parent]);
+      ids_[publicId] = id;
+      return id;
+    }
+
+    void SetTag(const std::string& resource,
+                uint16_t group,
+                uint16_t element,
+                const std::string& value)
+    {
+      index_->SetMainDicomTag(*manager_, ids_[resource], group, element, value.c_str());
+    }
+
+    virtual void SetUp() ORTHANC_OVERRIDE
+    {
+      MongoDBIndexTest::SetUp();
+
+      Create("pa", OrthancPluginResourceType_Patient, "");
+      Create("pb", OrthancPluginResourceType_Patient, "");
+      Create("sa1", OrthancPluginResourceType_Study, "pa");
+      Create("sa2", OrthancPluginResourceType_Study, "pa");
+      Create("sb1", OrthancPluginResourceType_Study, "pb");
+      Create("sa1-1", OrthancPluginResourceType_Series, "sa1");
+      Create("sa1-2", OrthancPluginResourceType_Series, "sa1");
+      Create("sa2-1", OrthancPluginResourceType_Series, "sa2");
+      Create("sb1-1", OrthancPluginResourceType_Series, "sb1");
+      Create("sa1-1-i1", OrthancPluginResourceType_Instance, "sa1-1");
+      Create("sa1-1-i2", OrthancPluginResourceType_Instance, "sa1-1");
+      Create("sa1-1-i3", OrthancPluginResourceType_Instance, "sa1-1");
+      Create("sa1-1-i4", OrthancPluginResourceType_Instance, "sa1-1");
+      Create("sa1-2-i1", OrthancPluginResourceType_Instance, "sa1-2");
+      Create("sa2-1-i1", OrthancPluginResourceType_Instance, "sa2-1");
+      Create("sb1-1-i1", OrthancPluginResourceType_Instance, "sb1-1");
+
+      SetTag("pa", GROUP_0010, PATIENT_NAME, "DOE");
+      SetTag("pb", GROUP_0010, PATIENT_NAME, "SMITH");
+      SetTag("sa1", GROUP_0010, PATIENT_NAME, "DOE");
+      SetTag("sa2", GROUP_0010, PATIENT_NAME, "DOE");
+      SetTag("sb1", GROUP_0010, PATIENT_NAME, "SMITH");
+      SetTag("sa1", GROUP_0008, STUDY_DESCRIPTION, "CT head");
+      SetTag("sa2", GROUP_0008, STUDY_DESCRIPTION, "MR");
+      SetTag("sb1", GROUP_0008, STUDY_DESCRIPTION, "CT chest");
+      SetTag("sa1", GROUP_0008, STUDY_DATE, "20200101");
+      SetTag("sa2", GROUP_0008, STUDY_DATE, "20210101");
+      SetTag("sb1", GROUP_0008, STUDY_DATE, "20190101");
+      SetTag("sa1-1", GROUP_0008, MODALITY, "CT");
+      SetTag("sa1-2", GROUP_0008, MODALITY, "SR");
+      SetTag("sa2-1", GROUP_0008, MODALITY, "MR");
+      SetTag("sb1-1", GROUP_0008, MODALITY, "CT");
+      SetTag("sa1-1-i1", GROUP_0020, INSTANCE_NUMBER, "1");
+      SetTag("sa1-1-i2", GROUP_0020, INSTANCE_NUMBER, "9");
+      SetTag("sa1-1-i3", GROUP_0020, INSTANCE_NUMBER, "10");
+      SetTag("sa1-2-i1", GROUP_0020, INSTANCE_NUMBER, "1");
+      SetTag("sa2-1-i1", GROUP_0020, INSTANCE_NUMBER, "1");
+      SetTag("sb1-1-i1", GROUP_0020, INSTANCE_NUMBER, "1");
+    }
+
+    static Messages::Find_Request CreateRequest(Messages::ResourceType level)
+    {
+      Messages::Find_Request request;
+      request.set_level(level);
+      return request;
+    }
+
+    static void AddTagConstraint(Messages::Find_Request& request,
+                                 Messages::ResourceType level,
+                                 uint16_t group,
+                                 uint16_t element,
+                                 Messages::ConstraintType type,
+                                 const std::string& value,
+                                 bool caseSensitive = true,
+                                 bool mandatory = true)
+    {
+      Messages::DatabaseConstraint* constraint = request.add_dicom_tag_constraints();
+      constraint->set_level(level);
+      constraint->set_tag_group(group);
+      constraint->set_tag_element(element);
+      constraint->set_is_identifier_tag(false);
+      constraint->set_is_case_sensitive(caseSensitive);
+      constraint->set_is_mandatory(mandatory);
+      constraint->set_type(type);
+      constraint->add_values(value);
+    }
+
+    static void AddTagOrdering(Messages::Find_Request& request,
+                               Messages::ResourceType level,
+                               uint16_t group,
+                               uint16_t element,
+                               Messages::OrderingDirection direction,
+                               Messages::OrderingCast cast = Messages::ORDERING_CAST_STRING)
+    {
+      Messages::Find_Request_Ordering* ordering = request.add_ordering();
+      ordering->set_key_type(Messages::ORDERING_KEY_TYPE_DICOM_TAG);
+      ordering->set_direction(direction);
+      ordering->set_cast(cast);
+      ordering->set_tag_group(group);
+      ordering->set_tag_element(element);
+      ordering->set_is_identifier_tag(false);
+      ordering->set_tag_level(level);
+    }
+
+    Messages::TransactionResponse Find(const Messages::Find_Request& request)
+    {
+      Messages::TransactionResponse response;
+      index_->ExecuteFind(response, *manager_, request);
+      return response;
+    }
+
+    // The public IDs of the answers, in their order
+    std::vector<std::string> FindIds(const Messages::Find_Request& request)
+    {
+      Messages::TransactionResponse response = Find(request);
+
+      std::vector<std::string> ids;
+      for (int i = 0; i < response.find_size(); i++)
+      {
+        ids.push_back(response.find(i).public_id());
+        EXPECT_EQ(ids_[response.find(i).public_id()], response.find(i).internal_id());
+      }
+
+      return ids;
+    }
+
+    uint64_t Count(const Messages::Find_Request& request)
+    {
+      Messages::TransactionResponse response;
+      index_->ExecuteCount(response, *manager_, request);
+      return response.count_resources().count();
+    }
+  };
+
+
+  typedef std::vector<std::string>  Ids;
+
+
+  // The values of the tag (group, element) in "tags", in their order
+  template <typename Tags>
+  std::vector<std::string> GetTagValues(const Tags& tags,
+                                        uint16_t group,
+                                        uint16_t element)
+  {
+    std::vector<std::string> values;
+    for (int i = 0; i < tags.size(); i++)
+    {
+      if (tags.Get(i).group() == group &&
+          tags.Get(i).element() == element)
+      {
+        values.push_back(tags.Get(i).value());
+      }
+    }
+
+    return values;
+  }
+
+
+  template <typename Metadata>
+  std::string GetMetadataValue(const Metadata& metadata,
+                               int32_t key,
+                               int64_t* revision = NULL)
+  {
+    for (int i = 0; i < metadata.size(); i++)
+    {
+      if (metadata.Get(i).key() == key)
+      {
+        if (revision != NULL)
+        {
+          *revision = metadata.Get(i).revision();
+        }
+
+        return metadata.Get(i).value();
+      }
+    }
+
+    return "(missing)";
+  }
+}
+
+
+// Without ordering, the answers are sorted by public ID, which makes the limits repeatable
+TEST_F(MongoDBFindTest, FindLevelsAndLimits)
+{
+  ASSERT_EQ(Ids({"pa", "pb"}), FindIds(CreateRequest(Messages::RESOURCE_PATIENT)));
+  ASSERT_EQ(Ids({"sa1", "sa2", "sb1"}), FindIds(CreateRequest(Messages::RESOURCE_STUDY)));
+  ASSERT_EQ(Ids({"sa1-1", "sa1-2", "sa2-1", "sb1-1"}), FindIds(CreateRequest(Messages::RESOURCE_SERIES)));
+  ASSERT_EQ(7u, FindIds(CreateRequest(Messages::RESOURCE_INSTANCE)).size());
+  ASSERT_EQ(7u, Count(CreateRequest(Messages::RESOURCE_INSTANCE)));
+
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+  request.mutable_limits()->set_since(1);
+  request.mutable_limits()->set_count(1);
+  ASSERT_EQ(Ids({"sa2"}), FindIds(request));
+  ASSERT_EQ(1u, Count(request));
+
+  request.mutable_limits()->set_since(2);
+  request.mutable_limits()->set_count(5);
+  ASSERT_EQ(Ids({"sb1"}), FindIds(request));
+  ASSERT_EQ(1u, Count(request));
+
+  request.mutable_limits()->set_since(0);
+  request.mutable_limits()->set_count(2);
+  ASSERT_EQ(Ids({"sa1", "sa2"}), FindIds(request));
+
+  request.mutable_limits()->set_since(1);
+  request.mutable_limits()->set_count(0);  // No limit on the count
+  ASSERT_EQ(Ids({"sa2", "sb1"}), FindIds(request));
+  ASSERT_EQ(2u, Count(request));
+
+  request.mutable_limits()->set_since(10);
+  ASSERT_TRUE(FindIds(request).empty());
+  ASSERT_EQ(0u, Count(request));
+}
+
+
+TEST_F(MongoDBFindTest, FindTagConstraints)
+{
+  {
+    // Ancestor level
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_SERIES);
+    AddTagConstraint(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::CONSTRAINT_EQUAL, "doe", false);
+    ASSERT_EQ(Ids({"sa1-1", "sa1-2", "sa2-1"}), FindIds(request));
+    ASSERT_EQ(3u, Count(request));
+  }
+
+  {
+    // Child level, which drives the pipeline
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_SERIES, GROUP_0008, MODALITY, Messages::CONSTRAINT_EQUAL, "CT");
+    ASSERT_EQ(Ids({"sa1", "sb1"}), FindIds(request));
+
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_WILDCARD, "*head");
+    ASSERT_EQ(Ids({"sa1"}), FindIds(request));
+    ASSERT_EQ(1u, Count(request));
+  }
+
+  {
+    // Range on the same tag
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::CONSTRAINT_GREATER_OR_EQUAL, "20191231");
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::CONSTRAINT_SMALLER_OR_EQUAL, "20201231");
+    ASSERT_EQ(Ids({"sa1"}), FindIds(request));
+  }
+
+  {
+    // Nothing matches (the driver count is 0)
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_EQUAL, "PET");
+    ASSERT_TRUE(FindIds(request).empty());
+    ASSERT_EQ(0u, Count(request));
+  }
+
+  {
+    // Exact match ignoring the case: bounded by the upper and lower-case forms, or not if the value has an "s"
+    const char* const descriptions[] = { "MR head", "mr HEAD", "MR hEaD", "MR HEADS", "MR HEA", "US Scan", "us scan", "US SCANS" };
+    for (size_t i = 0; i < sizeof(descriptions) / sizeof(descriptions[0]); i++)
+    {
+      const std::string study = "sc" + std::to_string(i);
+      Create(study, OrthancPluginResourceType_Study, "pb");
+      SetTag(study, GROUP_0008, STUDY_DESCRIPTION, descriptions[i]);
+    }
+
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_EQUAL, "Mr Head", false);
+    ASSERT_EQ(Ids({"sc0", "sc1", "sc2"}), FindIds(request));
+    ASSERT_EQ(3u, Count(request));
+
+    request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_EQUAL, "Us Scan", false);
+    ASSERT_EQ(Ids({"sc5", "sc6"}), FindIds(request));
+    ASSERT_EQ(2u, Count(request));
+  }
+}
+
+
+TEST_F(MongoDBFindTest, FindMetadataConstraints)
+{
+  index_->SetMetadata(*manager_, ids_["sa1"], METADATA_TYPE, "x", 0);
+  index_->SetMetadata(*manager_, ids_["sa2"], METADATA_TYPE, "Y", 0);
+  index_->SetMetadata(*manager_, ids_["sa1-1"], METADATA_TYPE, "Y", 0);  // Other level
+
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+  Messages::DatabaseMetadataConstraint* constraint = request.add_metadata_constraints();
+  constraint->set_metadata(METADATA_TYPE);
+  constraint->set_is_case_sensitive(true);
+  constraint->set_is_mandatory(true);
+  constraint->set_type(Messages::CONSTRAINT_EQUAL);
+  constraint->add_values("Y");
+  ASSERT_EQ(Ids({"sa2"}), FindIds(request));
+
+  constraint->set_is_case_sensitive(false);
+  constraint->set_type(Messages::CONSTRAINT_LIST);
+  constraint->add_values("X");
+  ASSERT_EQ(Ids({"sa1", "sa2"}), FindIds(request));
+
+  // Not mandatory: a missing metadata matches too
+  constraint->set_is_mandatory(false);
+  constraint->clear_values();
+  constraint->add_values("y");
+  ASSERT_EQ(Ids({"sa2", "sb1"}), FindIds(request));
+  ASSERT_EQ(2u, Count(request));
+
+  // Combined with a tag constraint
+  AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_WILDCARD, "CT*");
+  ASSERT_EQ(Ids({"sb1"}), FindIds(request));
+}
+
+
+// The Orthanc ID of the query level or of an ancestor
+TEST_F(MongoDBFindTest, FindOrthancIdentifiers)
+{
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+  request.set_orthanc_id_patient("pa");
+  ASSERT_EQ(Ids({"sa1", "sa2"}), FindIds(request));
+  ASSERT_EQ(2u, Count(request));
+
+  request.set_orthanc_id_study("sa2");  // The lowest level wins
+  ASSERT_EQ(Ids({"sa2"}), FindIds(request));
+  ASSERT_EQ(1u, Count(request));
+
+  request.set_orthanc_id_study("pb");  // Not a study
+  ASSERT_TRUE(FindIds(request).empty());
+  ASSERT_EQ(0u, Count(request));
+
+  request.set_orthanc_id_study("nope");
+  ASSERT_TRUE(FindIds(request).empty());
+
+  request = CreateRequest(Messages::RESOURCE_INSTANCE);
+  request.set_orthanc_id_series("sa1-1");
+  ASSERT_EQ(Ids({"sa1-1-i1", "sa1-1-i2", "sa1-1-i3", "sa1-1-i4"}), FindIds(request));
+
+  // With a tag constraint
+  AddTagConstraint(request, Messages::RESOURCE_INSTANCE, GROUP_0020, INSTANCE_NUMBER, Messages::CONSTRAINT_EQUAL, "9");
+  ASSERT_EQ(Ids({"sa1-1-i2"}), FindIds(request));
+
+  // With labels
+  index_->AddLabel(*manager_, ids_["sa1"], "a");
+  request = CreateRequest(Messages::RESOURCE_STUDY);
+  request.set_orthanc_id_patient("pa");
+  request.add_labels("a");
+  request.set_labels_constraint(Messages::LABELS_CONSTRAINT_NONE);
+  ASSERT_EQ(Ids({"sa2"}), FindIds(request));
+}
+
+
+TEST_F(MongoDBFindTest, FindOrdering)
+{
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_INSTANCE);
+  request.set_orthanc_id_series("sa1-1");
+
+  // A missing value comes last, in both directions
+  AddTagOrdering(request, Messages::RESOURCE_INSTANCE, GROUP_0020, INSTANCE_NUMBER, Messages::ORDERING_DIRECTION_ASC, Messages::ORDERING_CAST_INT);
+  ASSERT_EQ(Ids({"sa1-1-i1", "sa1-1-i2", "sa1-1-i3", "sa1-1-i4"}), FindIds(request));
+
+  request.mutable_ordering(0)->set_direction(Messages::ORDERING_DIRECTION_DESC);
+  ASSERT_EQ(Ids({"sa1-1-i3", "sa1-1-i2", "sa1-1-i1", "sa1-1-i4"}), FindIds(request));
+
+  request.mutable_ordering(0)->set_cast(Messages::ORDERING_CAST_FLOAT);
+  ASSERT_EQ(Ids({"sa1-1-i3", "sa1-1-i2", "sa1-1-i1", "sa1-1-i4"}), FindIds(request));
+
+  request.mutable_ordering(0)->set_cast(Messages::ORDERING_CAST_STRING);
+  ASSERT_EQ(Ids({"sa1-1-i2", "sa1-1-i3", "sa1-1-i1", "sa1-1-i4"}), FindIds(request));
+
+  // The limits apply after the ordering
+  request.mutable_limits()->set_since(1);
+  request.mutable_limits()->set_count(2);
+  ASSERT_EQ(Ids({"sa1-1-i3", "sa1-1-i1"}), FindIds(request));
+
+  // Ordering by a study tag
+  request = CreateRequest(Messages::RESOURCE_STUDY);
+  AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+  ASSERT_EQ(Ids({"sa2", "sa1", "sb1"}), FindIds(request));
+
+  // The patient tags are read at the study level, and the public ID breaks the ties
+  request = CreateRequest(Messages::RESOURCE_STUDY);
+  AddTagOrdering(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::ORDERING_DIRECTION_DESC);
+  ASSERT_EQ(Ids({"sb1", "sa1", "sa2"}), FindIds(request));
+
+  // Then by the study date
+  AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+  ASSERT_EQ(Ids({"sb1", "sa2", "sa1"}), FindIds(request));
+
+  // Ordering series by a tag of their patient, then of their study
+  request = CreateRequest(Messages::RESOURCE_SERIES);
+  AddTagOrdering(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::ORDERING_DIRECTION_DESC);
+  AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_ASC);
+  ASSERT_EQ(Ids({"sb1-1", "sa1-1", "sa1-2", "sa2-1"}), FindIds(request));
+
+  // Ordering by a metadata, with a constraint on a child level (the driver)
+  index_->SetMetadata(*manager_, ids_["sa1"], METADATA_TYPE, "2", 0);
+  index_->SetMetadata(*manager_, ids_["sb1"], METADATA_TYPE, "1", 0);
+
+  request = CreateRequest(Messages::RESOURCE_STUDY);
+  AddTagConstraint(request, Messages::RESOURCE_SERIES, GROUP_0008, MODALITY, Messages::CONSTRAINT_EQUAL, "CT");
+  Messages::Find_Request_Ordering* ordering = request.add_ordering();
+  ordering->set_key_type(Messages::ORDERING_KEY_TYPE_METADATA);
+  ordering->set_metadata(METADATA_TYPE);
+  ordering->set_direction(Messages::ORDERING_DIRECTION_ASC);
+  ordering->set_cast(Messages::ORDERING_CAST_INT);
+  ASSERT_EQ(Ids({"sb1", "sa1"}), FindIds(request));
+
+  request.clear_dicom_tag_constraints();
+  ASSERT_EQ(Ids({"sb1", "sa1", "sa2"}), FindIds(request));
+}
+
+
+TEST_F(MongoDBFindTest, FindResourceContent)
+{
+  const int64_t study = ids_["sa1"];
+
+  index_->SetMetadata(*manager_, study, METADATA_TYPE, "study", 4);
+  index_->SetMetadata(*manager_, ids_["pa"], METADATA_TYPE, "patient", 0);
+  index_->AddLabel(*manager_, study, "b");
+  index_->AddLabel(*manager_, study, "a");
+
+  OrthancPluginAttachment attachment;
+  attachment.uuid = "uuid-study";
+  attachment.contentType = OrthancPluginContentType_DicomAsJson;
+  attachment.uncompressedSize = 42;
+  attachment.uncompressedHash = "md5-u";
+  attachment.compressionType = OrthancPluginCompressionType_ZlibWithSize;
+  attachment.compressedSize = 21;
+  attachment.compressedHash = "md5-c";
+  index_->AddAttachment(*manager_, study, attachment, 3, "custom");
+
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+  request.set_orthanc_id_study("sa1");
+  request.set_retrieve_main_dicom_tags(true);
+  request.set_retrieve_metadata(true);
+  request.set_retrieve_labels(true);
+  request.set_retrieve_attachments(true);
+  request.set_retrieve_parent_identifier(true);
+  request.mutable_parent_patient()->set_retrieve_main_dicom_tags(true);
+  request.mutable_parent_patient()->set_retrieve_metadata(true);
+
+  Messages::TransactionResponse response = Find(request);
+  ASSERT_EQ(1, response.find_size());
+
+  const Messages::Find_Response& found = response.find(0);
+  ASSERT_EQ(study, found.internal_id());
+  ASSERT_EQ("sa1", found.public_id());
+  ASSERT_EQ("pa", found.parent_public_id());
+
+  ASSERT_EQ(3, found.study_content().main_dicom_tags_size());
+  ASSERT_EQ(Ids({"CT head"}), GetTagValues(found.study_content().main_dicom_tags(), GROUP_0008, STUDY_DESCRIPTION));
+
+  int64_t revision = -1;
+  ASSERT_EQ(1, found.study_content().metadata_size());
+  ASSERT_EQ("study", GetMetadataValue(found.study_content().metadata(), METADATA_TYPE, &revision));
+  ASSERT_EQ(4, revision);
+
+  ASSERT_EQ(Ids({"DOE"}), GetTagValues(found.patient_content().main_dicom_tags(), GROUP_0010, PATIENT_NAME));
+  ASSERT_EQ("patient", GetMetadataValue(found.patient_content().metadata(), METADATA_TYPE));
+
+  std::set<std::string> labels(found.labels().begin(), found.labels().end());
+  ASSERT_EQ(MakeSet("a", "b"), labels);
+
+  ASSERT_EQ(1, found.attachments_size());
+  ASSERT_EQ(1, found.attachments_revisions_size());
+  ASSERT_EQ(3, found.attachments_revisions(0));
+  ASSERT_EQ("uuid-study", found.attachments(0).uuid());
+  ASSERT_EQ(OrthancPluginContentType_DicomAsJson, found.attachments(0).content_type());
+  ASSERT_EQ(42u, found.attachments(0).uncompressed_size());
+  ASSERT_EQ("md5-u", found.attachments(0).uncompressed_hash());
+  ASSERT_EQ(OrthancPluginCompressionType_ZlibWithSize, found.attachments(0).compression_type());
+  ASSERT_EQ(21u, found.attachments(0).compressed_size());
+  ASSERT_EQ("md5-c", found.attachments(0).compressed_hash());
+  ASSERT_EQ("custom", found.attachments(0).custom_data());
+
+  ASSERT_FALSE(found.has_series_content());
+  ASSERT_FALSE(found.has_children_series_content());
+  ASSERT_TRUE(found.one_instance_public_id().empty());
+}
+
+
+TEST_F(MongoDBFindTest, FindChildrenContent)
+{
+  index_->SetMetadata(*manager_, ids_["sa1-1"], METADATA_TYPE, "series", 0);
+  index_->SetMetadata(*manager_, ids_["sa1-1"], METADATA_TYPE + 1, "other", 0);
+
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+  request.set_orthanc_id_patient("pa");
+  request.mutable_children_series()->set_retrieve_identifiers(true);
+  request.mutable_children_series()->add_retrieve_metadata(METADATA_TYPE);
+  Messages::Find_Request_Tag* tag = request.mutable_children_series()->add_retrieve_main_dicom_tags();
+  tag->set_group(GROUP_0008);
+  tag->set_element(MODALITY);
+  request.mutable_children_instances()->set_retrieve_count(true);
+  tag = request.mutable_children_instances()->add_retrieve_main_dicom_tags();
+  tag->set_group(GROUP_0020);
+  tag->set_element(INSTANCE_NUMBER);
+
+  Messages::TransactionResponse response = Find(request);
+  ASSERT_EQ(2, response.find_size());
+
+  {
+    const Messages::Find_Response& sa1 = response.find(0);
+    ASSERT_EQ("sa1", sa1.public_id());
+
+    const Messages::Find_Response_ChildrenContent& series = sa1.children_series_content();
+    std::set<std::string> ids(series.identifiers().begin(), series.identifiers().end());
+    ASSERT_EQ(MakeSet("sa1-1", "sa1-2"), ids);
+    ASSERT_EQ(2u, series.count());
+
+    std::vector<std::string> modalities = GetTagValues(series.main_dicom_tags(), GROUP_0008, MODALITY);
+    std::sort(modalities.begin(), modalities.end());
+    ASSERT_EQ(Ids({"CT", "SR"}), modalities);
+    ASSERT_EQ(2, series.main_dicom_tags_size());  // Only the requested tags
+
+    ASSERT_EQ(1, series.metadata_size());  // Only the requested metadata
+    ASSERT_EQ("series", GetMetadataValue(series.metadata(), METADATA_TYPE));
+
+    const Messages::Find_Response_ChildrenContent& instances = sa1.children_instances_content();
+    ASSERT_EQ(5u, instances.count());
+    ASSERT_EQ(0, instances.identifiers_size());
+    ASSERT_EQ(4, instances.main_dicom_tags_size());  // "sa1-1-i4" has no instance number
+  }
+
+  {
+    const Messages::Find_Response& sa2 = response.find(1);
+    ASSERT_EQ("sa2", sa2.public_id());
+    ASSERT_EQ(1u, sa2.children_series_content().count());
+    ASSERT_EQ(0, sa2.children_series_content().metadata_size());
+    ASSERT_EQ(1u, sa2.children_instances_content().count());
+  }
+
+  // From the patients, with a constraint on a child level
+  request = CreateRequest(Messages::RESOURCE_PATIENT);
+  AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_WILDCARD, "CT*");
+  request.mutable_children_studies()->set_retrieve_count(true);
+  request.mutable_children_series()->set_retrieve_count(true);
+  request.mutable_children_instances()->set_retrieve_identifiers(true);
+
+  response = Find(request);
+  ASSERT_EQ(2, response.find_size());
+  ASSERT_EQ("pa", response.find(0).public_id());
+  ASSERT_EQ(2u, response.find(0).children_studies_content().count());
+  ASSERT_EQ(3u, response.find(0).children_series_content().count());
+  ASSERT_EQ(6u, response.find(0).children_instances_content().count());
+  ASSERT_EQ(6, response.find(0).children_instances_content().identifiers_size());
+  ASSERT_EQ("pb", response.find(1).public_id());
+  ASSERT_EQ(1u, response.find(1).children_studies_content().count());
+  ASSERT_EQ(Ids({"sb1-1-i1"}), Ids(response.find(1).children_instances_content().identifiers().begin(),
+                                   response.find(1).children_instances_content().identifiers().end()));
+
+  // A series without instance
+  Create("sb1-2", OrthancPluginResourceType_Series, "sb1");
+  request = CreateRequest(Messages::RESOURCE_SERIES);
+  request.set_orthanc_id_series("sb1-2");
+  request.mutable_children_instances()->set_retrieve_count(true);
+  request.mutable_children_instances()->set_retrieve_identifiers(true);
+  request.set_retrieve_one_instance_metadata_and_attachments(true);
+  response = Find(request);
+  ASSERT_EQ(1, response.find_size());
+  ASSERT_EQ(0u, response.find(0).children_instances_content().count());
+  ASSERT_TRUE(response.find(0).one_instance_public_id().empty());
+}
+
+
+TEST_F(MongoDBFindTest, FindAncestorsAndOneInstance)
+{
+  index_->SetMetadata(*manager_, ids_["sa1"], METADATA_TYPE, "study", 2);
+  index_->SetMetadata(*manager_, ids_["sa1-1-i1"], METADATA_TYPE, "instance", 5);
+  AddAttachment(ids_["sa1-1-i1"], "uuid-i1");
+
+  // Instances, with the content of all their ancestors
+  Messages::Find_Request request = CreateRequest(Messages::RESOURCE_INSTANCE);
+  AddTagConstraint(request, Messages::RESOURCE_INSTANCE, GROUP_0020, INSTANCE_NUMBER, Messages::CONSTRAINT_EQUAL, "1");
+  request.set_retrieve_parent_identifier(true);
+  request.mutable_parent_series()->set_retrieve_main_dicom_tags(true);
+  request.mutable_parent_study()->set_retrieve_metadata(true);
+  request.mutable_parent_patient()->set_retrieve_main_dicom_tags(true);
+  request.set_retrieve_one_instance_metadata_and_attachments(true);  // Ignored at the instance level
+
+  Messages::TransactionResponse response = Find(request);
+  ASSERT_EQ(4, response.find_size());
+
+  const Messages::Find_Response& i1 = response.find(0);
+  ASSERT_EQ("sa1-1-i1", i1.public_id());
+  ASSERT_EQ("sa1-1", i1.parent_public_id());
+  ASSERT_EQ(Ids({"CT"}), GetTagValues(i1.series_content().main_dicom_tags(), GROUP_0008, MODALITY));
+  ASSERT_EQ("study", GetMetadataValue(i1.study_content().metadata(), METADATA_TYPE));
+  ASSERT_EQ(0, i1.study_content().main_dicom_tags_size());
+  ASSERT_EQ(Ids({"DOE"}), GetTagValues(i1.patient_content().main_dicom_tags(), GROUP_0010, PATIENT_NAME));
+  ASSERT_TRUE(i1.one_instance_public_id().empty());
+
+  ASSERT_EQ("sb1-1-i1", response.find(3).public_id());
+  ASSERT_EQ(Ids({"SMITH"}), GetTagValues(response.find(3).patient_content().main_dicom_tags(), GROUP_0010, PATIENT_NAME));
+
+  // One instance of each study, with its metadata and attachments
+  request = CreateRequest(Messages::RESOURCE_STUDY);
+  AddTagConstraint(request, Messages::RESOURCE_SERIES, GROUP_0008, MODALITY, Messages::CONSTRAINT_EQUAL, "CT");
+  request.set_retrieve_one_instance_metadata_and_attachments(true);
+  request.set_retrieve_parent_identifier(true);
+
+  response = Find(request);
+  ASSERT_EQ(2, response.find_size());
+
+  const Messages::Find_Response& sa1 = response.find(0);
+  ASSERT_EQ("sa1", sa1.public_id());
+  ASSERT_EQ("pa", sa1.parent_public_id());
+  ASSERT_EQ("sa1-1-i1", sa1.one_instance_public_id());  // The first stored instance
+
+  int64_t revision = -1;
+  ASSERT_EQ(1, sa1.one_instance_metadata_size());
+  ASSERT_EQ("instance", GetMetadataValue(sa1.one_instance_metadata(), METADATA_TYPE, &revision));
+  ASSERT_EQ(5, revision);
+  ASSERT_EQ(1, sa1.one_instance_attachments_size());
+  ASSERT_EQ("uuid-i1", sa1.one_instance_attachments(0).uuid());
+  ASSERT_TRUE(sa1.one_instance_attachments(0).custom_data().empty());
+
+  ASSERT_EQ("sb1", response.find(1).public_id());
+  ASSERT_EQ("pb", response.find(1).parent_public_id());
+  ASSERT_EQ("sb1-1-i1", response.find(1).one_instance_public_id());
+  ASSERT_EQ(0, response.find(1).one_instance_metadata_size());
+}
+
+
+// The pipeline shapes whose "$lookup"s use a level array as "localField" (cf. "GetLevelKey()")
+TEST_F(MongoDBFindTest, FindLevelArraysAfterEachStart)
+{
+  index_->AddLabel(*manager_, ids_["sa1-1"], "l");
+  index_->AddLabel(*manager_, ids_["sb1-1"], "l");
+
+  for (int start = 0; start < 5; start++)
+  {
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_SERIES);
+
+    switch (start)
+    {
+      case 0:  // No driver
+        break;
+
+      case 1:  // Driver on the query level
+        AddTagConstraint(request, Messages::RESOURCE_SERIES, GROUP_0008, MODALITY, Messages::CONSTRAINT_EQUAL, "CT");
+        break;
+
+      case 2:  // Driver on a lower level, then "$group"
+        AddTagConstraint(request, Messages::RESOURCE_INSTANCE, GROUP_0020, INSTANCE_NUMBER, Messages::CONSTRAINT_EQUAL, "1");
+        break;
+
+      case 3:  // Driver on an ancestor level
+        AddTagConstraint(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::CONSTRAINT_EQUAL, "DOE");
+        break;
+
+      case 4:  // Labels
+        request.add_labels("l");
+        request.set_labels_constraint(Messages::LABELS_CONSTRAINT_ANY);
+        break;
+
+      default:
+        throw std::runtime_error("unexpected");
+    }
+
+    request.set_retrieve_parent_identifier(true);
+    request.mutable_parent_patient()->set_retrieve_main_dicom_tags(true);
+    request.mutable_children_instances()->set_retrieve_count(true);
+    request.mutable_children_instances()->set_retrieve_identifiers(true);
+    request.set_retrieve_one_instance_metadata_and_attachments(true);
+    AddTagOrdering(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::ORDERING_DIRECTION_ASC);
+
+    Messages::TransactionResponse response = Find(request);
+    ASSERT_LE(2, response.find_size()) << start;
+
+    for (int i = 0; i < response.find_size(); i++)
+    {
+      const Messages::Find_Response& series = response.find(i);
+      ASSERT_FALSE(series.parent_public_id().empty()) << start;
+      ASSERT_EQ(series.public_id().substr(0, series.parent_public_id().size()), series.parent_public_id()) << start;
+      ASSERT_EQ(1, series.patient_content().main_dicom_tags_size()) << start;
+      ASSERT_LE(1u, series.children_instances_content().count()) << start;
+      ASSERT_EQ(series.public_id() + "-i1", series.one_instance_public_id()) << start;
+    }
+
+    // The patient "DOE" comes first
+    ASSERT_EQ("sa1-1", response.find(0).public_id()) << start;
+  }
+}
+
+
+/**
+ * The pages of a list ordered by a tag of the query level use the
+ * bound of "FindOrderingBound()": each page must be the same slice of
+ * the whole list (which is read without limits, hence without bound),
+ * including with ties at the end of a page, resources without the tag,
+ * filters, and a resource with two documents for the tag.
+ **/
+TEST_F(MongoDBFindTest, FindOrderingPages)
+{
+  // More studies, with ties on the date, and two without date
+  const char* dates[] = { "20200101", "20200101", "20180505", NULL, "20200101", "20221212", NULL, "20180505" };
+  for (size_t i = 0; i < sizeof(dates) / sizeof(const char*); i++)
+  {
+    const std::string study = "sc" + std::to_string(i);
+    Create(study, OrthancPluginResourceType_Study, "pb");
+    if (dates[i] != NULL)
+    {
+      SetTag(study, GROUP_0008, STUDY_DATE, dates[i]);
+    }
+    SetTag(study, GROUP_0008, STUDY_DESCRIPTION, i % 3 == 0 ? "MR" : "CT");
+  }
+
+  index_->AddLabel(*manager_, ids_["sc1"], "hidden");
+  index_->AddLabel(*manager_, ids_["sa1"], "hidden");
+
+  for (int variant = 0; variant < 5; variant++)
+  {
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+
+    switch (variant)
+    {
+      case 0:
+        AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+        break;
+
+      case 1:
+        AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_ASC);
+        AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::ORDERING_DIRECTION_DESC);
+        break;
+
+      case 2:  // Filters applied while reading the index
+        AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+        AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_EQUAL, "CT", true, false);
+        request.add_labels("hidden");
+        request.set_labels_constraint(Messages::LABELS_CONSTRAINT_NONE);
+        break;
+
+      case 3:  // The patient tags are copied at the study level
+        AddTagOrdering(request, Messages::RESOURCE_PATIENT, GROUP_0010, PATIENT_NAME, Messages::ORDERING_DIRECTION_ASC);
+        break;
+
+      case 4:
+      {
+        // A second document for the tag of one study, which Orthanc never writes
+        mongocxx::client client{mongocxx::uri{database_->GetUri()}};
+        GetCollection(client, "MainDicomTags").insert_one(make_document(
+          kvp("id", ids_["sc5"]), kvp("tagGroup", static_cast<int32_t>(GROUP_0008)),
+          kvp("tagElement", static_cast<int32_t>(STUDY_DATE)), kvp("value", "20221212")));
+        AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+        break;
+      }
+
+      default:
+        throw std::runtime_error("unexpected");
+    }
+
+    const Ids all = FindIds(request);
+    ASSERT_EQ(variant == 2 ? 4u : 11u, all.size()) << variant;  // Exactly "CT", without "sc1"
+
+    for (size_t since = 0; since <= all.size(); since++)
+    {
+      for (size_t count = 1; since + count <= all.size() + 1; count++)
+      {
+        request.mutable_limits()->set_since(since);
+        request.mutable_limits()->set_count(count);
+
+        const Ids expected(all.begin() + since, all.begin() + std::min(all.size(), since + count));
+        ASSERT_EQ(expected, FindIds(request)) << variant << " since=" << since << " count=" << count;
+      }
+    }
+  }
+}
+
+
+/**
+ * A mandatory tag that matches more than "PROBE_LIMIT" tags is not
+ * selective: the pages then come from an ordering scan, filtered by
+ * this tag (and by the others). Each page must be the same slice of
+ * the whole list, including when the filters reject so many resources
+ * that the scan reaches its limit and the request runs without it.
+ **/
+TEST_F(MongoDBFindTest, FindOrderingScanWithFilters)
+{
+  static const uint16_t ACCESSION_NUMBER = 0x0050;  // (0008,0050), study
+
+  const size_t COUNT = 1200;
+  for (size_t i = 0; i < COUNT; i++)
+  {
+    const std::string study = "sd" + std::to_string(i);
+    Create(study, OrthancPluginResourceType_Study, "pa");
+    SetTag(study, GROUP_0008, STUDY_DESCRIPTION, "CT");
+    SetTag(study, GROUP_0008, STUDY_DATE, "2019" + std::to_string(1000 + (i * 7919) % 1200));  // Shuffled, with ties
+    SetTag(study, GROUP_0008, ACCESSION_NUMBER, "A" + std::to_string(i));
+  }
+
+  for (int variant = 0; variant < 6; variant++)
+  {
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_STUDY);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DESCRIPTION, Messages::CONSTRAINT_EQUAL, "CT");
+
+    size_t expected = COUNT;  // The studies of the fixture have other descriptions
+
+    if (variant == 1 || variant == 3)
+    {
+      // One study in 10: the scan finds the pages
+      AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, ACCESSION_NUMBER, Messages::CONSTRAINT_WILDCARD, "*7");
+      expected = COUNT / 10;
+    }
+    else if (variant == 4 || variant == 5)
+    {
+      // One study in 50: the scan reaches its limit
+      AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, ACCESSION_NUMBER, Messages::CONSTRAINT_WILDCARD, "*12", false);
+      expected = 24;  // "A12", "A112", ..., "A1112", and "A12x"
+    }
+
+    if (variant == 0 || variant == 1 || variant == 4)
+    {
+      AddTagOrdering(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::ORDERING_DIRECTION_DESC);
+    }
+
+    const Ids all = FindIds(request);
+    if (variant != 4 && variant != 5)
+    {
+      ASSERT_EQ(expected, all.size()) << variant;
+    }
+
+    for (size_t since = 0; since < all.size() + 2; since = (since < 3 ? since + 1 : since * 4))
+    {
+      for (size_t count = 1; count <= 100; count = count * 10)
+      {
+        request.mutable_limits()->set_since(since);
+        request.mutable_limits()->set_count(count);
+
+        const Ids page(all.begin() + std::min(all.size(), since), all.begin() + std::min(all.size(), since + count));
+        ASSERT_EQ(page, FindIds(request)) << variant << " since=" << since << " count=" << count;
+        ASSERT_EQ(page.size(), Count(request)) << variant << " since=" << since << " count=" << count;
+      }
+    }
+  }
+}
+
+
+/**
+ * Two mandatory tags that both match more than "PROBE_LIMIT" tags are
+ * counted again with a higher limit, so that the more selective one
+ * drives: here, the study date range (1,100 studies) rather than the
+ * modality (1,300 series), including when the modality is matched
+ * case-insensitively, which does not bound the index scan. Both give
+ * the same answers, so the test reads the pipeline of the Find in the
+ * profiler of the test database.
+ **/
+TEST_F(MongoDBFindTest, FindDriverAboveProbeLimit)
+{
+  const size_t DATED = 1100;
+  const size_t OTHERS = 200;
+
+  for (size_t i = 0; i < DATED; i++)
+  {
+    const std::string study = "sd" + std::to_string(i);
+    const std::string series = study + "-1";
+    Create(study, OrthancPluginResourceType_Study, "pa");
+    Create(series, OrthancPluginResourceType_Series, study);
+    SetTag(study, GROUP_0008, STUDY_DATE, "201906" + std::to_string(10 + i % 20));
+    SetTag(series, GROUP_0008, MODALITY, "MR");
+  }
+
+  Create("sx", OrthancPluginResourceType_Study, "pb");  // No date
+  for (size_t i = 0; i < OTHERS; i++)
+  {
+    const std::string series = "sx-" + std::to_string(i);
+    Create(series, OrthancPluginResourceType_Series, "sx");
+    SetTag(series, GROUP_0008, MODALITY, "MR");
+  }
+
+  mongocxx::client client{mongocxx::uri{database_->GetUri()}};
+  mongocxx::database database = client[database_->GetName()];
+
+  // A case-insensitive equality is a regular expression, which does not bound the index scan
+  for (bool caseSensitive : { true, false })
+  {
+    Messages::Find_Request request = CreateRequest(Messages::RESOURCE_SERIES);
+    AddTagConstraint(request, Messages::RESOURCE_SERIES, GROUP_0008, MODALITY, Messages::CONSTRAINT_EQUAL, "MR", caseSensitive);
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::CONSTRAINT_GREATER_OR_EQUAL, "20190601");
+    AddTagConstraint(request, Messages::RESOURCE_STUDY, GROUP_0008, STUDY_DATE, Messages::CONSTRAINT_SMALLER_OR_EQUAL, "20190630");
+
+    database["system.profile"].drop();
+    database.run_command(make_document(kvp("profile", 2)));
+
+    const size_t found = FindIds(request).size();
+
+    database.run_command(make_document(kvp("profile", 0)));
+    ASSERT_EQ(DATED, found) << caseSensitive;  // "sa2-1" of the fixture is an MR series of 2021
+
+    // The first "$match" of the Find, the only aggregation that sorts (by public ID, without ordering)
+    int32_t driverElement = -1;
+    for (const bsoncxx::document::view& entry : database["system.profile"].find(
+           make_document(kvp("command.aggregate", make_document(kvp("$exists", true))))))
+    {
+      const bsoncxx::array::view pipeline = entry["command"]["pipeline"].get_array().value;
+
+      bool sorts = false;
+      for (const bsoncxx::array::element& stage : pipeline)
+      {
+        sorts = (sorts || stage.get_document().value.find("$sort") != stage.get_document().value.end());
+      }
+
+      if (sorts)
+      {
+        const bsoncxx::document::view match = pipeline[0].get_document().value["$match"].get_document().value;
+        driverElement = MongoDBToolbox::GetInteger(match, "tagElement");
+      }
+    }
+
+    ASSERT_EQ(STUDY_DATE, driverElement) << caseSensitive;
+  }
+}

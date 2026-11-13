@@ -51,6 +51,7 @@ namespace OrthancDatabases
     unsigned int             connectionRetryInterval_;
     MongoDBTransactionsMode  transactionsMode_;
     bool                     createIndexesAtStartup_;
+    bool                     enableExtendedFind_;
 
     void Reset();
 
@@ -111,6 +112,16 @@ namespace OrthancDatabases
     bool IsCreateIndexesAtStartup() const
     {
       return createIndexesAtStartup_;
+    }
+
+    void SetEnableExtendedFind(bool enable)
+    {
+      enableExtendedFind_ = enable;
+    }
+
+    bool IsExtendedFindEnabled() const
+    {
+      return enableExtendedFind_;
     }
 
     static MongoDBTransactionsMode ParseTransactionsMode(const Json::Value& value);
