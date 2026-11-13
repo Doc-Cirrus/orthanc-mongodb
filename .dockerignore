@@ -1,0 +1,17 @@
+# Build context of .docker/Dockerfile (the repository root). Only the sources
+# are needed: the third-party downloads are fetched again by the build.
+.git
+.tmp
+.vscode
+.idea
+*.iml
+.DS_Store
+._.DS_Store
+build
+**/ThirdPartyDownloads
+
+# Local settings of the compose environments, and the DICOM sender, which is
+# built from its own context (.docker/DicomSender)
+.docker/.env
+.docker/docker-compose.override.yaml
+.docker/DicomSender
