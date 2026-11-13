@@ -51,13 +51,10 @@ endif()
 
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UPPERCASE)
 
-if (STATIC_BUILD OR LINK_STATIC_LIBS)
-    set(MONGO_ENABLE_STATIC ON)
-    set(MONGO_ENABLE_SHARED OFF)
-else ()
-    set(MONGO_ENABLE_STATIC OFF)
-    set(MONGO_ENABLE_SHARED ON)
-endif ()
+# Always static: the shared mongocxx allows a single "mongocxx::instance"
+# per process, so both plugins could not be loaded together
+set(MONGO_ENABLE_STATIC ON)
+set(MONGO_ENABLE_SHARED OFF)
 
 include(ProcessorCount)
 ProcessorCount(MONGO_BUILD_JOBS)

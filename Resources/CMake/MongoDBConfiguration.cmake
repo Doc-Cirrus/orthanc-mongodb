@@ -39,17 +39,18 @@ endif()
 find_package(mongoc ${MONGO_C_MINIMAL_VERSION} CONFIG REQUIRED)
 find_package(mongocxx ${MONGO_CXX_MINIMAL_VERSION} CONFIG REQUIRED)
 
-if (STATIC_BUILD OR LINK_STATIC_LIBS)
-  set(MONGO_PREFER_STATIC ON)
-else()
-  set(MONGO_PREFER_STATIC OFF)
-endif()
+# The static mongocxx is always preferred, cf. below
+set(MONGO_PREFER_STATIC ON)
 
-if ((MONGO_PREFER_STATIC OR NOT TARGET mongo::mongocxx_shared) AND TARGET mongo::mongocxx_static)
+if (TARGET mongo::mongocxx_static)
   set(MONGODB_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
   add_definitions(-DBSONCXX_STATIC -DMONGOCXX_STATIC)
 elseif (TARGET mongo::mongocxx_shared)
-  set(MONGODB_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
+  # Each plugin creates its own "mongocxx::instance", which the shared
+  # library allows only once per process: both plugins could not be loaded
+  message(FATAL_ERROR "Only static builds are supported: the shared mongocxx library allows a single "
+    "mongocxx::instance per process, so the index and the storage plugins cannot be loaded together. "
+    "Provide the static mongocxx libraries, or set AUTO_INSTALL_DEPENDENCIES=ON to build them")
 else()
   message(FATAL_ERROR "The mongocxx package does not provide any usable library target")
 endif()
