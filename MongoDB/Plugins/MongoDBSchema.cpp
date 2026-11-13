@@ -156,6 +156,13 @@ namespace OrthancDatabases
     indexes.emplace_back("KeyValueStores", make_document(kvp("storeId", 1), kvp("key", 1)), true);
     indexes.emplace_back("Queues", make_document(kvp("queueId", 1), kvp("id", 1)), false);
 
+    // Revision 2: the audit logs, in chronological order (the index on
+    // "ts" is a TTL index if "AuditLogsRetentionDays" is set)
+    indexes.emplace_back("AuditLogs", make_document(kvp("ts", 1)), false);
+    indexes.emplace_back("AuditLogs", make_document(kvp("userId", 1), kvp("ts", 1)), false);
+    indexes.emplace_back("AuditLogs", make_document(kvp("resourceId", 1), kvp("ts", 1)), false);
+    indexes.emplace_back("AuditLogs", make_document(kvp("action", 1), kvp("ts", 1)), false);
+
     return indexes;
   }
 
@@ -756,6 +763,98 @@ namespace OrthancDatabases
   }
 
 
+  /**
+   * "AuditLogsRetentionDays" makes the index { ts } of "AuditLogs" a TTL
+   * index, so that the server deletes the older logs. Setting it back
+   * to 0 rebuilds the index without TTL: nothing is ever deleted unless
+   * the option is set.
+   **/
+  static void ConfigureAuditLogsRetention(mongocxx::database& database,
+                                          unsigned int days)
+  {
+    const bsoncxx::document::value keys = make_document(kvp("ts", 1));
+
+    try
+    {
+      std::optional<bsoncxx::document::value> index;
+
+      for (const bsoncxx::document::view& existing : database["AuditLogs"].list_indexes())
+      {
+        if (existing["key"] &&
+            existing["key"].type() == bsoncxx::type::k_document &&
+            HasSameKeys(existing["key"].get_document().value, keys.view()))
+        {
+          index = bsoncxx::document::value(existing);
+        }
+      }
+
+      if (!index)
+      {
+        if (days > 0)
+        {
+          LOG(WARNING) << "MongoDB: the index AuditLogs.ts_1 is missing, \"AuditLogsRetentionDays\" has no effect";
+        }
+
+        return;
+      }
+
+      const bsoncxx::document::element current = index->view()["expireAfterSeconds"];
+      const int64_t expected = static_cast<int64_t>(days) * 24 * 3600;
+
+      if (days > 0)
+      {
+        int64_t seconds = -1;
+        if (current)
+        {
+          switch (current.type())
+          {
+            case bsoncxx::type::k_int32:
+              seconds = current.get_int32().value;
+              break;
+
+            case bsoncxx::type::k_int64:
+              seconds = current.get_int64().value;
+              break;
+
+            case bsoncxx::type::k_double:
+              seconds = static_cast<int64_t>(current.get_double().value);
+              break;
+
+            default:
+              break;
+          }
+        }
+
+        if (seconds != expected)
+        {
+          database.run_command(make_document(
+            kvp("collMod", "AuditLogs"),
+            kvp("index", make_document(kvp("keyPattern", keys.view()), kvp("expireAfterSeconds", expected)))));
+          LOG(WARNING) << "MongoDB: the audit logs are deleted after " << days << " days";
+        }
+      }
+      else if (current)
+      {
+        const std::string name(index->view()["name"].get_string().value);
+        database["AuditLogs"].indexes().drop_one(name);
+        database["AuditLogs"].create_index(keys.view(), make_document(kvp("name", name)));
+        LOG(WARNING) << "MongoDB: the audit logs are not deleted automatically anymore";
+      }
+    }
+    catch (mongocxx::operation_exception& e)
+    {
+      if (e.code().value() != 26 /* NamespaceNotFound */)
+      {
+        MongoDBDatabase::ThrowException(e);
+      }
+    }
+    catch (mongocxx::exception& e)
+    {
+      MongoDBDatabase::ThrowException(e);
+    }
+  }
+
+
   static void Upgrade(DatabaseManager& manager,
                       const MongoDBParameters& parameters)
   {
@@ -839,6 +938,8 @@ namespace OrthancDatabases
     // A new database needs no full scan to compute its statistics
     MongoDBStatistics(manager).InitializeIfEmpty();
 
+    mongocxx::database driver = database.GetDatabase();
+    ConfigureAuditLogsRetention(driver, parameters.GetAuditLogsRetentionDays());
   }
 
 

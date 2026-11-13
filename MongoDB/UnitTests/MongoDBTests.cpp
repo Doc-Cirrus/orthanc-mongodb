@@ -3045,6 +3045,124 @@ TEST_F(MongoDBIndexTest, AttachmentCustomData)
 }
 
 
+// Phase 6: the audit logs, with the filters of the REST route "/plugins/mongodb/audit-logs"
+TEST_F(MongoDBIndexTest, AuditLogs)
+{
+  ASSERT_TRUE(index_->HasAuditLogs());
+
+  std::string binary = "{\"a\":1}";
+  binary.push_back('\0');
+
+  index_->RecordAuditLog(*manager_, "plugin", "alice", OrthancPluginResourceType_Study, "s1", "view", binary.c_str(), binary.size());
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  index_->RecordAuditLog(*manager_, "plugin", "bob", OrthancPluginResourceType_Study, "s1", "delete", NULL, 0);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  index_->RecordAuditLog(*manager_, "other", "alice", OrthancPluginResourceType_Patient, "p1", "view", NULL, 0);
+
+  std::list<IDatabaseBackend::AuditLog> logs;
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "", "", 0, 0);
+  ASSERT_EQ(3u, logs.size());
+
+  std::vector<IDatabaseBackend::AuditLog> all(logs.begin(), logs.end());
+  ASSERT_EQ("alice", all[0].GetUserId());
+  ASSERT_EQ("bob", all[1].GetUserId());
+  ASSERT_EQ("other", all[2].GetSourcePlugin());
+  ASSERT_EQ(OrthancPluginResourceType_Patient, all[2].GetResourceType());
+  ASSERT_EQ("p1", all[2].GetResourceId());
+  ASSERT_TRUE(all[0].HasLogData());
+  ASSERT_EQ(binary, all[0].GetLogData());
+  ASSERT_FALSE(all[1].HasLogData());
+
+  // "2026-09-24T10:00:00.123Z"
+  const std::string& ts = all[1].GetTimestamp();
+  ASSERT_EQ(24u, ts.size());
+  ASSERT_EQ('T', ts[10]);
+  ASSERT_EQ('.', ts[19]);
+  ASSERT_EQ('Z', ts[23]);
+  ASSERT_LT(all[0].GetTimestamp(), all[1].GetTimestamp());
+
+  index_->GetAuditLogs(*manager_, logs, "alice", "", "", "", "", 0, 0);
+  ASSERT_EQ(2u, logs.size());
+  index_->GetAuditLogs(*manager_, logs, "", "s1", "", "", "", 0, 0);
+  ASSERT_EQ(2u, logs.size());
+  index_->GetAuditLogs(*manager_, logs, "alice", "", "view", "", "", 0, 0);
+  ASSERT_EQ(2u, logs.size());
+  index_->GetAuditLogs(*manager_, logs, "", "", "delete", "", "", 0, 0);
+  ASSERT_EQ(1u, logs.size());
+  ASSERT_EQ("bob", logs.front().GetUserId());
+
+  // "since" skips logs, "limit" 0 is no limit
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "", "", 1, 1);
+  ASSERT_EQ(1u, logs.size());
+  ASSERT_EQ("bob", logs.front().GetUserId());
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "", "", 1, 0);
+  ASSERT_EQ(2u, logs.size());
+
+  // [from, to[, from the timestamps that the route returns
+  index_->GetAuditLogs(*manager_, logs, "", "", "", all[1].GetTimestamp(), "", 0, 0);
+  ASSERT_EQ(2u, logs.size());
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "", all[1].GetTimestamp(), 0, 0);
+  ASSERT_EQ(1u, logs.size());
+  ASSERT_EQ("alice", logs.front().GetUserId());
+  index_->GetAuditLogs(*manager_, logs, "", "", "", all[0].GetTimestamp(), all[2].GetTimestamp(), 0, 0);
+  ASSERT_EQ(2u, logs.size());
+
+  // Other ISO 8601 forms, as with "::TIMESTAMPTZ"
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "2000-01-01", "", 0, 0);
+  ASSERT_EQ(3u, logs.size());
+  index_->GetAuditLogs(*manager_, logs, "", "", "", "2000-01-01T00:00:00+02:00", "2001-01-01T00:00:00Z", 0, 0);
+  ASSERT_EQ(0u, logs.size());
+
+  ASSERT_THROW(index_->GetAuditLogs(*manager_, logs, "", "", "", "yesterday", "", 0, 0), Orthanc::OrthancException);
+}
+
+
+// Phase 6: "AuditLogsRetentionDays" turns the index on "ts" into a TTL index
+TEST_F(MongoDBIndexTest, AuditLogsRetention)
+{
+  auto getTtl = [&]() -> int64_t
+  {
+    mongocxx::client client{mongocxx::uri{database_->GetUri()}};
+    for (const bsoncxx::document::view& index : GetCollection(client, "AuditLogs").list_indexes())
+    {
+      if (std::string(index["name"].get_string().value) == "ts_1")
+      {
+        bsoncxx::document::element ttl = index["expireAfterSeconds"];
+        if (!ttl)
+        {
+          return 0;
+        }
+
+        return (ttl.type() == bsoncxx::type::k_int32 ? ttl.get_int32().value : ttl.get_int64().value);
+      }
+    }
+
+    return -1;  // No index
+  };
+
+  ASSERT_EQ(0, getTtl());  // Off by default
+
+  MongoDBParameters parameters = CreateTestParameters(database_->GetUri());
+  std::unique_ptr<MongoDBIndex> index;
+  std::unique_ptr<DatabaseManager> manager;
+
+  parameters.SetAuditLogsRetentionDays(30);
+  manager.reset(StartAnotherIndex(index, parameters));
+  ASSERT_EQ(30 * 24 * 3600, getTtl());
+
+  parameters.SetAuditLogsRetentionDays(7);
+  manager.reset(StartAnotherIndex(index, parameters));
+  ASSERT_EQ(7 * 24 * 3600, getTtl());
+
+  parameters.SetAuditLogsRetentionDays(0);
+  manager.reset(StartAnotherIndex(index, parameters));
+  ASSERT_EQ(0, getTtl());
+
+  std::list<std::string> missing;
+  ASSERT_TRUE(MongoDBSchema::CheckIndexes(missing, *manager));
+}
+
+
 namespace
 {
   namespace Messages = Orthanc::DatabasePluginMessages;

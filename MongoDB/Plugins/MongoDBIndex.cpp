@@ -21,6 +21,7 @@
 
 #include "MongoDBSchema.h"
 #include "Index/MongoDBAttachments.h"
+#include "Index/MongoDBAuditLogs.h"
 #include "Index/MongoDBChanges.h"
 #include "Index/MongoDBExportedResources.h"
 #include "Index/MongoDBFind.h"
@@ -167,6 +168,34 @@ namespace OrthancDatabases
                                            uint64_t valueId)
   {
     MongoDBQueues(manager).AcknowledgeQueueValue(queueId, valueId);
+  }
+
+
+  void MongoDBIndex::RecordAuditLog(DatabaseManager& manager,
+                                    const std::string& sourcePlugin,
+                                    const std::string& userId,
+                                    OrthancPluginResourceType type,
+                                    const std::string& resourceId,
+                                    const std::string& action,
+                                    const void* logData,
+                                    uint32_t logDataSize)
+  {
+    MongoDBAuditLogs(manager).RecordAuditLog(sourcePlugin, userId, type, resourceId, action, logData, logDataSize);
+  }
+
+
+  void MongoDBIndex::GetAuditLogs(DatabaseManager& manager,
+                                  std::list<AuditLog>& logs,
+                                  const std::string& userIdFilter,
+                                  const std::string& resourceIdFilter,
+                                  const std::string& actionFilter,
+                                  const std::string& fromTsIsoFormat,
+                                  const std::string& toTsIsoFormat,
+                                  uint64_t since,
+                                  uint64_t limit)
+  {
+    MongoDBAuditLogs(manager).GetAuditLogs(logs, userIdFilter, resourceIdFilter, actionFilter,
+                                           fromTsIsoFormat, toTsIsoFormat, since, limit);
   }
 
 
