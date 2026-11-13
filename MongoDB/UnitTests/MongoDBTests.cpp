@@ -2887,6 +2887,106 @@ TEST_F(MongoDBIndexTest, LookupLabels)
 }
 
 
+// Phase 6: concurrent consumers of a queue get each value exactly once,
+// whether they pop it or reserve then acknowledge it
+TEST_F(MongoDBIndexTest, ConcurrentQueue)
+{
+  ASSERT_TRUE(index_->HasQueues());
+  ASSERT_TRUE(index_->HasReserveQueueValue());
+
+  const size_t VALUES = 200;
+  const size_t THREADS = 8;
+
+  for (size_t i = 0; i < VALUES; i++)
+  {
+    std::string value = "v" + std::to_string(i);
+    value.push_back('\0');  // Binary values
+    index_->EnqueueValue(*manager_, "queue", value);
+  }
+
+  ASSERT_EQ(VALUES, index_->GetQueueSize(*manager_, "queue"));
+
+  std::vector< std::vector<std::string> > received(THREADS);
+
+  RunConcurrently(THREADS, [&](size_t thread)
+  {
+    DatabaseManager manager(index_->CreateDatabaseFactory());
+
+    for (;;)
+    {
+      std::string value;
+      bool found = false;
+
+      // Half of the consumers pop, the other half reserve and acknowledge
+      ApplyWithRetries(manager, [&]()
+      {
+        if (thread % 2 == 0)
+        {
+          found = index_->DequeueValue(value, manager, "queue", true);
+        }
+        else
+        {
+          uint64_t id;
+          found = index_->ReserveQueueValue(value, id, manager, "queue", thread % 4 == 1, 60);
+          if (found)
+          {
+            index_->AcknowledgeQueueValue(manager, "queue", id);
+          }
+        }
+      });
+
+      if (found)
+      {
+        received[thread].push_back(value);
+      }
+      else
+      {
+        break;
+      }
+    }
+  });
+
+  std::set<std::string> unique;
+  size_t total = 0;
+  for (size_t i = 0; i < THREADS; i++)
+  {
+    unique.insert(received[i].begin(), received[i].end());
+    total += received[i].size();
+  }
+
+  ASSERT_EQ(VALUES, total);
+  ASSERT_EQ(VALUES, unique.size());
+  ASSERT_EQ(0u, index_->GetQueueSize(*manager_, "queue"));
+}
+
+
+// Phase 6: a reserved value is skipped by the other consumers, and is
+// counted in the size of its queue
+TEST_F(MongoDBIndexTest, QueueReservation)
+{
+  index_->EnqueueValue(*manager_, "queue", "a");
+  index_->EnqueueValue(*manager_, "queue", "b");
+
+  std::string value;
+  uint64_t id;
+  ASSERT_TRUE(index_->ReserveQueueValue(value, id, *manager_, "queue", true, 60));
+  ASSERT_EQ("a", value);
+  ASSERT_EQ(2u, index_->GetQueueSize(*manager_, "queue"));
+
+  // "a" is reserved: the front of the queue is "b"
+  ASSERT_TRUE(index_->DequeueValue(value, *manager_, "queue", true));
+  ASSERT_EQ("b", value);
+  ASSERT_FALSE(index_->DequeueValue(value, *manager_, "queue", true));
+  ASSERT_FALSE(index_->ReserveQueueValue(value, id, *manager_, "queue", false, 60));
+
+  // Another queue with the same ID of value cannot acknowledge it
+  ASSERT_THROW(index_->AcknowledgeQueueValue(*manager_, "other", id), Orthanc::OrthancException);
+  index_->AcknowledgeQueueValue(*manager_, "queue", id);
+  ASSERT_EQ(0u, index_->GetQueueSize(*manager_, "queue"));
+  ASSERT_THROW(index_->AcknowledgeQueueValue(*manager_, "queue", id), Orthanc::OrthancException);
+}
+
+
 // Phase 6: the custom data of the attachments, in the optional field "customData"
 TEST_F(MongoDBIndexTest, AttachmentCustomData)
 {
