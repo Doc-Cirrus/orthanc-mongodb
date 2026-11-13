@@ -1,0 +1,20 @@
+# Failures of the orthanc-tests suite (tag Orthanc-1.13.0) that run-orthanc-tests.sh accepts,
+# one per line: "<mode> <test> [flaky]", where <mode> is "all", "standalone" or "replica-set".
+# A test listed here that passes makes the script fail, so that the list stays exact; a test
+# marked "flaky" fails in some runs only, and may pass or fail.
+
+# The environment, also with the built-in SQLite index: dciodvfy (dicom3tools) is not installed
+all test_bitbucket_issue_46
+all test_extended_media
+all test_media_archive
+all test_media_encodings
+
+# Checks a transcoding that the Orthanc 1.13.0 LSB binary does differently, also with SQLite
+all test_lua_deadlock
+
+# Without transactions, a request can run between the deletion and the re-creation of an
+# overwritten instance (see docs/PLUGIN_CONFIGURATION.md, "Standalone server or replica set").
+# test_query_retrieve_format retrieves an instance that Orthanc already stores (C-MOVE to itself):
+# its own C-FIND, or the deletion of all patients at the start of the next test, can meet the gap.
+standalone test_query_retrieve_format flaky
+standalone test_raw_frame flaky

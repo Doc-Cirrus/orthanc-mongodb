@@ -1,0 +1,33 @@
+diff -r f3f666d432bf GenerateConfigurationForTests.py
+--- a/GenerateConfigurationForTests.py
++++ b/GenerateConfigurationForTests.py
+@@ -90,14 +90,10 @@
+ ip = socket.gethostbyname(socket.gethostname())
+ 
+ 
+-# Download the content of the default configuration file
++# Local change: the default configuration file is downloaded when the image is built
+ with open(args.target, 'wb') as f:
+-    url = 'https://orthanc.uclouvain.be/hg/orthanc/raw-file/default/OrthancServer/Resources/Configuration.json'
+-    http = urlopen(url)
+-    if http.getcode() != 200:
+-        raise Exception('Cannot download: %s' % url)
+-    
+-    f.write(http.read())
++    with open('/opt/integration/Configuration.json', 'rb') as source:
++        f.write(source.read())
+     
+ 
+ with open(args.target, 'r') as f:
+diff -r f3f666d432bf Tests/Run.py
+--- a/Tests/Run.py	Sat Aug 15 23:30:37 2026 +0200
++++ b/Tests/Run.py	Fri Sep 25 08:17:30 2026 +0000
+@@ -105,6 +105,8 @@
+ config = re.sub(r'("RemoteAccessAllowed"\s*:)\s*false', r'\1 true', config)
+ config = re.sub(r'("AuthenticationEnabled"\s*:)\s*false,', r'', config)  # Set with "RegisteredUsers"
+ config = re.sub(r'("ExecuteLuaEnabled"\s*:)\s*false', r'\1 true', config)
++if not re.search(r'"ExecuteLuaEnabled"\s*:', config):  # Local change: absent from the 1.13.0 defaults
++    config = config.replace('{', '{ "ExecuteLuaEnabled" : true,', 1)
+ config = re.sub(r'("HttpCompressionEnabled"\s*:)\s*true', r'\1 false', config)
+ config = re.sub(r'("DicomAssociationCloseDelay"\s*:)\s*[0-9]*', r'\1 0', config)
+ config = re.sub(r'("DicomModalities"\s*:)\s*{', r'\1 { "orthanc" : [ "%s", "%s", %s ], "orthanc2" : [ "OT-FROM-CONFIG", "%s", %s]' % 

@@ -14,4 +14,5 @@ build
 # built from its own context (.docker/DicomSender)
 .docker/.env
 .docker/docker-compose.override.yaml
+.docker/integration-results
 .docker/DicomSender
