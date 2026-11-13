@@ -1,2 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.dcm binary
+
 # Copied from Orthanc by Resources/SyncOrthancFolder.py: collapsed in the diffs of pull requests
 Resources/Orthanc/** linguist-generated=true
