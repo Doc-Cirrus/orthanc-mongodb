@@ -59,6 +59,7 @@
     { collection: 'ServerProperties', keys: ['server', 'property'] },
     { collection: 'AttachedFiles',    keys: ['id', 'fileType'] },
     { collection: 'Metadata',         keys: ['id', 'type'] },
+    { collection: 'Labels',           keys: ['id', 'label'] },
   ];
 
   // Sequence counters and the field whose maximum they must not be behind

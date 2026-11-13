@@ -27,18 +27,24 @@
  *   mongosh "mongodb://host:27017/orthanc" --quiet --file RepairDuplicates.js
  *   mongosh "mongodb://host:27017/orthanc" --quiet --eval "var repairApply = true" --file RepairDuplicates.js
  *
- * Stop every Orthanc that uses the database before applying.
+ * Stop every Orthanc that uses the database before applying. The script
+ * refuses to apply while the database looks in use (a live schema
+ * upgrade lock, or a change logged in the last 10 minutes); set
+ * "repairForce" to true to apply anyway.
  *
  * What is repaired:
  *   - Sequences: the duplicate counters of a sequence are merged into
  *     one, whose value is the largest of the counters and of the
  *     identifiers in use (a counter behind the data is moved forward).
- *   - GlobalProperties, ServerProperties, Metadata: the most recently
- *     inserted document of each key is kept (the largest "_id").
+   *   - GlobalProperties, ServerProperties, Metadata, Labels: the document
+ *     of each key that the plugin reads (the one "findOne" returns) is
+ *     kept. The large values of the removed properties are deleted from
+ *     the "LargeProperties" GridFS bucket.
  *   - AttachedFiles: of the attachments of the same resource and type,
- *     the most recent one whose file is in GridFS is kept. The UUIDs of
- *     the removed attachments are printed: their files, if any, are
- *     left in GridFS, and can be deleted once checked.
+ *     the one the plugin reads is kept, unless only another one has its
+ *     file in GridFS. A negative statistics change is recorded for each
+ *     removed attachment. The UUIDs that no remaining attachment uses
+ *     are printed: their files, if any, can be deleted once checked.
  *
  * What is only reported:
  *   - Resources with the same "publicId" or "internalId". Their children,
@@ -53,6 +59,7 @@
   'use strict';
 
   const apply = (typeof repairApply !== 'undefined') ? repairApply === true : false;
+  const force = (typeof repairForce !== 'undefined') ? repairForce === true : false;
 
   function format(value) {
     return EJSON.stringify(value, { relaxed: true });
@@ -62,7 +69,44 @@
     return db.getCollectionNames().indexOf(name) >= 0;
   }
 
-  // Groups of documents sharing the same key, the largest "_id" first
+  // Signs of a running Orthanc
+  function findActivity() {
+    const signs = [];
+
+    if (collectionExists('Locks') &&
+        db.Locks.countDocuments({ expiresAt: { $gt: new Date() } }, { limit: 1 }) > 0) {
+      signs.push('a live lock in "Locks"');
+    }
+
+    if (collectionExists('Changes')) {
+      // Orthanc logs the changes in UTC, as "YYYYMMDDTHHMMSS"
+      const pad = function (n) { return String(n).padStart(2, '0'); };
+      const t = new Date(Date.now() - 10 * 60 * 1000);
+      const since = String(t.getUTCFullYear()) + pad(t.getUTCMonth() + 1) + pad(t.getUTCDate()) + 'T' +
+            pad(t.getUTCHours()) + pad(t.getUTCMinutes()) + pad(t.getUTCSeconds());
+      if (db.Changes.countDocuments({ date: { $gte: since } }, { limit: 1 }) > 0) {
+        signs.push('changes logged in the last 10 minutes');
+      }
+    }
+
+    return signs;
+  }
+
+  if (apply && !force) {
+    const signs = findActivity();
+    if (signs.length > 0) {
+      print('The database looks in use (' + signs.join(', ') + '). Stop every Orthanc first, ' +
+            'or set "var repairForce = true" to apply anyway.');
+      quit(2);
+    }
+  }
+
+  // The document of a duplicate group that the plugin reads ("findOne" on the key)
+  function readByPlugin(collection, group) {
+    return db.getCollection(collection).findOne(group._id);
+  }
+
+  // Groups of documents sharing the same key
   function findDuplicates(collection, keys) {
     if (!collectionExists(collection)) {
       return [];
@@ -72,7 +116,6 @@
     keys.forEach(function (k) { groupId[k] = '$' + k; });
 
     return db.getCollection(collection).aggregate([
-      { $sort: { _id: -1 } },
       { $group: { _id: groupId, documents: { $push: '$$ROOT' }, count: { $sum: 1 } } },
       { $match: { count: { $gt: 1 } } },
     ], { allowDiskUse: true }).toArray();
@@ -98,13 +141,19 @@
   if (collectionExists('Sequences')) {
     sequences.forEach(function (s) {
       const counters = db.Sequences.find({ name: s.sequence }).sort({ _id: -1 }).toArray();
-      if (counters.length === 0) {
-        return;
-      }
-
       const top = collectionExists(s.collection) ?
         db.getCollection(s.collection).find({}, { [s.field]: 1 }).sort({ [s.field]: -1 }).limit(1).toArray() : [];
       const maxUsed = (top.length === 0 || top[0][s.field] === undefined) ? 0 : Number(top[0][s.field]);
+
+      if (counters.length === 0) {
+        if (maxUsed > 0) {
+          actions.push('Sequences: "' + s.sequence + '": create the missing counter at ' + maxUsed);
+          if (apply) {
+            db.Sequences.updateOne({ name: s.sequence }, { $max: { i: NumberLong(String(maxUsed)) } }, { upsert: true });
+          }
+        }
+        return;
+      }
       const value = Math.max(maxUsed, Math.max.apply(null, counters.map(function (c) { return Number(c.i); })));
 
       if (counters.length > 1 || Number(counters[0].i) !== value) {
@@ -112,40 +161,79 @@
                      ' found), set to ' + value + ' (largest identifier in use: ' + maxUsed + ')');
 
         if (apply) {
-          db.Sequences.updateOne({ _id: counters[0]._id }, { $set: { i: NumberLong(String(value)) } });
+          // "$max": an increment by a running Orthanc is never undone
+          db.Sequences.updateOne({ _id: counters[0]._id }, { $max: { i: NumberLong(String(value)) } });
           remove('Sequences', counters.slice(1).map(function (c) { return c._id; }));
         }
       }
     });
   }
 
-  // Key-value collections: keep the most recent document
+  // Key-value collections: keep the document the plugin reads
+  function deleteLargeValue(document, kept) {
+    if (apply && document.valueFile !== undefined &&
+        (kept.valueFile === undefined || String(kept.valueFile) !== String(document.valueFile))) {
+      db.getCollection('LargeProperties.chunks').deleteMany({ files_id: document.valueFile });
+      db.getCollection('LargeProperties.files').deleteOne({ _id: document.valueFile });
+    }
+  }
+
+  function describeValue(document) {
+    return document.valueFile !== undefined ? '(large value in LargeProperties)' : format(document.value);
+  }
+
   [
     { collection: 'GlobalProperties', keys: ['property'] },
     { collection: 'ServerProperties', keys: ['server', 'property'] },
     { collection: 'Metadata',         keys: ['id', 'type'] },
+    { collection: 'Labels',           keys: ['id', 'label'] },
   ].forEach(function (c) {
     findDuplicates(c.collection, c.keys).forEach(function (group) {
-      const removed = group.documents.slice(1);
+      const kept = readByPlugin(c.collection, group);
+      const removed = group.documents.filter(function (d) { return String(d._id) !== String(kept._id); });
       actions.push(c.collection + ' ' + format(group._id) + ': keep ' +
-                   format(group.documents[0].value) + ', remove ' + removed.length);
+                   (c.collection === 'Labels' ? 'one' : describeValue(kept)) + ', remove ' + removed.length);
+      removed.forEach(function (d) { deleteLargeValue(d, kept); });
       remove(c.collection, removed.map(function (d) { return d._id; }));
     });
   });
 
-  // Attachments: keep the most recent one whose file exists
+  // Attachments: keep the one the plugin reads, unless only another one has its file
+  const gridfs = collectionExists('fs.files');
+
   findDuplicates('AttachedFiles', ['id', 'fileType']).forEach(function (group) {
     const hasFile = function (d) {
       return db.getCollection('fs.files').countDocuments({ filename: d.uuid + ' - ' + d.fileType }, { limit: 1 }) > 0;
     };
 
-    const kept = group.documents.find(hasFile) || group.documents[0];
-    const removed = group.documents.filter(function (d) { return d._id !== kept._id; });
+    let kept = readByPlugin('AttachedFiles', group);
+    if (gridfs && !hasFile(kept)) {
+      kept = group.documents.find(hasFile) || kept;
+    }
 
-    actions.push('AttachedFiles ' + format(group._id) + ': keep ' + kept.uuid +
-                 ', remove ' + removed.map(function (d) { return d.uuid; }).join(', ') +
-                 ' (their files stay in GridFS)');
-    remove('AttachedFiles', removed.map(function (d) { return d._id; }));
+    const removed = group.documents.filter(function (d) { return String(d._id) !== String(kept._id); });
+
+    // The UUIDs still used by the kept attachment (or by any other) keep their files
+    const removedIds = removed.map(function (d) { return d._id; });
+    const orphans = removed.map(function (d) { return d.uuid; }).filter(function (uuid, i, all) {
+      return all.indexOf(uuid) === i &&
+        db.AttachedFiles.countDocuments({ uuid: uuid, _id: { $nin: removedIds } }, { limit: 1 }) === 0;
+    });
+
+    actions.push('AttachedFiles ' + format(group._id) + ': keep ' + kept.uuid + ', remove ' + removed.length +
+                 (orphans.length > 0 ?
+                  '; files no attachment uses any more' + (gridfs ? ' (left in GridFS)' : '') + ': ' + orphans.join(', ') :
+                  ''));
+
+    if (apply && removed.length > 0) {
+      remove('AttachedFiles', removedIds);
+
+      // As the plugin does when it deletes an attachment
+      db.StatisticsChanges.insertMany(removed.map(function (d) {
+        return { compressedSize: NumberLong(String(-Number(d.compressedSize))),
+                 uncompressedSize: NumberLong(String(-Number(d.uncompressedSize))) };
+      }));
+    }
   });
 
   // Resources: report only
