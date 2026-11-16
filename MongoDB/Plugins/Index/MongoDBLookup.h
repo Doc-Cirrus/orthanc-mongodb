@@ -48,7 +48,12 @@ namespace OrthancDatabases
    *   the only resource of that level. The groups on a lower level
    *   must all match the same descendant (and the descendants of
    *   several lower levels form one chain), like the "INNER JOIN" of
-   *   one row per level in SQL.
+   *   one row per level in SQL (the legacy lookup). With
+   *   "independentDescendants_" (the integrated Find), each
+   *   constraint on a lower level is instead its own existence
+   *   check: one descendant matches a constraint, and maybe another
+   *   one the next, like the "EXISTS" subqueries of the integrated
+   *   Find of "ISqlLookupFormatter".
    *
    * - A group that is not mandatory also matches if the tag is
    *   missing.
@@ -84,6 +89,9 @@ namespace OrthancDatabases
       int64_t                                                     identifiedId_;
       std::set<std::string>                                       fields_;  // Other fields to keep, e.g. level arrays
 
+      // Whether each constraint on a lower level only needs some descendant (see above)
+      bool                                                        independentDescendants_;
+
       /**
        * Whether each candidate must come once even if it has several
        * documents for the tag of the driver (which Orthanc never
@@ -93,9 +101,17 @@ namespace OrthancDatabases
       bool                                                        distinct_;
 
       /**
+       * Whether only the number of candidates matters: they then have
+       * no "publicId", and the "$group" of the distinct candidates
+       * only keeps "internalId" and the fields that the filters need,
+       * instead of whole documents.
+       **/
+      bool                                                        countOnly_;
+
+      /**
        * If nothing selective can start the pipeline (no identified
-       * resource, no label to have, and no mandatory tag matched by
-       * fewer than "PROBE_LIMIT" tags), the candidates can come from
+       * resource, and no mandatory tag or label matched by fewer than
+       * "PROBE_LIMIT" entries), the candidates can come from
        * an index in the order of a key: the values of a tag of the
        * query level ("orderingDirection_" is 1 or -1), or the public
        * IDs if "orderingOnPublicId_". The resources without this tag
@@ -115,6 +131,13 @@ namespace OrthancDatabases
       // If not NULL, the group of this constraint (of "tags_") is preferred to start the pipeline
       const DatabaseConstraint*                                   preferredDriver_;
 
+      /**
+       * If not NULL, this case-sensitive "<=" or ">=" constraint (of
+       * "tags_") excludes its own value ("<" or ">"), through the
+       * bounds of the index.
+       **/
+      const DatabaseConstraint*                                   strictBound_;
+
       CandidateRequest(int32_t level,
                        const DatabaseConstraints& tags) :
         level_(level),
@@ -123,7 +146,9 @@ namespace OrthancDatabases
         hasIdentified_(false),
         identifiedLevel_(0),
         identifiedId_(0),
+        independentDescendants_(false),
         distinct_(false),
+        countOnly_(false),
         hasOrderingScan_(false),
         orderingOnPublicId_(false),
         orderingIsIdentifier_(false),
@@ -131,7 +156,8 @@ namespace OrthancDatabases
         orderingElement_(0),
         orderingDirection_(1),
         orderingScanLimit_(0),
-        preferredDriver_(NULL)
+        preferredDriver_(NULL),
+        strictBound_(NULL)
       {
       }
     };
@@ -176,7 +202,8 @@ namespace OrthancDatabases
      * "false" if the constraint matches any value (the wildcard "*").
      **/
     static bool AppendValueConditions(std::vector<bsoncxx::document::value>& target,
-                                      const DatabaseConstraint& constraint);
+                                      const DatabaseConstraint& constraint,
+                                      bool strict = false);
 
     /**
      * Static estimate of the cost of starting the pipeline from this

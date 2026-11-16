@@ -46,14 +46,17 @@ namespace OrthancDatabases
   private:
     mongocxx::collection       collection_;
     mongocxx::client_session*  session_;
+    unsigned int               maxQueryTime_;  // In seconds, 0 for no limit
 
   public:
     typedef std::vector<bsoncxx::document::value>  Documents;
 
     MongoDBCollection(const mongocxx::collection& collection,
-                      mongocxx::client_session* session) :
+                      mongocxx::client_session* session,
+                      unsigned int maxQueryTime = 0) :
       collection_(collection),
-      session_(session)
+      session_(session),
+      maxQueryTime_(maxQueryTime)
     {
     }
 
@@ -69,6 +72,8 @@ namespace OrthancDatabases
               const bsoncxx::document::view_or_value& filter,
               const mongocxx::options::find& options = mongocxx::options::find());
 
+    // Like "Find()" and "CountDocuments()", the server stops it after "MaxQueryTime" seconds ("ErrorCode_Timeout"), if set
+    // (only for a collection from "GetSearchCollection()")
     void Aggregate(Documents& target,
                    const mongocxx::pipeline& pipeline,
                    const mongocxx::options::aggregate& options = mongocxx::options::aggregate());

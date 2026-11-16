@@ -38,6 +38,8 @@ namespace OrthancDatabases
     connectionRetryInterval_ = 5;
     transactionsMode_ = MongoDBTransactionsMode_Auto;
     createIndexesAtStartup_ = true;
+    enableExtendedFind_ = true;
+    maxQueryTime_ = 0;
   }
 
 
@@ -78,6 +80,8 @@ namespace OrthancDatabases
     }
 
     createIndexesAtStartup_ = configuration.GetBooleanValue("CreateIndexesAtStartup", true);
+    enableExtendedFind_ = configuration.GetBooleanValue("EnableExtendedFind", true);
+    SetMaxQueryTime(configuration.GetUnsignedIntegerValue("MaxQueryTime", 0));
   }
 
 

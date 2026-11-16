@@ -57,9 +57,16 @@ namespace OrthancDatabases
 
     try
     {
+      mongocxx::options::find limited = options;
+      if (maxQueryTime_ > 0 &&
+          !limited.max_time())
+      {
+        limited.max_time(std::chrono::milliseconds(static_cast<int64_t>(maxQueryTime_) * 1000));
+      }
+
       mongocxx::cursor cursor = (session_ == NULL ?
-                                 collection_.find(filter, options) :
-                                 collection_.find(*session_, filter, options));
+                                 collection_.find(filter, limited) :
+                                 collection_.find(*session_, filter, limited));
 
       for (auto&& document : cursor)
       {
@@ -78,9 +85,16 @@ namespace OrthancDatabases
 
     try
     {
+      mongocxx::options::aggregate limited = options;
+      if (maxQueryTime_ > 0 &&
+          !limited.max_time())
+      {
+        limited.max_time(std::chrono::milliseconds(static_cast<int64_t>(maxQueryTime_) * 1000));
+      }
+
       mongocxx::cursor cursor = (session_ == NULL ?
-                                 collection_.aggregate(pipeline, options) :
-                                 collection_.aggregate(*session_, pipeline, options));
+                                 collection_.aggregate(pipeline, limited) :
+                                 collection_.aggregate(*session_, pipeline, limited));
 
       for (auto&& document : cursor)
       {
@@ -96,13 +110,20 @@ namespace OrthancDatabases
   {
     try
     {
+      mongocxx::options::count limited = options;
+      if (maxQueryTime_ > 0 &&
+          !limited.max_time())
+      {
+        limited.max_time(std::chrono::milliseconds(static_cast<int64_t>(maxQueryTime_) * 1000));
+      }
+
       if (session_ == NULL)
       {
-        return collection_.count_documents(filter, options);
+        return collection_.count_documents(filter, limited);
       }
       else
       {
-        return collection_.count_documents(*session_, filter, options);
+        return collection_.count_documents(*session_, filter, limited);
       }
     }
     MONGODB_CATCH;
