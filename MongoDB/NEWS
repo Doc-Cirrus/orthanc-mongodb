@@ -2,8 +2,8 @@ Pending changes in the mainline
 ===============================
 
 
-Release 1.13.0 (not released yet)
-=================================
+Release 1.13.0 (2026-11-17)
+===========================
 
 DB schema revision: 2
 Minimum plugin SDK (for build): 1.13.0
