@@ -1,0 +1,85 @@
+# Orthanc with the MongoDB index and storage plugins, Orthanc Explorer 2, the
+# Stone Web Viewer and DICOMweb, on the standalone MongoDB server by default
+# (set ORTHANC_MONGO_URL in ".env" for the replica set).
+#
+#   docker compose up -d orthanc
+#
+# Orthanc is then on http://localhost:8042 and its DICOM port on 4242
+# (ORTHANC_HTTP_PORT and ORTHANC_DICOM_PORT). The configuration file is
+# mounted from Resources/Config, so it can be edited without a rebuild
+# ("docker compose restart orthanc").
+#
+# Seeding: on the first "docker compose up", the "dicom-sender" service
+# downloads the sample studies of DicomSender/dicom-sources.json and sends them
+# to Orthanc, once Orthanc is healthy. It then writes a marker in the volume
+# "orthanc-mongodb-samples", which also keeps the samples: on the next
+# "docker compose up", the service starts, finds the marker and exits at once.
+# SEED_ENABLED=false in ".env" turns seeding off. To seed again:
+#
+#   docker compose run --rm dicom-sender python3 seed.py --force
+#
+# See DicomSender/README.md.
+
+volumes:
+  samples:
+    name: orthanc-mongodb-samples
+
+services:
+  orthanc:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+      target: runtime
+      args:
+        BUILD_TYPE: ${BUILD_TYPE:-Release}
+        ORTHANC_VERSION: ${ORTHANC_VERSION:-1.13.0}
+        ORTHANC_EXPLORER_2_VERSION: ${ORTHANC_EXPLORER_2_VERSION:-1.15.0}
+        STONE_WEB_VIEWER_VERSION: ${STONE_WEB_VIEWER_VERSION:-3.0}
+        ORTHANC_DICOMWEB_VERSION: ${ORTHANC_DICOMWEB_VERSION:-1.24}
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      # Read by Resources/Config/configuration.json
+      MONGO_URL: ${ORTHANC_MONGO_URL:-mongodb://database:27017/inpacs}
+      MONGODB_ENABLE_INDEX: ${MONGODB_ENABLE_INDEX:-true}
+      MONGODB_ENABLE_STORAGE: ${MONGODB_ENABLE_STORAGE:-true}
+      MONGODB_ENABLE_TRANSACTIONS: ${MONGODB_ENABLE_TRANSACTIONS:-Auto}
+      MONGODB_INDEX_CONNECTIONS_COUNT: ${MONGODB_INDEX_CONNECTIONS_COUNT:-5}
+      MONGODB_CREATE_INDEXES_AT_STARTUP: ${MONGODB_CREATE_INDEXES_AT_STARTUP:-true}
+      MONGODB_ENABLE_EXTENDED_FIND: ${MONGODB_ENABLE_EXTENDED_FIND:-true}
+    volumes:
+      - ../Resources/Config/configuration.json:/usr/local/runtime/configuration.json:ro
+    ports:
+      - ${ORTHANC_HTTP_PORT:-8042}:8042
+      - ${ORTHANC_DICOM_PORT:-4242}:4242
+    healthcheck:
+      test: curl -fs http://localhost:8042/system
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    networks:
+      local:
+
+  dicom-sender:
+    build:
+      context: ./DicomSender
+    restart: "no"
+    depends_on:
+      orthanc:
+        condition: service_healthy
+    environment:
+      ORTHANC_URL: http://orthanc:8042
+      ORTHANC_HOST: orthanc
+      ORTHANC_PORT: 4242
+      ORTHANC_AET: ORTHANC
+      SEED_ENABLED: ${SEED_ENABLED:-true}
+      SEED_SOURCES: ${SEED_SOURCES:-}
+      SEED_COPIES: ${SEED_COPIES:-1}
+      SEED_PROCESSES: ${SEED_PROCESSES:-2}
+    volumes:
+      - samples:/samples
+    networks:
+      local:
