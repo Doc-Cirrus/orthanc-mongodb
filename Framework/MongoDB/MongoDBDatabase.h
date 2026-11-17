@@ -77,6 +77,10 @@ namespace OrthancDatabases
     // The returned collection takes part in the active transaction, if any
     MongoDBCollection GetCollection(const std::string& name);
 
+    // Like "GetCollection()", but the reads are limited to "MaxQueryTime", if set. Only for
+    // the searches: a limit must never cut the reads of a sequence of writes.
+    MongoDBCollection GetSearchCollection(const std::string& name);
+
     // Whether multi-document transactions are used on this server
     bool HasTransactions() const;
 

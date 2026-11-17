@@ -23,6 +23,7 @@
 #include "Index/MongoDBAttachments.h"
 #include "Index/MongoDBChanges.h"
 #include "Index/MongoDBExportedResources.h"
+#include "Index/MongoDBFind.h"
 #include "Index/MongoDBGlobalProperties.h"
 #include "Index/MongoDBLabels.h"
 #include "Index/MongoDBLookup.h"
@@ -637,6 +638,23 @@ namespace OrthancDatabases
     MongoDBMainDicomTags(manager).ClearMainDicomTags(internalId);
   }
 
+
+#if ORTHANC_PLUGINS_HAS_INTEGRATED_FIND == 1
+  void MongoDBIndex::ExecuteFind(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                 DatabaseManager& manager,
+                                 const Orthanc::DatabasePluginMessages::Find_Request& request)
+  {
+    MongoDBFind(manager).ExecuteFind(response, request);
+  }
+
+
+  void MongoDBIndex::ExecuteCount(Orthanc::DatabasePluginMessages::TransactionResponse& response,
+                                  DatabaseManager& manager,
+                                  const Orthanc::DatabasePluginMessages::Find_Request& request)
+  {
+    MongoDBFind(manager).ExecuteCount(response, request);
+  }
+#endif
 
 
   void MongoDBIndex::LookupResources(IDatabaseBackendOutput& output,

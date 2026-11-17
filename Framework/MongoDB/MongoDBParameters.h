@@ -51,6 +51,8 @@ namespace OrthancDatabases
     unsigned int             connectionRetryInterval_;
     MongoDBTransactionsMode  transactionsMode_;
     bool                     createIndexesAtStartup_;
+    bool                     enableExtendedFind_;
+    unsigned int             maxQueryTime_;
 
     void Reset();
 
@@ -111,6 +113,31 @@ namespace OrthancDatabases
     bool IsCreateIndexesAtStartup() const
     {
       return createIndexesAtStartup_;
+    }
+
+    void SetEnableExtendedFind(bool enable)
+    {
+      enableExtendedFind_ = enable;
+    }
+
+    bool IsExtendedFindEnabled() const
+    {
+      return enableExtendedFind_;
+    }
+
+    /**
+     * "MaxQueryTime": the seconds after which the server stops a
+     * query (aggregation, find or count, "maxTimeMS"), which then
+     * fails with "ErrorCode_Timeout". 0 means no limit.
+     **/
+    void SetMaxQueryTime(unsigned int seconds)
+    {
+      maxQueryTime_ = seconds;
+    }
+
+    unsigned int GetMaxQueryTime() const
+    {
+      return maxQueryTime_;
     }
 
     static MongoDBTransactionsMode ParseTransactionsMode(const Json::Value& value);

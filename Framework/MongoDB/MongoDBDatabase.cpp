@@ -292,6 +292,11 @@ namespace OrthancDatabases
     return MongoDBCollection(GetDatabase()[name], session_);
   }
 
+  MongoDBCollection MongoDBDatabase::GetSearchCollection(const std::string& name)
+  {
+    return MongoDBCollection(GetDatabase()[name], session_, pool_->GetParameters().GetMaxQueryTime());
+  }
+
 
   bool MongoDBDatabase::HasTransactions() const
   {
@@ -541,6 +546,9 @@ namespace OrthancDatabases
         case 112:    // WriteConflict
         case 251:    // NoSuchTransaction
           return Orthanc::ErrorCode_DatabaseCannotSerialize;
+
+        case 50:     // MaxTimeMSExpired: the same query would run as long again, so it is not retried
+          return Orthanc::ErrorCode_Timeout;
 
         case 6:      // HostUnreachable
         case 7:      // HostNotFound

@@ -185,7 +185,8 @@ namespace OrthancDatabases
 
 
   bool MongoDBLookup::AppendValueConditions(std::vector<bsoncxx::document::value>& target,
-                                            const DatabaseConstraint& constraint)
+                                            const DatabaseConstraint& constraint,
+                                            bool strict)
   {
     // NB: "bsoncxx::types::b_regex" only holds views, so it must be
     // built in the expression that appends it, while the pattern is
@@ -213,7 +214,7 @@ namespace OrthancDatabases
       case ConstraintType_SmallerOrEqual:
         if (constraint.IsCaseSensitive())
         {
-          target.push_back(make_document(kvp("value", make_document(kvp("$lte", constraint.GetSingleValue())))));
+          target.push_back(make_document(kvp("value", make_document(kvp(std::string(strict ? "$lt" : "$lte"), constraint.GetSingleValue())))));
         }
         else
         {
@@ -224,7 +225,7 @@ namespace OrthancDatabases
       case ConstraintType_GreaterOrEqual:
         if (constraint.IsCaseSensitive())
         {
-          target.push_back(make_document(kvp("value", make_document(kvp("$gte", constraint.GetSingleValue())))));
+          target.push_back(make_document(kvp("value", make_document(kvp(std::string(strict ? "$gt" : "$gte"), constraint.GetSingleValue())))));
         }
         else
         {
@@ -565,9 +566,42 @@ namespace OrthancDatabases
   {
     mongocxx::options::count options;
     options.limit(limit);
-    return database.GetCollection(GetCollection(group)).CountDocuments(CreateTagFilter(group, false), options);
+    return database.GetSearchCollection(GetCollection(group)).CountDocuments(CreateTagFilter(group, false), options);
   }
 
+
+  /**
+   * Counts, up to "limit", the labels that a label filter can start
+   * from, through the index on (label, id): the sum over the labels
+   * for "Any", and the fewest of a label for "All" (a resource has
+   * all the labels, so it has the rarest). It is an upper bound of the
+   * resources of the query level, as the labels of all levels count.
+   **/
+  static int64_t CountLabels(MongoDBDatabase& database,
+                             const std::set<std::string>& labels,
+                             LabelsConstraint constraint,
+                             int64_t limit)
+  {
+    mongocxx::options::count options;
+    options.limit(limit);
+    MongoDBCollection collection = database.GetSearchCollection(MongoDBLabels::COLLECTION);
+
+    if (constraint == LabelsConstraint_All)
+    {
+      int64_t best = limit;
+
+      for (std::set<std::string>::const_iterator it = labels.begin(); it != labels.end(); ++it)
+      {
+        best = std::min(best, static_cast<int64_t>(collection.CountDocuments(make_document(kvp("label", *it)), options)));
+      }
+
+      return best;
+    }
+    else
+    {
+      return collection.CountDocuments(make_document(kvp("label", make_document(kvp("$in", ToArray(labels))))), options);
+    }
+  }
 
   /**
    * Counts, up to "limit", the resources of the query level that list a
@@ -602,7 +636,7 @@ namespace OrthancDatabases
     pipeline.append_stages(stages.extract());
 
     MongoDBCollection::Documents result;
-    database.GetCollection(GetCollection(group)).Aggregate(result, pipeline);
+    database.GetSearchCollection(GetCollection(group)).Aggregate(result, pipeline);
 
     return (result.empty() ? 0 : MongoDBToolbox::GetInteger(result[0].view(), "count"));
   }
@@ -619,10 +653,12 @@ namespace OrthancDatabases
                           const DatabaseConstraint& constraint,
                           int32_t level,
                           int32_t metadata,
-                          bool preferred)
+                          bool preferred,
+                          bool alone,
+                          bool strict)
   {
     std::vector<bsoncxx::document::value> conditions;
-    if (!MongoDBLookup::AppendValueConditions(conditions, constraint) &&
+    if (!MongoDBLookup::AppendValueConditions(conditions, constraint, strict) &&
         !constraint.IsMandatory())
     {
       return;  // Universal constraint on an optional tag
@@ -634,7 +670,7 @@ namespace OrthancDatabases
     const unsigned int cost = MongoDBLookup::GetSelectivityCost(constraint);
 
     TagGroup* group = NULL;
-    for (size_t j = 0; j < groups.size(); j++)
+    for (size_t j = 0; j < groups.size() && !alone; j++)
     {
       if (groups[j].level_ == level &&
           groups[j].metadata_ == metadata &&
@@ -690,6 +726,30 @@ namespace OrthancDatabases
     const bool hasLabelsFilter = (!labels.empty() ||
                                   labelsConstraint == LabelsConstraint_None);
 
+    /**
+     * A label to have (not "None") starts the pipeline if it is
+     * selective, as the other tags. Otherwise, as the labels of all
+     * the resources of a Orthanc Explorer 2 list would be joined and
+     * sorted, the ordering scan reads the labels as a filter.
+     **/
+    const bool labelsCountable = (request.hasOrderingScan_ &&
+                                  !request.hasIdentified_ &&
+                                  !labels.empty() &&
+                                  labelsConstraint != LabelsConstraint_None);
+
+    // Counted at most once, and only if no tag driver below "PROBE_LIMIT" makes it irrelevant
+    int labelsSelectiveState = -1;
+    auto labelsSelective = [&]() -> bool
+    {
+      if (labelsSelectiveState < 0)
+      {
+        labelsSelectiveState = (labelsCountable &&
+                                CountLabels(database_, labels, labelsConstraint, PROBE_LIMIT) < PROBE_LIMIT) ? 1 : 0;
+      }
+
+      return (labelsSelectiveState == 1);
+    };
+
     // 1. Group the constraints by tag (or metadata) and level
 
     std::vector<TagGroup> groups;
@@ -701,13 +761,16 @@ namespace OrthancDatabases
       {
         const DatabaseConstraint& constraint = request.tags_->GetConstraint(i);
         AddToGroups(groups, constraint, static_cast<int32_t>(MessagesToolbox::ConvertToPlainC(constraint.GetLevel())), -1,
-                    &constraint == request.preferredDriver_);
+                    &constraint == request.preferredDriver_,
+                    request.independentDescendants_ &&
+                    static_cast<int32_t>(MessagesToolbox::ConvertToPlainC(constraint.GetLevel())) > level,
+                    &constraint == request.strictBound_);
       }
     }
 
     for (size_t i = 0; i < request.metadata_.size(); i++)
     {
-      AddToGroups(groups, *request.metadata_[i].second, level, request.metadata_[i].first, false);
+      AddToGroups(groups, *request.metadata_[i].second, level, request.metadata_[i].first, false, false, false);
     }
 
     /**
@@ -767,9 +830,8 @@ namespace OrthancDatabases
      * The ordering scan replaces a driver that reaches "PROBE_LIMIT"
      * (see below), so counting further would not change the plan.
      **/
-    const bool orderingScanPossible = (request.hasOrderingScan_ &&
-                                       !request.hasIdentified_ &&
-                                       (labels.empty() || labelsConstraint == LabelsConstraint_None));
+    const bool orderingScanCandidate = (request.hasOrderingScan_ &&
+                                        !request.hasIdentified_);
 
     /**
      * The candidates of each group, counted up to "probeLimit". If
@@ -850,7 +912,7 @@ namespace OrthancDatabases
 
       if (below ||
           saturated < 2 ||
-          orderingScanPossible ||
+          (orderingScanCandidate && !labelsSelective()) ||
           probeLimit >= PROBE_LIMIT_MAX)
       {
         break;
@@ -895,10 +957,9 @@ namespace OrthancDatabases
      * index on "StudyDate", instead of joining all the CT series with
      * their study (and then reading the date of all these studies).
      **/
-    const bool useOrderingScan = (request.hasOrderingScan_ &&
-                                  !request.hasIdentified_ &&
-                                  (labels.empty() || labelsConstraint == LabelsConstraint_None) &&
-                                  (driver == NULL || driver->estimate_ >= PROBE_LIMIT));
+    const bool useOrderingScan = (orderingScanCandidate &&
+                                  (driver == NULL || driver->estimate_ >= PROBE_LIMIT) &&
+                                  !labelsSelective());
     /**
      * A mandatory group on the tag of the ordering scan is part of the
      * scan, whose index bounds then skip the values it rejects (e.g. the
@@ -906,6 +967,18 @@ namespace OrthancDatabases
      * the latest date).
      **/
     const TagGroup* scanGroup = NULL;
+
+    /**
+     * Likewise, selective labels replace a driver that matches too many
+     * tags: the tag becomes a filter of the few labelled resources.
+     **/
+    if (!useOrderingScan &&
+        driver != NULL &&
+        driver->estimate_ >= PROBE_LIMIT &&
+        labelsSelective())
+    {
+      driver = NULL;
+    }
 
     if (useOrderingScan)
     {
@@ -947,8 +1020,19 @@ namespace OrthancDatabases
       }
     }
 
-    if (descendantGroups.size() == 1 &&
-        descendantGroups[0] == driver)
+    if (request.independentDescendants_)
+    {
+      // The driver was reached from a matching descendant, and no other group shares it
+      descendantGroups.erase(std::remove(descendantGroups.begin(), descendantGroups.end(), driver), descendantGroups.end());
+      descendantLevels.clear();
+
+      for (size_t i = 0; i < descendantGroups.size(); i++)
+      {
+        descendantLevels.push_back(descendantGroups[i]->level_);
+      }
+    }
+    else if (descendantGroups.size() == 1 &&
+             descendantGroups[0] == driver)
     {
       /**
        * The driver is the only group of the lower levels: each
@@ -966,10 +1050,16 @@ namespace OrthancDatabases
     // 3. The fields kept from the candidate resources
 
     bsoncxx::document::value candidateProjection = make_document();
+    std::set<std::string> candidateFields;  // The fields of the projection, besides the IDs
 
     {
       bsoncxx::builder::basic::document projection;
-      projection.append(kvp("_id", 0), kvp("internalId", 1), kvp("publicId", 1));
+      projection.append(kvp("_id", 0), kvp("internalId", 1));
+
+      if (!request.countOnly_)
+      {
+        projection.append(kvp("publicId", 1));
+      }
 
       std::set<std::string> fields = request.fields_;
       fields.erase("internalId");
@@ -983,7 +1073,14 @@ namespace OrthancDatabases
         }
       }
 
-      if (!descendantLevels.empty())
+      if (request.independentDescendants_)
+      {
+        for (size_t i = 0; i < descendantLevels.size(); i++)
+        {
+          fields.insert(GetLevelKey(descendantLevels[i]));
+        }
+      }
+      else if (!descendantLevels.empty())
       {
         fields.insert(GetLevelKey(descendantLevels.front()));
       }
@@ -994,6 +1091,7 @@ namespace OrthancDatabases
       }
 
       candidateProjection = projection.extract();
+      candidateFields = std::move(fields);
     }
 
     // 4. The candidate resources
@@ -1002,7 +1100,8 @@ namespace OrthancDatabases
     const bool labelsDrive = (driver == NULL &&
                               !request.hasIdentified_ &&
                               !labels.empty() &&
-                              labelsConstraint != LabelsConstraint_None);
+                              labelsConstraint != LabelsConstraint_None &&
+                              !useOrderingScan);
 
     if (request.hasIdentified_)
     {
@@ -1115,10 +1214,29 @@ namespace OrthancDatabases
       if (driver->level_ > level ||
           request.distinct_)
       {
-        stages.append(make_document(kvp("$group", make_document(
-          kvp("_id", "$internalId"),
-          kvp(FIELD_RESOURCE, make_document(kvp("$first", "$$ROOT")))))));
-        stages.append(make_document(kvp("$replaceWith", "$" + FIELD_RESOURCE)));
+        if (request.countOnly_)
+        {
+          // Only the fields that the next stages need, not the whole documents
+          bsoncxx::builder::basic::document group, project;
+          group.append(kvp("_id", "$internalId"));
+          project.append(kvp("_id", 0), kvp("internalId", "$_id"));
+
+          for (std::set<std::string>::const_iterator it = candidateFields.begin(); it != candidateFields.end(); ++it)
+          {
+            group.append(kvp(*it, make_document(kvp("$first", "$" + *it))));
+            project.append(kvp(*it, 1));
+          }
+
+          stages.append(make_document(kvp("$group", group.extract())));
+          stages.append(make_document(kvp("$project", project.extract())));
+        }
+        else
+        {
+          stages.append(make_document(kvp("$group", make_document(
+            kvp("_id", "$internalId"),
+            kvp(FIELD_RESOURCE, make_document(kvp("$first", "$$ROOT")))))));
+          stages.append(make_document(kvp("$replaceWith", "$" + FIELD_RESOURCE)));
+        }
       }
     }
 
@@ -1130,7 +1248,15 @@ namespace OrthancDatabases
       AppendTagGroupFilter(stages, group, group.level_ == level ? "internalId" : GetLevelKey(group.level_));
     }
 
-    if (!descendantLevels.empty())
+    if (request.independentDescendants_)
+    {
+      for (size_t i = 0; i < descendantGroups.size(); i++)
+      {
+        const std::vector<int32_t> levels(1, descendantGroups[i]->level_);
+        AppendDescendantFilter(stages, levels, 0, std::vector<const TagGroup*>(1, descendantGroups[i]));
+      }
+    }
+    else if (!descendantLevels.empty())
     {
       AppendDescendantFilter(stages, descendantLevels, 0, descendantGroups);
     }
@@ -1227,7 +1353,7 @@ namespace OrthancDatabases
     options.allow_disk_use(true);
 
     MongoDBCollection::Documents resources;
-    database_.GetCollection(collection).Aggregate(resources, pipeline, options);
+    database_.GetSearchCollection(collection).Aggregate(resources, pipeline, options);
 
     for (size_t i = 0; i < resources.size(); i++)
     {
