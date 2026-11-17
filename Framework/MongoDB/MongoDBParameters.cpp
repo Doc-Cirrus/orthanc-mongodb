@@ -95,6 +95,7 @@ namespace OrthancDatabases
     createIndexesAtStartup_ = true;
     enableExtendedFind_ = true;
     maxQueryTime_ = 0;
+    auditLogsRetentionDays_ = 0;
   }
 
 
@@ -180,6 +181,7 @@ namespace OrthancDatabases
     createIndexesAtStartup_ = configuration.GetBooleanValue("CreateIndexesAtStartup", true);
     enableExtendedFind_ = configuration.GetBooleanValue("EnableExtendedFind", true);
     SetMaxQueryTime(configuration.GetUnsignedIntegerValue("MaxQueryTime", 0));
+    auditLogsRetentionDays_ = configuration.GetUnsignedIntegerValue("AuditLogsRetentionDays", 0);
   }
 
 

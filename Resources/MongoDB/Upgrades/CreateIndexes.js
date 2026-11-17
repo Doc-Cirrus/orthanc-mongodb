@@ -97,6 +97,12 @@
     // Revision 2: the key-value stores (unique) and the queues, in their order
     ['KeyValueStores',        { storeId: 1, key: 1 },      true],
     ['Queues',                { queueId: 1, id: 1 }],
+
+    // Revision 2: the audit logs, in chronological order
+    ['AuditLogs',             { ts: 1 }],
+    ['AuditLogs',             { userId: 1, ts: 1 }],
+    ['AuditLogs',             { resourceId: 1, ts: 1 }],
+    ['AuditLogs',             { action: 1, ts: 1 }],
   ];
 
   // Same names as "IndexDefinition::GetName()" in "MongoDBSchema.cpp"

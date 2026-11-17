@@ -116,6 +116,7 @@ add_custom_target(
 
 set(MONGODB_PLUGINS_SOURCES
   Plugins/Index/MongoDBAttachments.cpp
+  Plugins/Index/MongoDBAuditLogs.cpp
   Plugins/Index/MongoDBChanges.cpp
   Plugins/Index/MongoDBExportedResources.cpp
   Plugins/Index/MongoDBFind.cpp

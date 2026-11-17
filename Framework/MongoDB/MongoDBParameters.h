@@ -53,6 +53,7 @@ namespace OrthancDatabases
     bool                     createIndexesAtStartup_;
     bool                     enableExtendedFind_;
     unsigned int             maxQueryTime_;
+    unsigned int             auditLogsRetentionDays_;
 
     void Reset();
 
@@ -138,6 +139,17 @@ namespace OrthancDatabases
     unsigned int GetMaxQueryTime() const
     {
       return maxQueryTime_;
+    }
+
+    void SetAuditLogsRetentionDays(unsigned int days)
+    {
+      auditLogsRetentionDays_ = days;
+    }
+
+    // 0 means that the audit logs are kept forever
+    unsigned int GetAuditLogsRetentionDays() const
+    {
+      return auditLogsRetentionDays_;
     }
 
     static MongoDBTransactionsMode ParseTransactionsMode(const Json::Value& value);
