@@ -8,6 +8,14 @@
 # From the repository root, without copying this file:
 #
 #   docker compose -f .docker/docker-compose.yml -f .docker/docker-compose.override.test.yaml.example run --rm unit-tests
+#
+# The integration tests: the orthanc-tests suite against Orthanc 1.13.0 with the
+# portable plugins, on the standalone server by default. MONGO_URL must name an
+# empty database; the logs are written to "integration-results":
+#
+#   docker compose run --rm integration-tests
+#   docker compose run --rm -e MODE=replica-set \
+#     -e MONGO_URL="mongodb://database-rs:27017/orthanc_tests?replicaSet=rs0" integration-tests
 
 services:
   unit-tests:
@@ -32,3 +40,20 @@ services:
     networks:
       local:
 
+  integration-tests:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+      target: integration
+    environment:
+      MODE: standalone
+      MONGO_URL: mongodb://database:27017/orthanc_tests
+    volumes:
+      - ./integration-results:/results
+    depends_on:
+      database:
+        condition: service_healthy
+      database-rs:
+        condition: service_healthy
+    networks:
+      local:

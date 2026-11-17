@@ -37,6 +37,7 @@ endif()
 
 set(AUTO_INSTALL_DEPENDENCIES OFF CACHE BOOL "Download and build the MongoDB C and C++ drivers instead of using the system ones")
 set(LINK_STATIC_LIBS OFF CACHE BOOL "Link against the static version of the system MongoDB drivers")
+set(PORTABLE_BUILD OFF CACHE BOOL "Plugins that only depend on glibc: static OpenSSL (from OPENSSL_ROOT_DIR), libstdc++ and libgcc, no SASL, bundled zlib (with STATIC_BUILD and AUTO_INSTALL_DEPENDENCIES)")
 set(MONGOC_ROOT "" CACHE PATH "Installation prefix of the MongoDB C driver (optional)")
 set(MONGOCXX_ROOT "" CACHE PATH "Installation prefix of the MongoDB C++ driver (optional)")
 
